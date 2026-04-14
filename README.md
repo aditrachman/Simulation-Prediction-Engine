@@ -1,171 +1,28 @@
 # Simulation Prediction Engine
 
-An AI-powered simulation and prediction system built with modern web technologies and cutting-edge AI capabilities.
+This repository contains a program designed for simulating various predictive algorithms used in data analysis and machine learning. The program allows users to experiment with different models, compare their performance, and understand the underlying processes of prediction.
 
-## 🎯 Overview
+## Features
 
-Simulation Prediction Engine is a full-stack application that leverages artificial intelligence to simulate and predict outcomes. It combines a powerful backend powered by Groq Cloud's LLMs with a sleek frontend for data visualization and interaction.
+- **Model Simulation**: Users can run simulations for various predictive models, such as linear regression, decision trees, and neural networks.
+- **Performance Metrics**: The program provides tools for calculating performance metrics, such as accuracy, precision, recall, and F1-score.
+- **Visualization**: Graphical representations of model performance and prediction results are included to assist in analysis.
+- **Customizability**: Users can modify simulation parameters and model configurations to tailor the experiments to their needs.
 
-## 🏗️ Tech Stack
+## Technical Details
 
-### Frontend
-- **Next.js 14** - React framework for production
-- **Tailwind CSS** - Utility-first CSS framework
-- **Recharts** - Composable charting library for data visualization
+- The program is implemented in Python and utilizes libraries such as NumPy and Matplotlib for numerical computations and visualizations respectively.
+- It employs a modular architecture that allows the integration of new models with minimal effort.
+- Extensive documentation is provided to facilitate understanding and usage of the codebase.
 
-### Backend
-- **Python 3.10+** - Programming language
-- **FastAPI** - Modern web framework for building APIs
-- **Uvicorn** - ASGI web server
+## Usage
 
-### AI Brain
-- **Groq Cloud SDK** - High-speed LLM inference
+To use the program, clone the repository and follow the instructions in the `INSTALL.md` file for setting up your environment. Examples of simulations can be found in the `examples` folder.
 
-## 🚀 Getting Started
+## Contribution
 
-### Prerequisites
-- Python 3.10 or higher
-- Node.js and npm
-- Groq API key (Get it from [Groq Console](https://console.groq.com))
+Contributions are welcome. Please refer to the `CONTRIBUTING.md` file for guidelines on how to contribute to this project.
 
-### Step 1: Setup Groq API Key
+## License
 
-1. Visit [Groq Console](https://console.groq.com)
-2. Sign up or log in to your account
-3. Navigate to API Keys section
-4. Generate a new API key
-5. Copy your API key for later use
-
-### Step 2: Backend Setup
-
-1. Navigate to the backend folder:
-   ```bash
-   cd backend
-   ```
-
-2. Add your Groq API key to `backend/engine.py`:
-   ```python
-   # Inisialisasi client
-   client = Groq(api_key="YOUR_GROQ_API_KEY_HERE")
-   ```
-
-3. Start the backend server:
-   ```bash
-   uvicorn main:app --reload
-   ```
-   
-   Keep this terminal running in the background. The API will be available at `http://localhost:8000`
-
-### Step 3: Frontend Setup
-
-1. Open a new terminal and navigate to the frontend folder:
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-4. Open your browser and visit `http://localhost:3000`
-
-## ⚙️ Configuration
-
-### Changing the AI Model
-
-To use a different Groq model, edit `backend/engine.py` and find this line:
-
-```python
-model="llama-3.3-70b-versatile",
-```
-
-Replace it with your desired model. Available Groq models include:
-- `llama-3.3-70b-versatile`
-- `mixtral-8x7b-32768`
-- `gemma-7b-it`
-
-### Customizing Agent Personality
-
-To modify the role or personality of the AI agent, edit `backend/agents.py`:
-
-- Adjust system prompts
-- Modify agent behaviors
-- Change decision-making logic
-- Update interaction rules
-
-## 📂 Project Structure
-
-```
-Simulation-Prediction-Engine/
-├── backend/
-│   ├── engine.py          # Groq client & AI logic
-│   ├── agents.py          # Agent personality & configuration
-│   ├── main.py            # FastAPI application entry point
-│   └── ...
-├── frontend/
-│   ├── app/               # Next.js app directory
-│   ├── components/        # React components
-│   ├── pages/             # Next.js pages
-│   ├── package.json
-│   └── ...
-└── README.md
-```
-
-## 🔄 API Endpoints
-
-The backend provides RESTful API endpoints for simulation and prediction. Check the FastAPI documentation at `http://localhost:8000/docs` for interactive API documentation.
-
-## 📊 Data Visualization
-
-The frontend uses Recharts to display simulation results and predictions in interactive, responsive charts and graphs.
-
-## 🐛 Troubleshooting
-
-### Backend won't start
-- Ensure Python 3.10+ is installed: `python --version`
-- Check if port 8000 is available
-- Verify Groq API key is correctly set in `engine.py`
-- Check for missing dependencies: `pip install -r requirements.txt`
-
-### Frontend won't start
-- Clear node_modules and reinstall: `rm -rf node_modules && npm install`
-- Ensure Node.js and npm are installed
-- Check if port 3000 is available
-- Clear Next.js cache: `rm -rf .next`
-
-### API connection errors
-- Ensure backend is running on `http://localhost:8000`
-- Check CORS settings in `backend/main.py`
-- Verify network connectivity
-- Check browser console for detailed error messages
-
-### Groq API errors
-- Verify your API key is valid and hasn't expired
-- Check your Groq account quota and rate limits
-- Ensure the model name is correctly spelled
-
-## 📝 Environment Variables
-
-Create a `.env.local` file in the frontend directory if needed:
-
-```
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to submit issues and enhancement requests.
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 📞 Support
-
-For issues and questions, please create an issue in the [GitHub repository](https://github.com/aditrachman/Simulation-Prediction-Engine/issues).
+This project is licensed under the MIT License. See the `LICENSE` file for more details.
