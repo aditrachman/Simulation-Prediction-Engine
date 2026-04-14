@@ -1,28 +1,154 @@
 # Simulation Prediction Engine
 
-This repository contains a program designed for simulating various predictive algorithms used in data analysis and machine learning. The program allows users to experiment with different models, compare their performance, and understand the underlying processes of prediction.
+An AI-powered simulation and prediction system built with modern web technologies and Groq Cloud's LLM.
 
-## Features
+## Overview
 
-- **Model Simulation**: Users can run simulations for various predictive models, such as linear regression, decision trees, and neural networks.
-- **Performance Metrics**: The program provides tools for calculating performance metrics, such as accuracy, precision, recall, and F1-score.
-- **Visualization**: Graphical representations of model performance and prediction results are included to assist in analysis.
-- **Customizability**: Users can modify simulation parameters and model configurations to tailor the experiments to their needs.
+Simulation Prediction Engine is a full-stack application that combines artificial intelligence with an interactive dashboard for data analysis and predictions. The system uses Groq Cloud for high-speed AI inference and provides real-time visualization of simulation results.
 
-## Technical Details
+## Tech Stack
 
-- The program is implemented in Python and utilizes libraries such as NumPy and Matplotlib for numerical computations and visualizations respectively.
-- It employs a modular architecture that allows the integration of new models with minimal effort.
-- Extensive documentation is provided to facilitate understanding and usage of the codebase.
+Frontend:
+- Next.js 14 - React framework
+- Tailwind CSS - Styling
+- Recharts - Data visualization
 
-## Usage
+Backend:
+- Python 3.10+ 
+- FastAPI - Web framework
+- Uvicorn - ASGI server
+- Groq Cloud SDK - LLM inference
 
-To use the program, clone the repository and follow the instructions in the `INSTALL.md` file for setting up your environment. Examples of simulations can be found in the `examples` folder.
+## Installation
 
-## Contribution
+### Prerequisites
 
-Contributions are welcome. Please refer to the `CONTRIBUTING.md` file for guidelines on how to contribute to this project.
+- Python 3.10 or higher
+- Node.js and npm
+- Groq API key from https://console.groq.com
+
+### Backend Setup
+
+1. Navigate to backend folder:
+```bash
+cd backend
+```
+
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Add your Groq API key to `backend/engine.py`:
+```python
+client = Groq(api_key="YOUR_GROQ_API_KEY")
+```
+
+5. Start the server:
+```bash
+uvicorn main:app --reload
+```
+
+Backend will run at http://localhost:8000
+
+### Frontend Setup
+
+1. Open a new terminal and navigate to frontend:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start development server:
+```bash
+npm run dev
+```
+
+Frontend will run at http://localhost:3000
+
+## Configuration
+
+### Change AI Model
+
+Edit `backend/engine.py` and change the model parameter:
+```python
+model="llama-3.3-70b-versatile"
+```
+
+Available models:
+- llama-3.3-70b-versatile (recommended)
+- mixtral-8x7b-32768
+- gemma-7b-it
+
+### Environment Variables
+
+Create `.env.local` in frontend directory:
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## Project Structure
+
+```
+Simulation-Prediction-Engine/
+├── backend/
+│   ├── engine.py          # Groq client and AI logic
+│   ├── agents.py          # Agent configuration
+│   ├── main.py            # FastAPI app
+│   └── requirements.txt
+├── frontend/
+│   ├── app/               # Next.js pages
+│   ├── components/        # React components
+│   ├── package.json
+│   └── tailwind.config.js
+└── README.md
+```
+
+## API Endpoints
+
+Base URL: http://localhost:8000
+
+Main endpoints:
+- `POST /api/simulate` - Run a simulation
+- `GET /api/simulate/{id}` - Get simulation result
+- `POST /api/predict` - Make predictions
+
+View full API documentation at http://localhost:8000/docs
+
+## Troubleshooting
+
+Port already in use:
+```bash
+# Use different port
+uvicorn main:app --reload --port 8001
+```
+
+Groq API error:
+- Check your API key is correct
+- Verify API key has not expired
+- Ensure you have API quota remaining
+
+Module not found:
+```bash
+pip install -r requirements.txt
+```
+
+Frontend port 3000 in use:
+```bash
+npm run dev -- -p 3001
+```
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for more details.
+MIT License
