@@ -1,8 +1,18 @@
-# backend/engine.py
+import os
+
+from dotenv import load_dotenv
 from groq import Groq
 
-# Inisialisasi client
-client = Groq(api_key="") #
+load_dotenv()
+
+def _build_client():
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not set on the server environment.")
+    return Groq(api_key=api_key)
+
+
+client = _build_client()
 
 def call_llm(system_prompt, user_prompt, model_name="llama-3.3-70b-versatile"):
     try:
@@ -21,7 +31,7 @@ def call_llm(system_prompt, user_prompt, model_name="llama-3.3-70b-versatile"):
 
 def run_simulation(topik, agents):
     # AMBIL 3 AGEN SAJA (Agar tidak kena limit TPM 6000 token)
-    selected_agents = agents[:3] 
+    selected_agents = agents[:4 ] 
     riwayat = f"TOPIK: {topik}\n"
     
     for p in selected_agents:
