@@ -34,24 +34,17 @@ Backend:
 cd backend
 ```
 
-2. Create and activate virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-venv\Scripts\activate     # Windows
-```
-
-3. Install dependencies:
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Add your Groq API key to `backend/engine.py`:
+3. Add your Groq API key to `backend/engine.py`:
 ```python
 client = Groq(api_key="YOUR_GROQ_API_KEY")
 ```
 
-5. Start the server:
+4. Start the server in main directory:
 ```bash
 uvicorn main:app --reload
 ```
