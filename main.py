@@ -13,15 +13,18 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from backend.agents import get_agents, get_all_categories
-from backend.engine import run_simulation
+from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
+from backend.scraper import ambil_konteks_real
+from backend.social_engine import run_social_simulation
 
 app = FastAPI(
-    title="Mini-Social-Swarm API",
+    title="VoxSwarm API",
     description=(
         "Simulation-Prediction-Engine dengan multi-agen, multi-ronde, "
-        "GraphRAG-lite, God's Eye intervention, dan agen custom dari frontend."
+        "mode debat, mode sosmed, data real (RSS+Reddit), "
+        "God\'s Eye intervention, dan agen custom dari frontend."
     ),
-    version="2.1.0",
+    version="3.0.0",
 )
 
 
@@ -217,17 +220,156 @@ def start_sim(payload: SimRequest, request: Request):
             detail=f"Kategori '{payload.kategori}' tidak dikenali. Gunakan: {get_all_categories()}",
         )
 
-    # Jalankan simulasi
+    # Ambil data real (RSS + Reddit) secara paralel
+    konteks_real = ambil_konteks_real(topik_bersih)
+
+    # Jalankan simulasi debat
     hasil = run_simulation(
         topik=topik_bersih,
         agents=daftar_agen,
         jumlah_ronde=payload.jumlah_ronde,
         intervensi=intervensi_bersih,
+        briefing_real=konteks_real.get("briefing", ""),
     )
 
     return {
         "status": "success",
         "data":   hasil,
+        "konteks_real": {
+            "total_sumber": konteks_real.get("total", 0),
+            "berita":       konteks_real.get("berita", [])[:5],
+            "reddit":       konteks_real.get("reddit", [])[:5],
+            "timestamp":    konteks_real.get("timestamp", ""),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Model: Simulasi Sosmed
+# ---------------------------------------------------------------------------
+
+class SosmedRequest(BaseModel):
+    topik: str = Field(
+        ...,
+        min_length=3,
+        max_length=300,
+        description="Topik / isu yang akan disimulasikan di sosmed",
+    )
+    kategori: str = Field(
+        default="Umum",
+        max_length=50,
+        description="Kategori simulasi untuk pemilihan agen",
+    )
+    jumlah_tick: int = Field(
+        default=5,
+        ge=2,
+        le=10,
+        description="Jumlah 'momen' sosmed — seperti ronde tapi lebih cair (2–10)",
+    )
+    intervensi: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Breaking news / skenario yang diinjeksikan di tengah simulasi sosmed",
+    )
+    agen_custom: Optional[list[AgenCustomModel]] = Field(
+        default=None,
+        max_length=5,
+        description="Agen tambahan yang didefinisikan pengguna (maks 5)",
+    )
+
+
+@app.post("/start-social", tags=["Simulation"])
+def start_social(payload: SosmedRequest, request: Request):
+    """
+    Jalankan simulasi SOSIAL MEDIA multi-agen.
+
+    Setiap agen punya akun sendiri dan bisa:
+    - POST — buat konten baru
+    - LIKE — like post orang lain
+    - REPLY — balas langsung
+    - QUOTE — quote tweet dengan komentar
+    - FOLLOW — follow agen lain
+    - DIAM — skip giliran
+
+    Data real dari RSS berita + Reddit dipakai sebagai konteks.
+    Agen otoritas (pemerintah) otomatis merespons konten viral.
+    """
+    _enforce_rate_limit(request)
+
+    topik_bersih = payload.topik.strip()
+    if not topik_bersih:
+        raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
+    _validate_text(topik_bersih, "Topik")
+
+    intervensi_bersih = None
+    if payload.intervensi:
+        intervensi_bersih = payload.intervensi.strip() or None
+        if intervensi_bersih:
+            _validate_text(intervensi_bersih, "Intervensi")
+
+    agen_custom_dict = None
+    if payload.agen_custom:
+        agen_custom_dict = []
+        for ac in payload.agen_custom:
+            nama_ac = ac.nama.strip()
+            role_ac = ac.role.strip()
+            _validate_text(nama_ac, "Nama agen custom")
+            _validate_text(role_ac, "Role agen custom")
+            agen_custom_dict.append({
+                "nama": nama_ac, "role": role_ac,
+                "pengaruh": ac.pengaruh, "kepribadian": ac.kepribadian,
+            })
+
+    daftar_agen = get_agents(payload.kategori, agen_custom=agen_custom_dict)
+    if not daftar_agen:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kategori '{payload.kategori}' tidak dikenali.",
+        )
+
+    # Ambil data real paralel dengan persiapan agen
+    konteks_real = ambil_konteks_real(topik_bersih)
+
+    # Jalankan simulasi sosmed
+    hasil = run_social_simulation(
+        topik=topik_bersih,
+        agents=daftar_agen,
+        konteks_real=konteks_real,
+        jumlah_tick=payload.jumlah_tick,
+        intervensi=intervensi_bersih,
+        call_llm_fn=call_llm,
+        call_llm_json_fn=call_llm_json,
+        score_sentiment_fn=score_sentiment,
+        model_agent=MODEL_AGENT,
+        model_analysis=MODEL_ANALYSIS,
+    )
+
+    return {
+        "status": "success",
+        "data":   hasil,
+    }
+
+
+@app.get("/fetch-context", tags=["Data Real"])
+def fetch_context(topik: str, request: Request):
+    """
+    Ambil data real (berita + Reddit) untuk topik tertentu tanpa menjalankan simulasi.
+    Berguna untuk preview konteks sebelum simulasi dimulai.
+    """
+    _enforce_rate_limit(request)
+    topik_bersih = topik.strip()[:300]
+    if not topik_bersih:
+        raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
+    _validate_text(topik_bersih, "Topik")
+
+    konteks = ambil_konteks_real(topik_bersih)
+    return {
+        "status":  "success",
+        "topik":   topik_bersih,
+        "berita":  konteks["berita"],
+        "reddit":  konteks["reddit"],
+        "total":   konteks["total"],
+        "timestamp": konteks["timestamp"],
     }
 
 
