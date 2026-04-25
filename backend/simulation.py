@@ -26,6 +26,33 @@ from .sentiment import score_sentiment
 from .graph     import extract_entities
 
 
+
+# ---------------------------------------------------------------------------
+# Emoji Stripper — untuk laporan profesional bebas emoji
+# ---------------------------------------------------------------------------
+
+def _strip_emoji(teks: str) -> str:
+    """Hapus emoji/unicode non-standar dari teks analisis."""
+    import re
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001f926-\U0001f937"
+        "\U00010000-\U0010ffff"
+        "\u2640-\u2642"
+        "\u2600-\u2B55"
+        "\u200d\u23cf\u23e9\u231a\ufe0f\u3030"
+        "]+",
+        flags=re.UNICODE,
+    )
+    hasil = emoji_pattern.sub("", teks)
+    return re.sub(r"  +", " ", hasil).strip()
+
 # ---------------------------------------------------------------------------
 # Simulation Core — Sequential + Jeda (solusi utama rate limit)
 # ---------------------------------------------------------------------------
@@ -153,6 +180,7 @@ def run_simulation(
     analisis_raw, aktor_analisis = _analisis_dan_aktor(
         topik, log_diskusi, agents, sentimen_agregat
     )
+    analisis_raw = _strip_emoji(analisis_raw)
     prediksi = _parse_prediksi(analisis_raw)
 
     return {
@@ -193,8 +221,8 @@ def _build_ringkasan_agen(agents: list[dict], sentimen_agregat: dict) -> tuple[d
         if not tren: continue
         arah = "stabil"
         if len(tren) >= 2:
-            if tren[-1] - tren[0] > 0.2:   arah = "→mendukung"
-            elif tren[0] - tren[-1] > 0.2: arah = "→menolak"
+            if tren[-1] - tren[0] > 0.2:   arah = "→positif"
+            elif tren[0] - tren[-1] > 0.2: arah = "→negatif"
         ringkasan_agen.append(
             f"{nama}: pengaruh={pengaruh_map.get(nama,0.5)}, "
             f"skor={tren[0]:.2f}→{tren[-1]:.2f}, vol={volatilitas.get(nama,0)}, {arah}"
@@ -209,30 +237,55 @@ def _analisis_dan_aktor(
     sentimen_agregat: dict,
 ) -> tuple[str, dict]:
     """
-    Gabungkan analisis akhir + aktor kunci dalam 1 call LLM-JSON.
+    Hasilkan analisis akhir + aktor kunci.
 
-    Sebelumnya: 2 call terpisah (call_llm teks + call_llm_json aktor).
-    Sekarang:   1 call JSON yang sekaligus menghasilkan narasi + aktor.
+    DIPISAH menjadi 2 call sederhana agar LLM tidak gagal parse JSON
+    akibat prompt terlalu panjang (penyebab utama "analisis tidak tersedia").
+
+    Call 1 — plain text analisis (lebih stabil, tidak ada risiko JSON corrupt)
+    Call 2 — JSON aktor kunci (prompt ringkas)
 
     Return: (analisis_raw: str, aktor_analisis: dict)
     """
     nama_valid = list(sentimen_agregat.keys())
     pengaruh_map, volatilitas, ringkasan_agen = _build_ringkasan_agen(agents, sentimen_agregat)
 
-    prompt = (
-        f"Log diskusi:\n{log_diskusi[:1200]}\n\n"
-        f"Data agen:\n" + "\n".join(ringkasan_agen) + "\n\n"
-        "Balas HANYA JSON valid dengan struktur:\n"
-        '{"analisis": "<RINGKASAN 2 paragraf>\\n\\n<TABEL: | Partisipan | Sikap Akhir | Prediksi ke Depan | Kemungkinan Berubah |>\\n\\nPREDIKSI SKENARIO: Konsensus X%, Polarisasi Y%, Status Quo Z%.", '
-        '"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}], '
-        '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"mendukung|menolak"}], '
-        '"aktor_penggerak":"...", "rekomendasi":"..."}'
+    # ── CALL 1: Analisis naratif (plain text — jauh lebih stabil) ───────
+    prompt_analisis = (
+        f"Topik: {topik}\n"
+        f"Log diskusi:\n{log_diskusi[:1000]}\n\n"
+        "Tulis analisis dalam bahasa Indonesia:\n"
+        "1. Ringkasan 2 paragraf: dinamika diskusi dan posisi tiap agen.\n"
+        "2. Tabel markdown:\n"
+        "   | Partisipan | Sikap Akhir | Prediksi ke Depan | Kemungkinan Berubah |\n"
+        "   Isi kolom Sikap Akhir dengan: positif / negatif / netral\n"
+        "3. Baris terakhir harus persis:\n"
+        "   PREDIKSI SKENARIO: Konsensus X%, Polarisasi Y%, Status Quo Z%\n"
+        "   (X+Y+Z = 100)"
     )
-
-    raw = call_llm_json(
-        "Kamu analis sosial. Jawab HANYA JSON valid, bahasa Indonesia mudah dipahami.",
-        prompt,
+    analisis_raw = call_llm(
+        "Kamu analis sosial. Tulis analisis diskusi dalam bahasa Indonesia. Jangan gunakan emoji.",
+        prompt_analisis,
         max_tokens=MAX_TOKENS_ANALYSIS,
+        model=MODEL_ANALYSIS,
+    )
+    analisis_raw = _strip_emoji(analisis_raw or "")
+    if not analisis_raw or analisis_raw.startswith("[Error") or analisis_raw.startswith("[RateLimit"):
+        analisis_raw = "(analisis tidak tersedia)"
+
+    # ── CALL 2: JSON aktor kunci (prompt ringkas) ────────────────────────
+    prompt_aktor = (
+        f"Topik: {topik}\nAgen: {', '.join(nama_valid)}\n"
+        + "\n".join(ringkasan_agen) + "\n\n"
+        "Balas HANYA JSON valid:\n"
+        '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
+        '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
+        '"aktor_penggerak":"...","rekomendasi":"..."}'
+    )
+    raw = call_llm_json(
+        "Analis diskusi sosial. Balas HANYA JSON valid.",
+        prompt_aktor,
+        max_tokens=500,
         model=MODEL_ANALYSIS,
     )
 
@@ -243,14 +296,11 @@ def _analisis_dan_aktor(
             if v.lower() == s.lower() or s.lower() in v.lower(): return v
         return s
 
-    def _lb(skor): return "Mendukung" if skor > 0.2 else "Menolak" if skor < -0.2 else "Netral"
+    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
 
-    analisis_raw  = ""
     aktor_analisis: dict = {}
 
     if isinstance(raw, dict) and raw:
-        analisis_raw = str(raw.get("analisis", ""))
-
         for item in raw.get("aktor_kunci", []):
             nama = _resolve(item.get("nama", ""))
             item["nama"] = nama
@@ -278,8 +328,6 @@ def _analisis_dan_aktor(
             if k in raw
         }
 
-    if not analisis_raw:
-        analisis_raw = "(analisis tidak tersedia)"
     if not aktor_analisis:
         aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
 
@@ -288,7 +336,7 @@ def _analisis_dan_aktor(
 
 def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict) -> dict:
     """Fallback pure-Python tanpa LLM jika call JSON gagal."""
-    def _lb(skor): return "Mendukung" if skor > 0.2 else "Menolak" if skor < -0.2 else "Netral"
+    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
     sp = sorted(pengaruh_map.items(), key=lambda x: -x[1])
     sv = sorted(volatilitas.items(),  key=lambda x: -x[1])
     return {
@@ -302,7 +350,7 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
         ],
         "swing_voter": [
             {"nama": n, "alasan_volatil": "Sering berubah pendapat",
-             "potensi_arah": "mendukung" if sentimen_agregat.get(n,[0])[-1] > 0 else "menolak",
+             "potensi_arah": "positif" if sentimen_agregat.get(n,[0])[-1] > 0 else "negatif",
              "volatilitas": v,
              "sikap_awal":  sentimen_agregat.get(n,[0])[0],
              "sikap_akhir": sentimen_agregat.get(n,[0])[-1]}
@@ -340,8 +388,8 @@ def analyze_key_actors(
         if not tren: continue
         arah = "stabil"
         if len(tren) >= 2:
-            if tren[-1] - tren[0] > 0.2:   arah = "→mendukung"
-            elif tren[0] - tren[-1] > 0.2: arah = "→menolak"
+            if tren[-1] - tren[0] > 0.2:   arah = "→positif"
+            elif tren[0] - tren[-1] > 0.2: arah = "→negatif"
         ringkasan_agen.append(
             f"{nama}: pengaruh={pengaruh_map.get(nama,0.5)}, "
             f"skor={tren[0]:.2f}→{tren[-1]:.2f}, vol={volatilitas.get(nama,0)}, {arah}"
@@ -354,14 +402,14 @@ def analyze_key_actors(
             if v.lower() == s.lower() or s.lower() in v.lower(): return v
         return s
 
-    def _lb(skor): return "Mendukung" if skor > 0.2 else "Menolak" if skor < -0.2 else "Netral"
+    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
 
     prompt = (
         f"Topik: {topik}\nAgen: {', '.join(nama_valid)}\n"
         + "\n".join(ringkasan_agen) + "\n\n"
         "JSON:\n"
         '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
-        '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"mendukung|menolak"}],'
+        '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
         '"aktor_penggerak":"...","rekomendasi":"..."}'
     )
     hasil = call_llm_json(
@@ -407,7 +455,7 @@ def analyze_key_actors(
         ],
         "swing_voter": [
             {"nama": n, "alasan_volatil": "Sering berubah pendapat",
-             "potensi_arah": "mendukung" if sentimen_agregat.get(n,[0])[-1] > 0 else "menolak",
+             "potensi_arah": "positif" if sentimen_agregat.get(n,[0])[-1] > 0 else "negatif",
              "volatilitas": v,
              "sikap_awal":  sentimen_agregat.get(n,[0])[0],
              "sikap_akhir": sentimen_agregat.get(n,[0])[-1]}

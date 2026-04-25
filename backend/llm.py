@@ -54,7 +54,7 @@ RETRY_MAX        = int(os.getenv("RETRY_MAX",        "4"))
 RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "5.0"))
 AGENT_CALL_DELAY = float(os.getenv("AGENT_CALL_DELAY", "2.0"))
 ROUND_DELAY      = float(os.getenv("ROUND_DELAY",      "3.0"))
-SENTIMENT_MODE   = os.getenv("SENTIMENT_MODE", "inline")  # "inline" atau "llm"
+SENTIMENT_MODE   = os.getenv("SENTIMENT_MODE", "llm")   # "llm" (default, akurat) atau "inline" (hemat token)
 # ───────────────────────────────────────────────────────────────────────────
 
 

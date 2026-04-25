@@ -1,10 +1,15 @@
 # backend/social_engine.py
 # Mode Sosmed VoxSwarm — diperbaiki:
-#   FIX #3a: Statistik agregat (total_likes, reply_count, quote_count, viral_count)
-#            sekarang disertakan di level atas payload return agar mudah diakses frontend.
-#   FIX #3b: Field parent_name ditambahkan ke setiap post reply/quote agar
-#            frontend bisa menampilkan "Agen A membalas Agen B" tanpa harus lookup.
+#   FIX INTERAKSI: Eksekusi aksi SEQUENTIAL per tick dalam 2 fase:
+#     Fase 1 — semua agen "berpikir" (LLM call paralel) dan memilih aksi
+#     Fase 2 — aksi dieksekusi SEQUENTIAL agar interaksi antar-agen nyata:
+#              REPLY/LIKE/QUOTE bisa merujuk post yang dibuat agen lain
+#              di fase 1 yang sama (bukan hanya post dari tick sebelumnya)
+#   FIX EMOTIKON: Fungsi strip_emoji() menghapus emotikon dari teks analisis
+#   FIX #3a: Statistik agregat di level atas payload
+#   FIX #3b: parent_name di setiap post reply/quote
 
+import re
 import uuid
 import time
 from datetime import datetime, timezone
@@ -20,6 +25,38 @@ def _now_iso() -> str:
 
 def _uid() -> str:
     return str(uuid.uuid4())[:8]
+
+
+def strip_emoji(teks: str) -> str:
+    """Hapus emoji/simbol unicode non-ASCII dari teks, untuk laporan profesional."""
+    if not teks:
+        return ""
+    # Hapus karakter emoji (blok unicode umum)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001f926-\U0001f937"
+        "\U00010000-\U0010ffff"
+        "\u2640-\u2642"
+        "\u2600-\u2B55"
+        "\u200d"
+        "\u23cf"
+        "\u23e9"
+        "\u231a"
+        "\ufe0f"
+        "\u3030"
+        "]+",
+        flags=re.UNICODE,
+    )
+    hasil = emoji_pattern.sub("", teks)
+    # Bersihkan spasi berlebih
+    hasil = re.sub(r"  +", " ", hasil).strip()
+    return hasil
 
 
 def buat_akun(agen: dict) -> dict:
@@ -48,7 +85,6 @@ def buat_post(
     quote_of: str = None,
     topik: str = "",
     sentimen: dict = None,
-    # FIX #3b: Tambahan field untuk context nama parent
     parent_nama: str = None,
     parent_handle: str = None,
 ) -> dict:
@@ -64,8 +100,6 @@ def buat_post(
         "tipe":          tipe,
         "reply_to":      reply_to,
         "quote_of":      quote_of,
-        # FIX #3b: Simpan nama & handle parent langsung di post
-        # sehingga frontend bisa render "Membalas Agen X" tanpa lookup
         "parent_nama":   parent_nama,
         "parent_handle": parent_handle,
         "topik":         topik,
@@ -98,9 +132,18 @@ def run_social_simulation(
     """
     Jalankan simulasi sosial media multi-agen.
 
-    FIX #3a: Return payload kini menyertakan statistik agregat di level atas:
-        - total_likes, total_replies, total_quotes, viral_count
-    FIX #3b: Setiap post reply/quote menyertakan parent_nama & parent_handle.
+    PERBAIKAN UTAMA — Interaksi 2-Fase per Tick:
+    ─────────────────────────────────────────────────────────────────────
+    Setiap tick dijalankan dalam dua fase terpisah:
+
+    FASE 1 (paralel): Semua agen "berpikir" bersamaan dan menghasilkan
+        rencana aksi (JSON). POST dieksekusi langsung di fase ini agar
+        hasilnya tersedia di fase 2.
+
+    FASE 2 (sequential): Aksi non-post (LIKE, REPLY, QUOTE, FOLLOW)
+        dieksekusi satu per satu. Karena semua post fase 1 sudah masuk
+        ke post_map, REPLY/QUOTE ke post teman satu tick bisa berhasil.
+    ─────────────────────────────────────────────────────────────────────
     """
 
     akun_map: dict[str, dict] = {}
@@ -120,11 +163,10 @@ def run_social_simulation(
 
     tick_intervensi = (jumlah_tick // 2) + 1 if intervensi else -1
 
-    # FIX #5 — precompute string gaya per agen sebelum loop tick
-    # Kepribadian tidak berubah; menghitung ulang setiap tick adalah redundan.
+    # Precompute string gaya per agen (kepribadian tidak berubah)
     _gaya_agen: dict[str, str] = {}
     for agen in agents:
-        kep     = agen.get("kepribadian", {})
+        kep      = agen.get("kepribadian", {})
         agresif  = kep.get("agreeableness", 0.5) < 0.4
         emosional = kep.get("neuroticism",   0.5) > 0.6
         terbuka  = kep.get("openness",       0.5) > 0.7
@@ -136,7 +178,7 @@ def run_social_simulation(
 
     for tick in range(1, jumlah_tick + 1):
 
-        # Injeksi intervensi sebagai "breaking news post" dari akun sistem
+        # ── Injeksi intervensi sebagai "breaking news post" ──────────────
         if tick == tick_intervensi and intervensi:
             post_intervensi = {
                 "id":            _uid(),
@@ -161,127 +203,207 @@ def run_social_simulation(
             semua_post.insert(0, post_intervensi)
             post_map[post_intervensi["id"]] = post_intervensi
 
-        tick_posts: list[dict]  = []
-        tick_aksi:  list[dict]  = []
-
-        # FIX #4 — precompute trending + intervensi_teks sekali per tick
-        # Semua agen dalam satu tick melihat snapshot yang sama.
+        # Precompute snapshot tick (sama untuk semua agen dalam satu tick)
         _trending_tick   = _get_trending(semua_post, top_n=3)
         _trending_teks   = _format_trending(_trending_tick) if _trending_tick else "Belum ada trending."
         _intervensi_teks = f"\n BREAKING NEWS: {intervensi}" if (tick == tick_intervensi and intervensi) else ""
         _briefing_teks   = briefing[:400] if briefing else "(tidak ada data real)"
 
-        # ── Proses setiap agen (paralel) ──
-        def _proses_agen_sosmed(agen_nama: str) -> list[dict]:
+        tick_posts: list[dict] = []
+        tick_aksi:  list[dict] = []
+
+        # ═══════════════════════════════════════════════════════════════
+        # FASE 1 — LLM calls paralel: semua agen "berpikir" bersamaan
+        #          dan menghasilkan rencana aksi.
+        #          POST langsung dieksekusi agar tersedia di Fase 2.
+        # ═══════════════════════════════════════════════════════════════
+
+        rencana_fase1: list[dict] = []   # [(agen_nama, aksi, konten, target, alasan)]
+
+        def _pikirkan_aksi(agen_nama: str) -> dict:
+            """Fase 1: minta LLM memilih aksi. Return dict rencana."""
             akun = akun_map[agen_nama]
             agen = next(a for a in agents if a["nama"] == agen_nama)
 
-            # Feed berbeda per agen (berdasarkan following), tapi trending sama
             feed      = _build_feed(akun, semua_post, post_map, maks=8)
             feed_teks = _format_feed(feed) if feed else "Belum ada post di feed."
+            gaya_str  = _gaya_agen[agen_nama]
 
-            # Reuse hasil precompute tick-level (FIX #4 & #5)
-            gaya_str = _gaya_agen[agen_nama]
+            # Daftar post yang bisa di-like/reply/quote (ID aktual)
+            post_ref_list = "\n".join([
+                f"  [{p['id']}] @{p['handle']}: {p['konten'][:100]}"
+                for p in feed[:6]
+            ])
 
             system_p = (
                 f"Kamu {agen['nama']} di platform sosial media dengan handle {akun['handle']}. {agen['role']} "
                 f"Gaya: {gaya_str}. "
-                "Pilih SATU aksi: POST, LIKE, REPLY, QUOTE, FOLLOW, atau DIAM. Balas HANYA JSON valid."
+                "Pilih SATU aksi: POST, LIKE, REPLY, QUOTE, FOLLOW, atau DIAM. "
+                "PENTING: untuk LIKE/REPLY/QUOTE, gunakan HANYA ID post dari daftar di bawah (format 8 karakter). "
+                "Balas HANYA JSON valid."
             )
-
-            post_ref_list = "\n".join([f"  [{p['id']}] @{p['handle']}: {p['konten'][:100]}" for p in feed[:5]])
 
             user_p = (
                 f"Topik hari ini: {topik}{_intervensi_teks}\n\n"
                 f"Data terkini:\n{_briefing_teks}\n\n"
-                f"Feed kamu (post dari yang kamu follow):\n{feed_teks}\n\n"
-                f"Trending sekarang:\n{_trending_teks}\n\n"
+                f"Feed kamu:\n{feed_teks}\n\n"
+                f"Trending:\n{_trending_teks}\n\n"
+                f"Post yang bisa kamu LIKE/REPLY/QUOTE (gunakan ID-nya):\n"
+                f"{post_ref_list if post_ref_list else '(belum ada post)'}\n\n"
                 f"Follower kamu: {len(akun['followers'])} | Following: {len(akun['following'])}\n\n"
-                "Pilih aksi kamu (HANYA pilih SATU):\n"
                 '{"aksi": "POST|LIKE|REPLY|QUOTE|FOLLOW|DIAM", '
                 '"konten": "isi post/reply/quote (kosong jika LIKE/FOLLOW/DIAM)", '
-                '"target_id": "post_id jika LIKE/REPLY/QUOTE, atau nama agen jika FOLLOW (kosong jika POST/DIAM)", '
+                '"target_id": "ID post (8 karakter) jika LIKE/REPLY/QUOTE, atau nama agen jika FOLLOW", '
                 '"alasan": "kenapa kamu pilih aksi ini (1 kalimat)"}'
-                f"\n\nPost yang bisa kamu like/reply/quote:\n{post_ref_list if post_ref_list else '(belum ada)'}"
             )
 
             raw = call_llm_json_fn(system_p, user_p, max_tokens=200, model=model_agent)
-
             if not isinstance(raw, dict):
                 raw = {}
-            aksi     = str(raw.get("aksi", "DIAM")).upper().strip()
-            konten   = str(raw.get("konten", "")).strip()
-            target   = str(raw.get("target_id", "")).strip()
-            alasan   = str(raw.get("alasan", "")).strip()
 
-            if aksi not in ("POST", "LIKE", "REPLY", "QUOTE", "FOLLOW", "DIAM"):
-                aksi = "DIAM"
+            return {
+                "agen_nama": agen_nama,
+                "aksi":      str(raw.get("aksi",      "DIAM")).upper().strip(),
+                "konten":    str(raw.get("konten",    "")).strip(),
+                "target":    str(raw.get("target_id", "")).strip(),
+                "alasan":    str(raw.get("alasan",    "")).strip(),
+            }
 
-            aksi_results = []
+        with ThreadPoolExecutor(max_workers=min(len(agents), 6)) as executor:
+            futures = {executor.submit(_pikirkan_aksi, a["nama"]): a["nama"] for a in agents}
+            for future in as_completed(futures):
+                try:
+                    rencana = future.result()
+                    rencana_fase1.append(rencana)
+                except Exception as e:
+                    print(f"[Fase1 Error] {futures[future]}: {e}")
 
-            if aksi == "POST" and konten:
+        # POST dieksekusi di akhir Fase 1 agar semua post tersedia di Fase 2
+        for rencana in rencana_fase1:
+            if rencana["aksi"] == "POST" and rencana["konten"]:
+                akun     = akun_map[rencana["agen_nama"]]
+                konten   = rencana["konten"]
                 sentimen = score_sentiment_fn(konten, topik) if score_sentiment_fn else {"label": "netral", "skor": 0.0}
-                post = buat_post(akun, konten, tipe="post", topik=topik, sentimen=sentimen)
-                aksi_results.append({"tipe": "post", "post": post, "alasan": alasan, "agen": agen_nama})
+                post     = buat_post(akun, konten, tipe="post", topik=topik, sentimen=sentimen)
+                semua_post.append(post)
+                post_map[post["id"]] = post
+                tick_posts.append(post)
+                tick_aksi.append({
+                    "tipe": "post", "post": post,
+                    "alasan": rencana["alasan"], "agen": rencana["agen_nama"],
+                })
+
+        # ═══════════════════════════════════════════════════════════════
+        # FASE 2 — Eksekusi sequential: LIKE, REPLY, QUOTE, FOLLOW
+        #          Semua post fase 1 sudah ada di post_map, jadi
+        #          interaksi antar-agen dalam satu tick bisa terjadi.
+        # ═══════════════════════════════════════════════════════════════
+
+        for rencana in rencana_fase1:
+            agen_nama = rencana["agen_nama"]
+            aksi      = rencana["aksi"]
+            konten    = rencana["konten"]
+            target    = rencana["target"]
+            alasan    = rencana["alasan"]
+            akun      = akun_map[agen_nama]
+
+            if aksi == "POST":
+                continue  # sudah dieksekusi di Fase 1
 
             elif aksi == "LIKE" and target:
                 post_target = post_map.get(target)
                 if post_target and akun["handle"] not in post_target["likes"]:
                     post_target["likes"].append(akun["handle"])
                     akun["likes_given"].append(target)
-                    aksi_results.append({"tipe": "like", "target_id": target, "alasan": alasan, "agen": agen_nama})
+                    tick_aksi.append({
+                        "tipe": "like", "target_id": target,
+                        "alasan": alasan, "agen": agen_nama,
+                    })
+                else:
+                    # target tidak ditemukan — coba like post terbaru dari orang lain
+                    kandidat = [p for p in semua_post if p["nama"] != agen_nama and akun["handle"] not in p["likes"]]
+                    if kandidat:
+                        fallback = kandidat[-1]
+                        fallback["likes"].append(akun["handle"])
+                        akun["likes_given"].append(fallback["id"])
+                        tick_aksi.append({
+                            "tipe": "like", "target_id": fallback["id"],
+                            "alasan": alasan + " (fallback)", "agen": agen_nama,
+                        })
 
             elif aksi == "REPLY" and konten and target:
                 post_target = post_map.get(target)
                 if post_target:
                     sentimen = score_sentiment_fn(konten, topik) if score_sentiment_fn else {"label": "netral", "skor": 0.0}
-                    # FIX #3b: Sertakan parent_nama & parent_handle
-                    reply = buat_post(
+                    reply    = buat_post(
                         akun, konten, tipe="reply", reply_to=target, topik=topik, sentimen=sentimen,
                         parent_nama=post_target.get("nama"), parent_handle=post_target.get("handle"),
                     )
                     post_target["replies"].append(reply["id"])
-                    aksi_results.append({"tipe": "reply", "post": reply, "target_id": target, "alasan": alasan, "agen": agen_nama})
+                    semua_post.append(reply)
+                    post_map[reply["id"]] = reply
+                    tick_posts.append(reply)
+                    tick_aksi.append({
+                        "tipe": "reply", "post": reply, "target_id": target,
+                        "alasan": alasan, "agen": agen_nama,
+                    })
+                elif konten:
+                    # target tidak ditemukan — jadikan POST biasa
+                    sentimen = score_sentiment_fn(konten, topik) if score_sentiment_fn else {"label": "netral", "skor": 0.0}
+                    post     = buat_post(akun, konten, tipe="post", topik=topik, sentimen=sentimen)
+                    semua_post.append(post)
+                    post_map[post["id"]] = post
+                    tick_posts.append(post)
+                    tick_aksi.append({
+                        "tipe": "post", "post": post,
+                        "alasan": alasan + " (reply→post fallback)", "agen": agen_nama,
+                    })
 
             elif aksi == "QUOTE" and konten and target:
                 post_target = post_map.get(target)
                 if post_target:
                     sentimen = score_sentiment_fn(konten, topik) if score_sentiment_fn else {"label": "netral", "skor": 0.0}
-                    # FIX #3b: Sertakan parent_nama & parent_handle
-                    quote = buat_post(
+                    quote    = buat_post(
                         akun, konten, tipe="quote", quote_of=target, topik=topik, sentimen=sentimen,
                         parent_nama=post_target.get("nama"), parent_handle=post_target.get("handle"),
                     )
                     post_target["quotes"].append(quote["id"])
-                    aksi_results.append({"tipe": "quote", "post": quote, "target_id": target, "alasan": alasan, "agen": agen_nama})
+                    semua_post.append(quote)
+                    post_map[quote["id"]] = quote
+                    tick_posts.append(quote)
+                    tick_aksi.append({
+                        "tipe": "quote", "post": quote, "target_id": target,
+                        "alasan": alasan, "agen": agen_nama,
+                    })
+                elif konten:
+                    # fallback ke POST
+                    sentimen = score_sentiment_fn(konten, topik) if score_sentiment_fn else {"label": "netral", "skor": 0.0}
+                    post     = buat_post(akun, konten, tipe="post", topik=topik, sentimen=sentimen)
+                    semua_post.append(post)
+                    post_map[post["id"]] = post
+                    tick_posts.append(post)
+                    tick_aksi.append({
+                        "tipe": "post", "post": post,
+                        "alasan": alasan + " (quote→post fallback)", "agen": agen_nama,
+                    })
 
             elif aksi == "FOLLOW" and target:
                 target_akun = _cari_akun(target, akun_map)
                 if target_akun and target_akun["handle"] not in akun["following"]:
                     akun["following"].append(target_akun["handle"])
                     target_akun["followers"].append(akun["handle"])
-                    aksi_results.append({"tipe": "follow", "target": target_akun["nama"], "alasan": alasan, "agen": agen_nama})
+                    tick_aksi.append({
+                        "tipe": "follow", "target": target_akun["nama"],
+                        "alasan": alasan, "agen": agen_nama,
+                    })
 
             else:
-                aksi_results.append({"tipe": "diam", "alasan": alasan or "tidak ada yang menarik", "agen": agen_nama})
+                tick_aksi.append({
+                    "tipe": "diam", "alasan": alasan or "tidak ada yang menarik",
+                    "agen": agen_nama,
+                })
 
-            return aksi_results
-
-        with ThreadPoolExecutor(max_workers=min(len(agents), 6)) as executor:
-            futures = {executor.submit(_proses_agen_sosmed, a["nama"]): a["nama"] for a in agents}
-            for future in as_completed(futures):
-                try:
-                    results = future.result()
-                    for res in results:
-                        tick_aksi.append(res)
-                        if res["tipe"] in ("post", "reply", "quote"):
-                            post = res["post"]
-                            semua_post.append(post)
-                            post_map[post["id"]] = post
-                            tick_posts.append(post)
-                except Exception:
-                    pass
-
+        # ── Update virality & respons otoritas ──────────────────────────
         _update_virality(semua_post, akun_map)
 
         viral_posts = [p for p in semua_post if p.get("is_viral") and p["tipe"] == "post"]
@@ -292,7 +414,7 @@ def run_social_simulation(
                         akun, viral_posts, semua_post, post_map,
                         topik, briefing, tick, akun_map,
                         call_llm_json_fn, score_sentiment_fn,
-                        model_agent, tick_aksi
+                        model_agent, tick_aksi,
                     )
 
         tick_detail.append({
@@ -305,13 +427,13 @@ def run_social_simulation(
 
         log_aktivitas.extend(tick_aksi)
 
-    # Analisis akhir sosmed
+    # ── Analisis akhir sosmed ────────────────────────────────────────────
     analisis_sosmed = _analisis_sosmed(
         topik, semua_post, akun_map, log_aktivitas,
-        call_llm_fn, model_analysis
+        call_llm_fn, model_analysis,
     )
 
-    # Susun profil akun untuk frontend
+    # ── Profil akun ─────────────────────────────────────────────────────
     profil_agen = []
     for nama, akun in akun_map.items():
         post_agen = [p for p in semua_post if p["nama"] == nama]
@@ -334,8 +456,7 @@ def run_social_simulation(
 
     profil_agen.sort(key=lambda x: -(x["followers"] + x["total_likes_dapat"]))
 
-    # FIX #3a: Hitung statistik agregat dan sertakan di level atas payload
-    total_likes_global  = sum(len(p["likes"])   for p in semua_post)
+    total_likes_global   = sum(len(p["likes"])   for p in semua_post)
     total_replies_global = sum(len(p["replies"]) for p in semua_post)
     total_quotes_global  = sum(len(p["quotes"])  for p in semua_post)
     viral_count_global   = len([p for p in semua_post if p.get("is_viral")])
@@ -351,7 +472,6 @@ def run_social_simulation(
         "viral_posts":    [p for p in semua_post if p.get("is_viral")],
         "log_aktivitas":  log_aktivitas,
         "analisis":       analisis_sosmed,
-        # FIX #3a: Statistik agregat tersedia di level atas (mudah diakses frontend)
         "statistik": {
             "total_likes":   total_likes_global,
             "total_replies": total_replies_global,
@@ -374,9 +494,9 @@ def _setup_awal_following(akun_map: dict):
     """Agen saling follow berdasarkan openness & pengaruh awal."""
     akun_list = list(akun_map.values())
     for akun in akun_list:
-        openness = akun["kepribadian"].get("openness", 0.5)
+        openness    = akun["kepribadian"].get("openness", 0.5)
         maks_follow = int(openness * len(akun_list))
-        kandidat = [a for a in akun_list if a["handle"] != akun["handle"]]
+        kandidat    = [a for a in akun_list if a["handle"] != akun["handle"]]
         kandidat.sort(key=lambda x: -x["pengaruh"])
         for target in kandidat[:maks_follow]:
             if target["handle"] not in akun["following"]:
@@ -399,11 +519,11 @@ def _format_feed(feed: list[dict]) -> str:
     if not feed:
         return "(feed kosong)"
     baris = []
-    for p in feed[:5]:
-        like_str = f" | {len(p['likes'])} likes" if p["likes"] else ""
+    for p in feed[:6]:
+        like_str  = f" | {len(p['likes'])} likes" if p["likes"] else ""
         viral_str = " [VIRAL]" if p.get("is_viral") else ""
-        tipe_str = f"[{p['tipe'].upper()}]" if p["tipe"] != "post" else ""
-        baris.append(f"  [{p['id']}] {tipe_str} {p['handle']}: {p['konten'][:120]}{like_str}{viral_str}")
+        tipe_str  = f"[{p['tipe'].upper()}] " if p["tipe"] != "post" else ""
+        baris.append(f"  [{p['id']}] {tipe_str}{p['handle']}: {p['konten'][:100]}{like_str}{viral_str}")
     return "\n".join(baris)
 
 
@@ -427,10 +547,10 @@ def _get_trending(semua_post: list, top_n: int = 5) -> list[dict]:
 
 def _update_virality(semua_post: list, akun_map: dict, viral_threshold: int = 3):
     """Post dianggap viral jika engagement >= threshold."""
-    n_agen = len(akun_map)
+    n_agen    = len(akun_map)
     threshold = max(viral_threshold, n_agen // 3)
     for post in semua_post:
-        engagement = len(post["likes"]) + len(post["replies"]) * 2 + len(post["quotes"]) * 3
+        engagement    = len(post["likes"]) + len(post["replies"]) * 2 + len(post["quotes"]) * 3
         post["is_viral"] = engagement >= threshold
         post["reach"]    = min(n_agen, engagement + 1)
 
@@ -450,7 +570,7 @@ def _authority_response(
     akun: dict, viral_posts: list, semua_post: list, post_map: dict,
     topik: str, briefing: str, tick: int, akun_map: dict,
     call_llm_json_fn, score_sentiment_fn,
-    model_agent: str, tick_aksi: list
+    model_agent: str, tick_aksi: list,
 ):
     """Agen otoritas (pemerintah) merespons jika ada konten viral."""
     if not call_llm_json_fn or not viral_posts:
@@ -496,9 +616,7 @@ def _authority_response(
             semua_post.append(reply)
             post_map[reply["id"]] = reply
             tick_aksi.append({
-                "tipe": "reply_otoritas",
-                "post": reply,
-                "target_id": top_viral["id"],
+                "tipe": "reply_otoritas", "post": reply, "target_id": top_viral["id"],
                 "kebijakan_baru": kebijakan,
                 "alasan": f"Merespons post viral dari {top_viral['handle']}",
                 "agen": akun["nama"],
@@ -512,9 +630,7 @@ def _authority_response(
             semua_post.append(quote)
             post_map[quote["id"]] = quote
             tick_aksi.append({
-                "tipe": "quote_otoritas",
-                "post": quote,
-                "target_id": top_viral["id"],
+                "tipe": "quote_otoritas", "post": quote, "target_id": top_viral["id"],
                 "kebijakan_baru": kebijakan,
                 "alasan": f"Quote tweet post viral dari {top_viral['handle']}",
                 "agen": akun["nama"],
@@ -529,7 +645,7 @@ def _analisis_sosmed(
     call_llm_fn,
     model_analysis: str,
 ) -> dict:
-    """Analisis akhir dinamika sosmed."""
+    """Analisis akhir dinamika sosmed. Teks analisis bebas dari emoji."""
     if not call_llm_fn:
         return {}
 
@@ -539,9 +655,10 @@ def _analisis_sosmed(
     total_like   = sum(len(p["likes"]) for p in semua_post)
     viral_count  = len([p for p in semua_post if p.get("is_viral")])
 
-    top_posts = _get_trending(semua_post, top_n=5)
+    top_posts     = _get_trending(semua_post, top_n=5)
     top_posts_teks = "\n".join(
-        f"  - [{p['handle']}] \"{p['konten'][:100]}\" ({len(p['likes'])} likes, {len(p['replies'])} balasan, {len(p['quotes'])} kutipan)"
+        f"  - [{p['handle']}] \"{p['konten'][:100]}\" "
+        f"({len(p['likes'])} likes, {len(p['replies'])} balasan, {len(p['quotes'])} kutipan)"
         for p in top_posts
     )
 
@@ -554,7 +671,6 @@ def _analisis_sosmed(
         for a in ranking_akun[:5]
     )
 
-    # FIX #4: Top Influencers berdasarkan engagement total
     influencer_scores = {}
     for nama, akun in akun_map.items():
         post_agen = [p for p in semua_post if p["nama"] == nama]
@@ -567,15 +683,18 @@ def _analisis_sosmed(
         f"Statistik: {total_post} post | {total_reply} reply | {total_quote} quote | {total_like} likes | {viral_count} viral\n\n"
         f"Top post:\n{top_posts_teks}\n\n"
         f"Ranking follower:\n{ranking_teks}\n\n"
-        "Analisis singkat 3-4 kalimat: siapa paling berpengaruh, narasi dominan, dan dampak diskusi ini."
+        "Analisis singkat 3-4 kalimat: siapa paling berpengaruh, narasi dominan, dan dampak diskusi ini. "
+        "JANGAN gunakan emoji atau simbol khusus dalam jawaban."
     )
 
-    narasi = call_llm_fn(
-        "Kamu analis media sosial. Jelaskan dengan bahasa mudah dipahami orang awam.",
+    narasi_raw = call_llm_fn(
+        "Kamu analis media sosial. Jelaskan dengan bahasa mudah dipahami orang awam. Jangan gunakan emoji.",
         prompt,
         max_tokens=400,
         model=model_analysis,
     )
+    # Strip emoji dari hasil analisis
+    narasi = strip_emoji(narasi_raw)
 
     return {
         "narasi": narasi,
@@ -591,7 +710,6 @@ def _analisis_sosmed(
             {"handle": a["handle"], "nama": a["nama"], "followers": len(a["followers"])}
             for a in ranking_akun[:5]
         ],
-        # FIX #4: Top influencers tersedia di analisis
         "top_influencers": [
             {"nama": nama, "engagement_score": skor}
             for nama, skor in top_influencers
