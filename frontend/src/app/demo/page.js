@@ -787,6 +787,350 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
 };
 
 
+// ─── Komponen: Badge Sumber Prediksi ─────────────────────────────────
+const PrediksiSourceBadge = ({ source, note }) => {
+  if (!source) return null;
+  if (source === "ml") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 border border-green-500/40 px-3 py-1 text-[11px] font-bold text-green-300">
+        🤖 ML Model
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-white/10 px-3 py-1 text-[11px] font-bold text-slate-400 cursor-help"
+      title={note ?? "Model belum aktif — perlu lebih banyak sampel"}
+    >
+      📐 Rule-based {note ? `(${note})` : ""}
+    </span>
+  );
+};
+
+
+// ─── Komponen: Panel Feedback Ground Truth ────────────────────────────
+const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, feedbackConf, setFeedbackConf, feedbackCatatan, setFeedbackCatatan, feedbackLoading, setFeedbackLoading, feedbackResult, setFeedbackResult }) => {
+  if (!topikHash) return null;
+
+  const kirimFeedback = async () => {
+    setFeedbackLoading(true);
+    setFeedbackResult(null);
+    try {
+      const res = await fetch(`${apiBase}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topik_hash:   topikHash,
+          label_aktual: feedbackLabel,
+          confidence:   feedbackConf,
+          catatan:      feedbackCatatan,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Gagal mengirim feedback.");
+      setFeedbackResult({ ok: true, data: data.data, message: data.message });
+    } catch (err) {
+      setFeedbackResult({ ok: false, message: err.message });
+    }
+    setFeedbackLoading(false);
+  };
+
+  const confPct = Math.round(feedbackConf * 100);
+  const confLabel = confPct <= 33 ? "Kurang yakin" : confPct <= 66 ? "Cukup yakin" : "Sangat yakin";
+
+  const LABEL_OPTIONS = [
+    { value: "Konsensus",  display: "✅ Konsensus — semua pihak setuju / isu mereda" },
+    { value: "Polarisasi", display: "⚡ Polarisasi — masyarakat terbelah, debat panas" },
+    { value: "Status Quo", display: "😐 Status Quo — situasi tidak banyak berubah" },
+  ];
+
+  return (
+    <Kartu>
+      <JudulSeksi>💡 Apa yang Sebenarnya Terjadi?</JudulSeksi>
+      <p className="mb-4 text-xs text-slate-400 leading-relaxed">
+        Bantu sistem belajar! Setelah isu ini berkembang di dunia nyata,
+        pilih outcome yang paling sesuai. Makin banyak koreksi yang kamu beri,
+        makin akurat prediksi VoxSwarm ke depannya.
+      </p>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
+        {/* Label */}
+        <div>
+          <label className="block text-[11px] font-bold text-slate-400 mb-1.5">Outcome yang terjadi</label>
+          <div className="flex flex-col gap-2">
+            {LABEL_OPTIONS.map(({ value, display }) => (
+              <button
+                key={value}
+                onClick={() => setFeedbackLabel(value)}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold border text-left transition ${
+                  feedbackLabel === value
+                    ? "bg-indigo-600 border-indigo-500 text-white"
+                    : "border-white/10 text-slate-400 hover:border-indigo-400 hover:text-white"
+                }`}
+              >
+                {display}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Confidence */}
+        <div>
+          <label className="block text-[11px] font-bold text-slate-400 mb-1">
+            Seberapa yakin kamu dengan pilihan ini?
+          </label>
+          <p className="text-xs font-bold text-indigo-300 mb-2">{confLabel}</p>
+          <input
+            type="range" min="0" max="1" step="0.05"
+            value={feedbackConf}
+            onChange={e => setFeedbackConf(parseFloat(e.target.value))}
+            className="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-indigo-500"
+          />
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+            <span>Kurang yakin</span>
+            <span>Sangat yakin</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Catatan */}
+      <div className="mb-4">
+        <label className="block text-[11px] font-bold text-slate-400 mb-1.5">Ceritakan konteksnya (opsional)</label>
+        <textarea
+          value={feedbackCatatan}
+          onChange={e => setFeedbackCatatan(e.target.value)}
+          placeholder="Misal: Setelah demo besar-besaran, pemerintah akhirnya mencabut kebijakan ini..."
+          maxLength={1000}
+          rows={2}
+          className="w-full rounded-xl border border-white/10 bg-[#0E1220] px-3 py-2 text-xs text-slate-300 placeholder:text-slate-600 outline-none focus:border-indigo-500 transition resize-none"
+        />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={kirimFeedback}
+          disabled={feedbackLoading}
+          className="rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-5 py-2 text-xs font-bold text-white transition"
+        >
+          {feedbackLoading ? "⏳ Menyimpan..." : "💾 Simpan Koreksi"}
+        </button>
+
+        {feedbackResult && (
+          <div className={`text-xs font-semibold ${feedbackResult.ok ? "text-green-400" : "text-red-400"}`}>
+            {feedbackResult.ok
+              ? <>
+                  ✓ Koreksi disimpan! VoxSwarm akan belajar dari ini.
+                  {feedbackResult.data?.retrain_triggered && (
+                    <span className="ml-2 block text-amber-300 font-normal">🔄 Sistem sedang memperbarui model prediksinya...</span>
+                  )}
+                </>
+              : `✕ ${feedbackResult.message}`
+            }
+          </div>
+        )}
+      </div>
+    </Kartu>
+  );
+};
+
+
+// ─── Komponen: Panel ML Model Performance ────────────────────────────
+const PanelMLMetrics = ({ apiBase }) => {
+  const [metrics,  setMetrics]  = useState(null);
+  const [loading,  setLoading]  = useState(false);
+
+  const fetchMetrics = () => {
+    setLoading(true);
+    fetch(`${apiBase}/ml-metrics`)
+      .then(r => r.json())
+      .then(d => setMetrics(d.metrics ?? null))
+      .catch(() => setMetrics(null))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchMetrics(); }, []);
+
+  if (loading) return (
+    <Kartu>
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+        Memuat performa model ML...
+      </div>
+    </Kartu>
+  );
+
+  if (!metrics || !metrics.ok) {
+    const nSampel    = metrics?.n_samples   ?? 0;
+    const minSampel  = metrics?.min_samples ?? 5;
+    const sisa       = Math.max(0, minSampel - nSampel);
+    const progPct    = Math.min(100, (nSampel / minSampel) * 100);
+
+    return (
+      <Kartu>
+        <JudulSeksi>🤖 ML Prediction Engine</JudulSeksi>
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4">
+          <p className="text-sm font-bold text-indigo-300 mb-1">
+            {sisa > 0
+              ? `Butuh ${sisa} simulasi lagi untuk mengaktifkan ML`
+              : (metrics?.message ?? "Model sedang disiapkan...")}
+          </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            VoxSwarm akan mulai belajar dari pola diskusi setelah cukup data terkumpul.
+            Setiap simulasi yang kamu jalankan membantu sistem jadi lebih cerdas.
+          </p>
+          {/* Progress bar menuju MIN_SAMPLES */}
+          <div className="mt-3 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-indigo-500 transition-all duration-700"
+              style={{ width: `${progPct}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-slate-600">
+            {nSampel} / {minSampel} simulasi terkumpul
+          </p>
+        </div>
+      </Kartu>
+    );
+  }
+
+  const { accuracy_pct, eval_method, n_samples, n_feedback_labels, confusion_matrix: cm, classes, per_class, macro_avg, weighted_avg } = metrics;
+  const accColor = accuracy_pct >= 80 ? "#22c55e" : accuracy_pct >= 60 ? "#f59e0b" : "#ef4444";
+  const K_ABBR = { "Konsensus": "K", "Polarisasi": "P", "Status Quo": "SQ" };
+
+  return (
+    <Kartu>
+      <div className="flex items-center justify-between mb-5">
+        <JudulSeksi>🤖 ML Model Performance</JudulSeksi>
+        <button
+          onClick={fetchMetrics}
+          className="text-[10px] text-slate-600 hover:text-indigo-400 transition border border-white/10 rounded-lg px-2.5 py-1 font-bold"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* ── Sub-section 1: Header ── */}
+      <div className="mb-6 rounded-xl border border-white/10 bg-white/3 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-black text-white">Akurasi: {accuracy_pct}%</span>
+          <span className="text-[11px] text-slate-500">{eval_method}</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden mb-2">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${accuracy_pct}%`, backgroundColor: accColor }}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Dataset: <span className="text-slate-300 font-semibold">{n_samples} sampel</span>
+          {n_feedback_labels > 0 && <span> (<span className="text-indigo-300">{n_feedback_labels} dengan label manual</span>)</span>}
+        </p>
+      </div>
+
+      {/* ── Sub-section 2: Confusion Matrix ── */}
+      {cm && cm.length > 0 && (
+        <div className="mb-6">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Confusion Matrix</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] border-collapse">
+              <thead>
+                <tr>
+                  <th className="p-2 text-slate-600 font-normal text-right">Aktual →</th>
+                  {classes.map(c => (
+                    <th key={c} className="p-2 text-center text-slate-400 font-bold">
+                      Pred {K_ABBR[c] ?? c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cm.map((row, ri) => (
+                  <tr key={ri}>
+                    <td className="p-2 text-right font-bold text-slate-400">{classes[ri]}</td>
+                    {row.map((val, ci) => {
+                      const isDiag = ri === ci;
+                      const cellClass = isDiag
+                        ? "bg-green-900/40 text-green-300 font-black"
+                        : val > 0
+                          ? "bg-red-900/20 text-red-400"
+                          : "text-slate-600";
+                      return (
+                        <td key={ci} className={`p-2 text-center rounded ${cellClass}`}>
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sub-section 3: Per-class metrics ── */}
+      <div>
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Per-Kelas Metrics</p>
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr>
+              <th className="pb-1.5 text-left text-slate-500 font-bold">Kelas</th>
+              <th className="pb-1.5 text-center text-slate-500 font-bold">Precision</th>
+              <th className="pb-1.5 text-center text-slate-500 font-bold">Recall</th>
+              <th className="pb-1.5 text-center text-slate-500 font-bold">F1</th>
+              <th className="pb-1.5 text-center text-slate-500 font-bold">Support</th>
+            </tr>
+          </thead>
+          <tbody>
+            {classes.map(c => {
+              const m = per_class[c];
+              if (!m) return null;
+              const f1Pct = Math.round(m.f1 * 100);
+              return (
+                <tr key={c} className="border-t border-white/5">
+                  <td className="py-2 pr-2 font-bold text-slate-300">{c}</td>
+                  {["precision","recall","f1"].map(metric => (
+                    <td key={metric} className="py-2 px-1 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="font-semibold text-slate-200">{Math.round(m[metric] * 100)}%</span>
+                        <div className="h-1 w-12 rounded-full bg-white/10 overflow-hidden">
+                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.round(m[metric] * 100)}%` }} />
+                        </div>
+                      </div>
+                    </td>
+                  ))}
+                  <td className="py-2 text-center text-slate-400">{m.support}</td>
+                </tr>
+              );
+            })}
+            {/* Macro avg */}
+            <tr className="border-t border-white/10">
+              <td className="py-1.5 pr-2 italic text-slate-500">Macro Avg</td>
+              {["precision","recall","f1"].map(metric => (
+                <td key={metric} className="py-1.5 px-1 text-center italic text-slate-500">
+                  {Math.round(macro_avg[metric] * 100)}%
+                </td>
+              ))}
+              <td className="py-1.5 text-center text-slate-600">—</td>
+            </tr>
+            {/* Weighted avg */}
+            <tr className="border-t border-white/5">
+              <td className="py-1.5 pr-2 italic text-slate-500">Weighted Avg</td>
+              {["precision","recall","f1"].map(metric => (
+                <td key={metric} className="py-1.5 px-1 text-center italic text-slate-500">
+                  {Math.round(weighted_avg[metric] * 100)}%
+                </td>
+              ))}
+              <td className="py-1.5 text-center text-slate-600">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Kartu>
+  );
+};
+
+
 // ─── Komponen Utama ───────────────────────────────────────────────────
 export default function VoxSwarmDashboard() {
   const [terpasang,    setTerpasang]    = useState(false);
@@ -805,6 +1149,19 @@ export default function VoxSwarmDashboard() {
   const [hasilSosmed,    setHasilSosmed]    = useState(null);
   const [jumlahTick,     setJumlahTick]     = useState(5);
   const [intervensiSos,  setIntervensiSos]  = useState("");
+  // ── State topik_hash & prediksi source ──
+  const [topikHash,      setTopikHash]      = useState(null);
+  const [prediksiSource, setPrediksiSource] = useState(null);   // "ml" | "rule_based"
+  const [prediksiNote,   setPrediksiNote]   = useState(null);
+  // ── State feedback ground truth ──
+  const [feedbackLabel,      setFeedbackLabel]      = useState("Konsensus");
+  const [feedbackConf,       setFeedbackConf]       = useState(1.0);
+  const [feedbackCatatan,    setFeedbackCatatan]    = useState("");
+  const [feedbackLoading,    setFeedbackLoading]    = useState(false);
+  const [feedbackResult,     setFeedbackResult]     = useState(null);   // hasil submit
+  // ── State ML metrics ──
+  const [mlMetrics,      setMlMetrics]      = useState(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
 
   const inputRef = useRef(null);
   const hasilRef = useRef(null);
@@ -816,6 +1173,13 @@ export default function VoxSwarmDashboard() {
       .then(r => r.json())
       .then(d => { if (d.kategori?.length) setKategoriList(d.kategori); })
       .catch(() => {});
+    // Fetch ML metrics saat mount
+    setLoadingMetrics(true);
+    fetch(`${apiBase}/ml-metrics`)
+      .then(r => r.json())
+      .then(d => setMlMetrics(d.metrics ?? null))
+      .catch(() => setMlMetrics(null))
+      .finally(() => setLoadingMetrics(false));
   }, []);
 
   // ── Mulai simulasi sosmed ────────────────────────────────────────
@@ -857,6 +1221,10 @@ export default function VoxSwarmDashboard() {
     setRondeAktif(0);
     setBukaEkspor(false);
     setRiwayatSim([]);
+    setTopikHash(null);
+    setPrediksiSource(null);
+    setPrediksiNote(null);
+    setFeedbackResult(null);
     try {
       const body = {
         topik: topik.trim(),
@@ -875,6 +1243,11 @@ export default function VoxSwarmDashboard() {
       }
       const data = await res.json();
       setHasil(data.data);
+      // Simpan topik_hash & prediksi source dari response
+      setTopikHash(data.data?.topik_hash ?? null);
+      setPrediksiSource(data.data?.prediksi_source ?? null);
+      setPrediksiNote(data.data?.ml_info?.note ?? null);
+      setFeedbackResult(null);   // reset feedback panel
       setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
     } catch (err) {
       alert("❌ " + (err.message || "Server tidak dapat dihubungi."));
@@ -900,7 +1273,7 @@ export default function VoxSwarmDashboard() {
   const grafData       = hasil?.graf_data ?? { entitas: [], relasi: [] };
   const aktorAnalisis  = hasil?.aktor_analisis ?? null;
 
-  const narasi = analisis
+  const narasiRaw = analisis
     .split("\n")
     .filter(l => {
       const trimmed = l.trim();
@@ -913,7 +1286,11 @@ export default function VoxSwarmDashboard() {
     })
     .join(" ")
     .replace(/\*{1,2}/g, "")
-    .slice(0, 700);
+    .slice(0, 1200);
+
+  const narasi = narasiRaw.includes(".")
+    ? narasiRaw.slice(0, narasiRaw.lastIndexOf(".") + 1)
+    : narasiRaw;
 
   const dataBar = (rondeIni?.agen ?? []).map(a => ({
     nama:  a.nama,
@@ -1165,6 +1542,7 @@ export default function VoxSwarmDashboard() {
                 <span className={`rounded-full px-4 py-1.5 text-xs font-bold text-white ${INFO_STATUS[status].kelas}`}>
                   {INFO_STATUS[status].label}
                 </span>
+                <PrediksiSourceBadge source={prediksiSource} note={prediksiNote} />
                 <span className="text-xs text-slate-500">
                   Topik: <span className="font-medium text-slate-300">"{topik}"</span>
                   {hasil.intervensi && <span className="text-amber-400"> · 🔀 {hasil.intervensi.slice(0, 40)}...</span>}
@@ -1398,6 +1776,25 @@ export default function VoxSwarmDashboard() {
 
             {/* ── Graf Pengetahuan Interaktif (GraphRAG) ── */}
             <GrafKnowledge grafData={grafData} />
+
+            {/* ── Feedback Ground Truth ── */}
+            <PanelFeedback
+              topikHash={topikHash}
+              apiBase={apiBase}
+              feedbackLabel={feedbackLabel}
+              setFeedbackLabel={setFeedbackLabel}
+              feedbackConf={feedbackConf}
+              setFeedbackConf={setFeedbackConf}
+              feedbackCatatan={feedbackCatatan}
+              setFeedbackCatatan={setFeedbackCatatan}
+              feedbackLoading={feedbackLoading}
+              setFeedbackLoading={setFeedbackLoading}
+              feedbackResult={feedbackResult}
+              setFeedbackResult={setFeedbackResult}
+            />
+
+            {/* ── ML Model Performance ── */}
+            <PanelMLMetrics apiBase={apiBase} />
 
             {/* ── Mulai ulang ── */}
             <div className="pb-6 text-center print:hidden">

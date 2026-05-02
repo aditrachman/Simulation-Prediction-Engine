@@ -43,16 +43,16 @@ AGENT_FALLBACK_CHAIN = [
 ]
 
 # ─── TOKEN BUDGET ──────────────────────────────────────────────────────────
-MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "80"))
+MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "250"))  # 250 ≈ 180-200 kata BI = 3-4 kalimat penuh
 MAX_TOKENS_RESPONSE  = int(os.getenv("MAX_TOKENS_RESPONSE",  "400"))
 MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "900"))
 MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
-MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "50"))
+MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "60"))
 
 # ─── RATE LIMIT CONFIG ─────────────────────────────────────────────────────
 RETRY_MAX        = int(os.getenv("RETRY_MAX",        "4"))
 RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "5.0"))
-AGENT_CALL_DELAY = float(os.getenv("AGENT_CALL_DELAY", "2.0"))
+AGENT_CALL_DELAY = float(os.getenv("AGENT_CALL_DELAY", "3.0"))   # dinaikkan dari 2.0 → kompensasi token lebih besar
 ROUND_DELAY      = float(os.getenv("ROUND_DELAY",      "3.0"))
 SENTIMENT_MODE   = os.getenv("SENTIMENT_MODE", "llm")   # "llm" (default, akurat) atau "inline" (hemat token)
 # ───────────────────────────────────────────────────────────────────────────

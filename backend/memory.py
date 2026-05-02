@@ -92,5 +92,5 @@ def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str
     ][:2]  # max 2 (hemat token)
     if not kuat:
         return ""
-    baris = [f'- {p["nama"]}: "{p["pendapat"][:70]}"' for p in kuat]
-    return "Dengar pendapat:\n" + "\n".join(baris)
+    baris = [f'- {p["nama"]} berpendapat: "{p["pendapat"][:70]}"' for p in kuat]
+    return "Respons atau tanggapi pendapat ini:\n" + "\n".join(baris)

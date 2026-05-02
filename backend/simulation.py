@@ -95,8 +95,10 @@ def run_simulation(
 
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
-            f"Gaya: {gaya_str}. "
-            "Jawab 1-2 kalimat pendek, bahasa sehari-hari."
+            f"Gaya bicara: {gaya_str}. "
+            f"PENTING: Berikan sudut pandang UNIK dari peranmu — "
+            f"jangan ulangi argumen agen lain. "
+            "Tulis 2-3 kalimat penuh dan selesai, bahasa sehari-hari Indonesia."
         )
 
         parts = []
@@ -264,7 +266,12 @@ def _analisis_dan_aktor(
         "   (X+Y+Z = 100)"
     )
     analisis_raw = call_llm(
-        "Kamu analis sosial. Tulis analisis diskusi dalam bahasa Indonesia. Jangan gunakan emoji.",
+        (
+            "Kamu analis sosial yang menjelaskan diskusi kepada orang awam. "
+            "Tulis analisis dalam bahasa Indonesia yang MUDAH DIPAHAMI, "
+            "seperti menjelaskan kepada teman — bukan laporan akademis. "
+            "Hindari jargon teknis. Gunakan kalimat singkat. Jangan pakai bullet/tabel."
+        ),
         prompt_analisis,
         max_tokens=MAX_TOKENS_ANALYSIS,
         model=MODEL_ANALYSIS,

@@ -100,19 +100,23 @@ def _score_inline(teks: str, topik: str = "") -> dict:
 
 def _score_llm(teks: str, topik: str = "") -> dict:
     system = (
-        "Kamu sistem klasifikasi sentimen.\n"
+        "Kamu sistem klasifikasi sentimen terhadap ISU publik Indonesia.\n"
         "Nilai apakah pendapat berikut bersikap POSITIF, NEGATIF, atau NETRAL terhadap ISU.\n\n"
-        "DEFINISI:\n"
-        "  positif = mendukung / pro / setuju terhadap isu\n"
-        "  negatif = menolak / khawatir / kritis terhadap isu\n"
-        "  netral  = skeptis terhadap klaim, berimbang, atau tidak berpihak\n\n"
-        "CONTOH:\n"
-        "  ISU: penyalahgunaan AI foto selebriti\n"
-        "  'AI sangat bermanfaat untuk semua industri' → positif\n"
-        "  'Ini meresahkan dan harus diregulasi ketat' → negatif\n"
-        "  'Saya tidak percaya klaim itu, tidak ada bukti kuat' → netral (skeptis)\n"
-        "  'Ada manfaat tapi ada risiko, perlu dikaji lebih lanjut' → netral\n"
-        "  'Saya paham manfaatnya, namun ini sangat meresahkan' → negatif\n\n"
+        "DEFINISI KETAT:\n"
+        "  positif = secara keseluruhan MENDUKUNG / SETUJU / PRO terhadap isu atau kebijakan\n"
+        "  negatif = secara keseluruhan MENOLAK / KHAWATIR / KRITIS terhadap isu atau kebijakan\n"
+        "  netral  = berimbang (ada pro-kontra), skeptis terhadap klaim, atau tidak berpihak\n\n"
+        "ATURAN PENTING:\n"
+        "  - Jika ada kata kritis tapi DIIKUTI dukungan → positif\n"
+        "  - Jika ada kata positif tapi DIIKUTI penolakan kuat → negatif\n"
+        "  - Kalimat yang menyebut masalah tanpa solusi = negatif\n"
+        "  - 'Perlu dikaji' / 'harus diperhatikan' = netral\n\n"
+        "CONTOH (ISU: kenaikan harga BBM):\n"
+        "  'Kebijakan ini memberatkan rakyat kecil dan tidak adil' → negatif, skor -0.8\n"
+        "  'Kenaikan BBM memang perlu tapi dampaknya harus dimitigasi' → netral, skor -0.1\n"
+        "  'Saya mendukung kebijakan ini demi ketahanan energi jangka panjang' → positif, skor 0.7\n"
+        "  'Ada dampak positif dan negatif, perlu evaluasi lebih lanjut' → netral, skor 0.0\n"
+        "  'Ini kebijakan zalim yang hanya menguntungkan oligarki!' → negatif, skor -0.9\n\n"
         'Kembalikan HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
     user = (

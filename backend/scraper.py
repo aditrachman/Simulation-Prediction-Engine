@@ -3,12 +3,15 @@
 #   - RSS feed berita Indonesia (Kompas, Detik, BBC Indonesia, Tempo, Antara)
 #   - Reddit via JSON API publik (tanpa OAuth, gratis)
 #   - Fallback graceful jika semua sumber gagal
+#   - Disk cache by topic hash (TTL configurable via CONTEXT_CACHE_TTL_MINUTES)
 
 import re
 import time
 import json
 import hashlib
+import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 import urllib.request
 import urllib.parse
@@ -20,7 +23,6 @@ import xml.etree.ElementTree as ET
 # ---------------------------------------------------------------------------
 
 RSS_SOURCES = [
-    # Berita Indonesia
     {"nama": "Kompas",        "url": "https://rss.kompas.com/rss/breakingnews.xml",         "bahasa": "id"},
     {"nama": "Detik",         "url": "https://feed.detik.com/detikcom-index",                "bahasa": "id"},
     {"nama": "BBC Indonesia", "url": "https://feeds.bbci.co.uk/indonesian/rss.xml",          "bahasa": "id"},
@@ -44,6 +46,130 @@ HEADERS = {
 
 TIMEOUT = 8  # detik
 
+# ---------------------------------------------------------------------------
+# Disk Cache Config
+# ---------------------------------------------------------------------------
+
+import os
+
+_CACHE_DIR  = Path(__file__).parent / "data"
+_CACHE_FILE = _CACHE_DIR / "context_cache.json"
+_CACHE_TTL  = int(os.getenv("CONTEXT_CACHE_TTL_MINUTES", "30")) * 60   # detik
+_CACHE_MAX  = int(os.getenv("CONTEXT_CACHE_MAX_ENTRIES", "100"))        # maks topik disimpan
+
+_cache_lock = threading.Lock()
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _topic_key(topik: str) -> str:
+    """Hash MD5 dari topik lowercase — jadi key cache."""
+    return hashlib.md5(topik.strip().lower().encode("utf-8")).hexdigest()
+
+
+def _load_cache() -> dict:
+    """Baca cache dari disk. Return {} jika file belum ada atau corrupt."""
+    if not _CACHE_FILE.exists():
+        return {}
+    try:
+        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_cache(cache: dict) -> None:
+    """Tulis cache ke disk. Silent fail jika tidak bisa write."""
+    try:
+        _CACHE_FILE.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=None),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[Cache] Gagal simpan cache: {e}")
+
+
+def _get_cached(topik: str) -> Optional[dict]:
+    """
+    Ambil konteks dari cache jika masih valid (belum expired).
+    Return None jika miss atau TTL terlewat.
+    """
+    with _cache_lock:
+        cache = _load_cache()
+        key   = _topic_key(topik)
+        entry = cache.get(key)
+        if not entry:
+            return None
+
+        age = time.time() - entry.get("cached_at", 0)
+        if age > _CACHE_TTL:
+            # Expired — hapus entry
+            cache.pop(key, None)
+            _save_cache(cache)
+            return None
+
+        return entry.get("data")
+
+
+def _set_cache(topik: str, data: dict) -> None:
+    """
+    Simpan konteks ke cache dengan timestamp sekarang.
+    Trim entri terlama jika melebihi CACHE_MAX.
+    """
+    with _cache_lock:
+        cache = _load_cache()
+        key   = _topic_key(topik)
+
+        cache[key] = {
+            "topik":     topik,
+            "cached_at": time.time(),
+            "data":      data,
+        }
+
+        # Trim: buang entri terlama jika cache terlalu besar
+        if len(cache) > _CACHE_MAX:
+            sorted_keys = sorted(cache, key=lambda k: cache[k].get("cached_at", 0))
+            for old_key in sorted_keys[:len(cache) - _CACHE_MAX]:
+                cache.pop(old_key, None)
+
+        _save_cache(cache)
+
+
+def clear_context_cache(topik: Optional[str] = None) -> int:
+    """
+    Hapus cache.
+    - topik=None  → hapus semua
+    - topik=str   → hapus hanya topik itu
+
+    Return: jumlah entri yang dihapus.
+    """
+    with _cache_lock:
+        cache = _load_cache()
+        if topik is None:
+            n = len(cache)
+            _save_cache({})
+            return n
+        key = _topic_key(topik)
+        if key in cache:
+            cache.pop(key)
+            _save_cache(cache)
+            return 1
+        return 0
+
+
+def get_cache_stats() -> dict:
+    """Info ringkas tentang kondisi cache saat ini."""
+    with _cache_lock:
+        cache = _load_cache()
+        now   = time.time()
+        valid = sum(1 for e in cache.values() if now - e.get("cached_at", 0) <= _CACHE_TTL)
+        return {
+            "total_entries": len(cache),
+            "valid_entries": valid,
+            "expired_entries": len(cache) - valid,
+            "ttl_minutes": _CACHE_TTL // 60,
+            "max_entries": _CACHE_MAX,
+            "cache_file": str(_CACHE_FILE),
+        }
+
 
 # ---------------------------------------------------------------------------
 # HTTP helper
@@ -55,7 +181,6 @@ def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT) -> Optional[s
         req = urllib.request.Request(url, headers=headers or HEADERS)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
-            # Coba decode UTF-8 dulu, fallback ke latin-1
             try:
                 return raw.decode("utf-8")
             except UnicodeDecodeError:
@@ -69,12 +194,12 @@ def _clean_html(text: str) -> str:
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"&amp;", "&", text)
-    text = re.sub(r"&lt;", "<", text)
-    text = re.sub(r"&gt;", ">", text)
-    text = re.sub(r"&quot;", '"', text)
-    text = re.sub(r"&#\d+;", " ", text)
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"&amp;",  "&",  text)
+    text = re.sub(r"&lt;",   "<",  text)
+    text = re.sub(r"&gt;",   ">",  text)
+    text = re.sub(r"&quot;", '"',  text)
+    text = re.sub(r"&#\d+;", " ",  text)
+    text = re.sub(r"\s+",    " ",  text)
     return text.strip()
 
 
@@ -91,12 +216,10 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
     """Parse RSS/Atom XML → list artikel."""
     articles = []
     try:
-        # Bersihkan karakter tidak valid sebelum parse
         xml_text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", xml_text)
-        root = ET.fromstring(xml_text)
+        root     = ET.fromstring(xml_text)
 
-        # Deteksi RSS vs Atom
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        ns      = {"atom": "http://www.w3.org/2005/Atom"}
         is_atom = root.tag.endswith("feed")
 
         if is_atom:
@@ -104,11 +227,11 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
         else:
             items = root.findall(".//item")
 
-        for item in items[:10]:  # maks 10 artikel per sumber
+        for item in items[:10]:
             if is_atom:
-                judul  = item.findtext("atom:title", "", ns) or item.findtext("title", "")
-                link_el = item.find("atom:link", ns) or item.find("link")
-                link   = link_el.get("href", "") if link_el is not None else ""
+                judul     = item.findtext("atom:title", "", ns) or item.findtext("title", "")
+                link_el   = item.find("atom:link", ns) or item.find("link")
+                link      = link_el.get("href", "") if link_el is not None else ""
                 ringkasan = (
                     item.findtext("atom:summary", "", ns)
                     or item.findtext("atom:content", "", ns)
@@ -116,10 +239,10 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
                 )
                 tanggal = item.findtext("atom:published", "", ns) or item.findtext("published", "")
             else:
-                judul    = item.findtext("title", "")
-                link     = item.findtext("link", "")
+                judul     = item.findtext("title", "")
+                link      = item.findtext("link", "")
                 ringkasan = item.findtext("description", "") or item.findtext("content:encoded", "")
-                tanggal  = item.findtext("pubDate", "")
+                tanggal   = item.findtext("pubDate", "")
 
             judul     = _clean_html(judul)
             ringkasan = _clean_html(ringkasan)[:400]
@@ -155,7 +278,6 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
             continue
         articles = _parse_rss(xml, src["nama"])
 
-        # Filter relevan
         relevan = []
         for art in articles:
             teks = (art["judul"] + " " + art["ringkasan"]).lower()
@@ -167,16 +289,15 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
         relevan.sort(key=lambda x: -x.get("relevansi", 0))
         semua.extend(relevan[:maks_per_sumber])
 
-    # Urutkan by relevansi, dedup by ID
     semua.sort(key=lambda x: -x.get("relevansi", 0))
-    seen = set()
+    seen  = set()
     hasil = []
     for art in semua:
         if art["id"] not in seen:
             seen.add(art["id"])
             hasil.append(art)
 
-    return hasil[:15]  # maks 15 artikel total
+    return hasil[:15]
 
 
 # ---------------------------------------------------------------------------
@@ -186,27 +307,23 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
 def fetch_reddit(topik: str, maks: int = 10) -> list[dict]:
     """
     Ambil post Reddit relevan menggunakan JSON API publik.
-    Cari di r/indonesia, r/IndonesiaNews, dan endpoint search global.
     """
     kata_kunci = urllib.parse.quote(topik)
     hasil = []
     seen  = set()
 
-    # 1. Search global di Reddit
     url_search = f"https://www.reddit.com/search.json?q={kata_kunci}&sort=hot&limit=10&restrict_sr=false"
     data = _fetch(url_search)
     if data:
         hasil.extend(_parse_reddit_json(data, "Reddit Search"))
 
-    # 2. Cari di subreddit spesifik
     for sub in REDDIT_SUBREDDITS:
         url_sub = f"https://www.reddit.com/r/{sub}/search.json?q={kata_kunci}&sort=hot&limit=5&restrict_sr=true"
         data = _fetch(url_sub)
         if data:
             hasil.extend(_parse_reddit_json(data, f"r/{sub}"))
-        time.sleep(0.3)  # rate limit Reddit
+        time.sleep(0.3)
 
-    # Dedup & filter relevan
     kata_list = [k.lower() for k in topik.split() if len(k) > 3]
     dedup = []
     for post in hasil:
@@ -227,10 +344,10 @@ def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
     """Parse response JSON Reddit listing."""
     posts = []
     try:
-        data = json.loads(json_text)
+        data     = json.loads(json_text)
         children = data.get("data", {}).get("children", [])
         for child in children:
-            d = child.get("data", {})
+            d        = child.get("data", {})
             post_id  = d.get("id", "")
             judul    = _clean_html(d.get("title", ""))
             selftext = _clean_html(d.get("selftext", ""))[:300]
@@ -259,22 +376,38 @@ def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
 
 # ---------------------------------------------------------------------------
 # Fungsi utama: gabungkan berita + Reddit → briefing untuk agen
+# (dengan disk cache — tidak fetch ulang jika topik sama & TTL belum habis)
 # ---------------------------------------------------------------------------
 
-def ambil_konteks_real(topik: str) -> dict:
+def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
     """
     Ambil data real dari berita + Reddit, gabungkan jadi briefing
     yang siap dipakai sebagai konteks agen sebelum simulasi dimulai.
 
+    Cache:
+      - Hit  → return langsung dari disk, 0 HTTP request
+      - Miss → fetch RSS + Reddit, simpan ke cache, return
+      - TTL  → default 30 menit (CONTEXT_CACHE_TTL_MINUTES di .env)
+      - force_refresh=True → skip cache, fetch ulang
+
     Returns:
         {
-            "berita": [...],
-            "reddit": [...],
-            "briefing": str,   ← teks siap pakai untuk prompt agen
-            "total": int,
+            "berita":    [...],
+            "reddit":    [...],
+            "briefing":  str,
+            "total":     int,
             "timestamp": str,
+            "from_cache": bool,
         }
     """
+    # ── Cache lookup ──────────────────────────────────────────────────────
+    if not force_refresh:
+        cached = _get_cached(topik)
+        if cached:
+            cached["from_cache"] = True
+            return cached
+    # ─────────────────────────────────────────────────────────────────────
+
     from concurrent.futures import ThreadPoolExecutor
 
     # Fetch paralel — berita & Reddit bersamaan
@@ -300,19 +433,23 @@ def ambil_konteks_real(topik: str) -> dict:
             meta = f" (👍 {post.get('upvotes', 0)}, 💬 {post.get('komentar', 0)})"
             baris.append(f"  {i}. [{post['sumber']}] {post['judul']}{ring}{meta}")
 
-    if not baris:
-        briefing = ""
-    else:
-        briefing = (
-            f"=== DATA REAL TERKAIT TOPIK: {topik} ===\n"
-            + "\n".join(baris)
-            + "\n=== GUNAKAN DATA INI SEBAGAI REFERENSI, BUKAN SATU-SATUNYA FAKTA ==="
-        )
+    briefing = (
+        f"=== DATA REAL TERKAIT TOPIK: {topik} ===\n"
+        + "\n".join(baris)
+        + "\n=== GUNAKAN DATA INI SEBAGAI REFERENSI, BUKAN SATU-SATUNYA FAKTA ==="
+    ) if baris else ""
 
-    return {
-        "berita":    berita,
-        "reddit":    reddit,
-        "briefing":  briefing,
-        "total":     len(berita) + len(reddit),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    result = {
+        "berita":     berita,
+        "reddit":     reddit,
+        "briefing":   briefing,
+        "total":      len(berita) + len(reddit),
+        "timestamp":  datetime.now(timezone.utc).isoformat(),
+        "from_cache": False,
     }
+
+    # ── Simpan ke cache ───────────────────────────────────────────────────
+    _set_cache(topik, result)
+    # ─────────────────────────────────────────────────────────────────────
+
+    return result
