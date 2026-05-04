@@ -98,7 +98,8 @@ def run_simulation(
             f"Gaya bicara: {gaya_str}. "
             f"PENTING: Berikan sudut pandang UNIK dari peranmu — "
             f"jangan ulangi argumen agen lain. "
-            "Tulis 2-3 kalimat penuh dan selesai, bahasa sehari-hari Indonesia."
+            "Tulis TEPAT 2-3 kalimat. Setiap kalimat HARUS diakhiri tanda titik. "
+            "JANGAN potong kalimat di tengah."
         )
 
         parts = []
@@ -108,6 +109,16 @@ def run_simulation(
             parts.append(f"Info: {briefing_real[:200]}")
         parts.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
         user_p = "\n".join(parts)
+
+        # BUG #1b: Batasi total panjang user prompt — pangkas konteks jika > 600 char
+        if len(user_p) > 600:
+            parts_trimmed = []
+            if konteks_memori:   parts_trimmed.append(konteks_memori[:80])
+            if konteks_pengaruh: parts_trimmed.append(konteks_pengaruh[:100])
+            if ronde_ke == 1 and briefing_real:
+                parts_trimmed.append(f"Info: {briefing_real[:100]}")
+            parts_trimmed.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
+            user_p = "\n".join(parts_trimmed)
 
         jawaban  = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
         sentimen = score_sentiment(jawaban, topik=topik_ronde)

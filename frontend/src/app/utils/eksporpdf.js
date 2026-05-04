@@ -151,6 +151,142 @@ function buildSwingVoterHTML(swingVoter) {
   }).join("");
 }
 
+// ── Builder: HTML seksi laporan ML ───────────────────────────────────────────
+function buildMLSection(mlData) {
+  if (!mlData || !mlData.metrics || !mlData.metrics.ok) return "";
+
+  const m     = mlData.metrics;
+  const debug = mlData.debug ?? null;
+
+  const accColor = m.accuracy_pct >= 80 ? "#16a34a" : m.accuracy_pct >= 60 ? "#d97706" : "#dc2626";
+
+  // ── Bar akurasi ──
+  const accBar = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700;color:#1e293b">Ketepatan Prediksi</span>
+        <span style="font-size:18px;font-weight:900;color:${accColor}">${m.accuracy_pct}%</span>
+      </div>
+      <div style="height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${m.accuracy_pct}%;background:${accColor};border-radius:99px"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <span style="font-size:10px;color:#94a3b8">Metode: <strong>${m.eval_method}</strong></span>
+        <span style="font-size:10px;color:#94a3b8">Dataset: <strong>${m.n_samples} sampel</strong>${m.n_feedback_labels > 0 ? ` (${m.n_feedback_labels} label manual)` : ""}</span>
+      </div>
+    </div>`;
+
+  // ── Peringatan overfitting ──
+  const overfitWarn = (m.accuracy_pct >= 95 && m.n_samples < 20)
+    ? `<div style="background:#fefce8;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-bottom:12px">
+        <p style="font-size:10px;font-weight:700;color:#92400e;margin:0 0 2px">Perhatian: Akurasi tinggi dengan data sedikit bisa berarti model menghafal, bukan belajar.</p>
+        <p style="font-size:10px;color:#78350f;margin:0">Tambahkan lebih banyak simulasi untuk hasil yang lebih dapat dipercaya.</p>
+       </div>`
+    : "";
+
+  // ── Kartu per skenario ──
+  const perClassCards = (m.classes ?? []).map(c => {
+    const pc = m.per_class?.[c];
+    if (!pc) return "";
+    const f1Pct = Math.round(pc.f1 * 100);
+    const f1Col = f1Pct >= 70 ? "#16a34a" : f1Pct >= 50 ? "#d97706" : "#dc2626";
+    return `<div style="flex:1;min-width:140px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:700;color:#1e293b">${c}</span>
+        <span style="font-size:13px;font-weight:900;color:${f1Col}">${f1Pct}%</span>
+      </div>
+      <div style="height:5px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;width:${f1Pct}%;background:${f1Col};border-radius:99px"></div>
+      </div>
+      <div style="font-size:10px;color:#64748b">
+        Ketepatan: <strong>${Math.round(pc.precision * 100)}%</strong> &nbsp;
+        Kelengkapan: <strong>${Math.round(pc.recall * 100)}%</strong>
+      </div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:1px">Data: ${pc.support} kasus</div>
+    </div>`;
+  }).join("");
+
+  // ── Confusion matrix ──
+  let cmTable = "";
+  if (m.confusion_matrix && m.classes) {
+    const thStyle = `style="background:#1e1b4b;color:#e0e7ff;text-align:center;padding:5px 8px;font-size:10px"`;
+    const rows = m.confusion_matrix.map((row, ri) => {
+      const cells = row.map((val, ci) => {
+        const isDiag = ri === ci;
+        const bg = isDiag && val > 0 ? "#dcfce7" : val > 0 ? "#fee2e2" : "#fff";
+        const col = isDiag && val > 0 ? "#15803d" : val > 0 ? "#dc2626" : "#94a3b8";
+        return `<td style="text-align:center;padding:5px 8px;font-size:11px;font-weight:${isDiag ? "900" : "400"};background:${bg};color:${col}">${val}</td>`;
+      }).join("");
+      return `<tr><td style="padding:5px 8px;font-size:10px;font-weight:700;color:#374151;text-align:right">${m.classes[ri]}</td>${cells}</tr>`;
+    }).join("");
+    const headerCols = m.classes.map(c => `<th ${thStyle}>${c}</th>`).join("");
+    cmTable = `
+      <p style="font-size:10px;color:#64748b;margin-bottom:6px">Baris = kenyataan · Kolom = tebakan VoxSwarm · Hijau = benar · Merah = meleset</p>
+      <table style="border-collapse:collapse;font-size:11px;margin-bottom:12px">
+        <thead><tr><th style="background:#1e1b4b;color:#e0e7ff;padding:5px 8px;font-size:10px"></th>${headerCols}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // ── Distribusi label (dari debug) ──
+  let labelDist = "";
+  if (debug?.label_distribution) {
+    const bars = Object.entries(debug.label_distribution).map(([lbl, cnt]) => {
+      const pct = debug.label_pct?.[lbl] ?? 0;
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:5px">
+        <span style="font-size:10px;color:#374151;width:90px;flex-shrink:0">${lbl}</span>
+        <div style="flex:1;height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:#6366f1;border-radius:99px"></div>
+        </div>
+        <span style="font-size:10px;color:#64748b;width:30px;text-align:right">${cnt}</span>
+      </div>`;
+    }).join("");
+
+    const riskColor = debug.overfitting_risk === "HIGH" ? "#dc2626"
+                    : debug.overfitting_risk === "MEDIUM" ? "#d97706" : "#16a34a";
+
+    const imbalanceNote = debug.imbalance_warning
+      ? `<p style="font-size:10px;color:#d97706;margin-top:4px">Data tidak seimbang — label "${debug.dominant_label}" mendominasi lebih dari 70%.</p>`
+      : "";
+
+    labelDist = `
+      <div style="margin-top:14px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc">
+        <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Distribusi Label Training</p>
+        ${bars}
+        ${imbalanceNote}
+        <p style="font-size:10px;margin-top:6px">Risiko overfitting: <strong style="color:${riskColor}">${debug.overfitting_risk}</strong>
+          &nbsp;·&nbsp; Total data: <strong>${debug.n_total}</strong>
+          &nbsp;·&nbsp; Dummy: <strong>${debug.source_distribution?.dummy ?? 0}</strong>
+          &nbsp;·&nbsp; Feedback: <strong>${debug.source_distribution?.feedback ?? 0}</strong>
+        </p>
+      </div>`;
+  }
+
+  // ── Weighted average footer ──
+  const wAvg = m.weighted_avg;
+  const wF1 = Math.round((wAvg?.f1 ?? 0) * 100);
+
+  return `
+    <div class="section no-break page-break">
+      <div class="section-title">Laporan Machine Learning — Prediksi Cerdas VoxSwarm</div>
+      <p style="font-size:11px;color:#64748b;margin-bottom:14px;line-height:1.6">
+        Model ini belajar dari pola simulasi yang sudah dijalankan untuk memprediksi
+        skenario diskusi yang belum terjadi. Semakin banyak data, semakin akurat prediksinya.
+      </p>
+      ${overfitWarn}
+      ${accBar}
+      <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ketepatan per Skenario</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">${perClassCards}</div>
+      <div style="background:#f0f4ff;border-radius:8px;padding:8px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:#374151">Skor gabungan (weighted F1)</span>
+        <span style="font-size:14px;font-weight:900;color:#4338ca">${wF1}%</span>
+      </div>
+      <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Tebakan vs Kenyataan (Confusion Matrix)</p>
+      ${cmTable}
+      ${labelDist}
+    </div>`;
+}
+
 // ── Builder: CSS string untuk dokumen HTML ────────────────────────────────────
 function buildCSS() {
   return `
@@ -188,7 +324,7 @@ function buildCSS() {
 }
 
 // ── Builder: HTML dokumen lengkap ─────────────────────────────────────────────
-function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML }) {
+function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML, mlData }) {
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -256,6 +392,8 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
   ${tabelMemori}
 </div>
 
+${buildMLSection(mlData)}
+
 <div class="footer">
   Laporan ini dibuat otomatis oleh <strong>VoxSwarm</strong> — Sistem Simulasi Opini Multi-Agen  |  ${tanggal}
 </div>
@@ -267,7 +405,7 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
 }
 
 // ── Export utama ───────────────────────────────────────────────────────────────
-export function eksporPDF(hasil, topik, analisis, aktorAnalisis) {
+export function eksporPDF(hasil, topik, analisis, aktorAnalisis, mlData = null) {
   if (!hasil) return;
 
   const tanggal    = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
@@ -286,6 +424,7 @@ export function eksporPDF(hasil, topik, analisis, aktorAnalisis) {
     rekomendasi:    aktorAnalisis?.rekomendasi ?? "",
     aktorKunciHTML: buildAktorKunciHTML(aktorAnalisis?.aktor_kunci ?? []),
     swingVoterHTML: buildSwingVoterHTML(aktorAnalisis?.swing_voter ?? []),
+    mlData,
   });
 
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });

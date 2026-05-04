@@ -43,11 +43,11 @@ AGENT_FALLBACK_CHAIN = [
 ]
 
 # ─── TOKEN BUDGET ──────────────────────────────────────────────────────────
-MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "250"))  # 250 ≈ 180-200 kata BI = 3-4 kalimat penuh
+MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "350"))  # 350 ≈ 250-280 kata BI = 3-4 kalimat penuh, lebih stabil di model 8B
 MAX_TOKENS_RESPONSE  = int(os.getenv("MAX_TOKENS_RESPONSE",  "400"))
 MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "900"))
 MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
-MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "60"))
+MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "80"))
 
 # ─── RATE LIMIT CONFIG ─────────────────────────────────────────────────────
 RETRY_MAX        = int(os.getenv("RETRY_MAX",        "4"))
@@ -130,6 +130,13 @@ def call_llm(
                     max_tokens=max_tokens,
                 )
                 result = resp.choices[0].message.content.strip()
+                # Auto-complete kalimat terpotong: potong di kalimat terakhir yang lengkap
+                if result and result[-1] not in ".!?\"'":
+                    last_punct = max(
+                        result.rfind("."), result.rfind("!"), result.rfind("?")
+                    )
+                    if last_punct > len(result) * 0.5:  # ada kalimat lengkap di >50% teks
+                        result = result[:last_punct + 1]
                 with _llm_cache_lock:
                     _llm_cache[key] = result
                 return result

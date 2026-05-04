@@ -37,7 +37,18 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 BASE_DIR      = Path(__file__).parent
-DATA_DIR      = BASE_DIR / "data"
+
+# DATA_DIR: cari di backend/data/ dulu (production),
+# fallback ke root project/data/ (jika file diletakkan di luar folder backend)
+_candidate_dirs = [
+    BASE_DIR / "data",           # backend/data/  ← lokasi normal
+    BASE_DIR.parent / "data",    # project_root/data/ ← fallback
+]
+DATA_DIR = next(
+    (d for d in _candidate_dirs if (d / "simulation_history.jsonl").exists()),
+    _candidate_dirs[0],  # default ke backend/data/ jika belum ada file sama sekali
+)
+
 HISTORY_FILE  = DATA_DIR / "simulation_history.jsonl"
 FEEDBACK_FILE = DATA_DIR / "feedback.jsonl"
 MODEL_FILE    = DATA_DIR / "outcome_model.pkl"
@@ -128,8 +139,25 @@ def build_feature_row(sim_output: dict, real_context: dict) -> dict:
         [r.get("upvotes", 0) for r in reddit]
     ) if reddit else 0.0
 
-    # ── Label ground-truth (weak label dari rule-based, bisa di-override oleh feedback) ──
-    label = max(prediksi, key=prediksi.get) if prediksi else "Status Quo"
+    # ── Label ground-truth (weak label berbasis fitur sentimen, bukan max(prediksi)) ──
+    # Gunakan fitur sentimen yang sudah dihitung di atas agar label lebih bermakna
+    pct_pos_val = n_pos / total_last
+    pct_neg_val = n_neg / total_last
+
+    if pct_pos_val >= 0.6:
+        label = "Konsensus"
+    elif pct_neg_val >= 0.5 or (max_sent - min_sent) > 1.6:
+        label = "Polarisasi"
+    else:
+        label = "Status Quo"
+
+    # Override dengan prediksi rule-based HANYA jika ada perbedaan kuat (>= 20% selisih):
+    if prediksi:
+        top_pred = max(prediksi, key=prediksi.get)
+        top_val  = prediksi[top_pred]
+        vals     = sorted(prediksi.values(), reverse=True)
+        if len(vals) >= 2 and (top_val - vals[1]) >= 20:
+            label = top_pred
 
     # ── topik_hash — FK untuk join dengan feedback.jsonl ─────────────────
     topik_raw  = (sim_output.get("topik") or "").strip().lower()
@@ -334,10 +362,8 @@ def train_model(force: bool = False) -> dict:
     le = LabelEncoder()
     y  = le.fit_transform(y_raw)
 
-    if len(rows) >= 20:
-        X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
-    else:
-        X_tr, X_te, y_tr, y_te = X, X, y, y
+    from sklearn.model_selection import LeaveOneOut
+    from sklearn.metrics import accuracy_score as _accuracy_score
 
     clf = RandomForestClassifier(
         n_estimators=100,
@@ -346,23 +372,36 @@ def train_model(force: bool = False) -> dict:
         random_state=42,
         class_weight="balanced",
     )
-    clf.fit(X_tr, y_tr)
-    acc = clf.score(X_te, y_te)
+
+    if len(rows) >= 20:
+        X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
+        clf.fit(X_tr, y_tr)
+        acc = clf.score(X_te, y_te)
+        eval_method = "train/test split (80/20)"
+    else:
+        # Leave-One-Out CV untuk evaluasi jujur saat data < 20
+        clf.fit(X, y)
+        loo = LeaveOneOut()
+        y_pred_loo = cross_val_predict(clf, X, y, cv=loo)
+        acc = _accuracy_score(y, y_pred_loo)
+        eval_method = f"Leave-One-Out CV ({len(rows)} fold)"
 
     with _model_lock:
         MODEL_FILE.write_bytes(pickle.dumps(clf))
         ENCODER_FILE.write_bytes(pickle.dumps(le))
 
+    n_weak = len(rows) - n_feedback
     return {
-        "ok":        True,
-        "n_samples": len(rows),
+        "ok":         True,
+        "n_samples":  len(rows),
         "n_feedback": n_feedback,
-        "accuracy":  round(acc, 4),
-        "classes":   list(le.classes_),
-        "message":   (
+        "accuracy":   round(acc, 4),
+        "classes":    list(le.classes_),
+        "eval_method": eval_method,
+        "message":    (
             f"Model dilatih dari {len(rows)} sampel "
-            f"({n_feedback} dengan label feedback, {len(rows) - n_feedback} weak label). "
-            f"Akurasi: {acc:.1%}"
+            f"({n_feedback} feedback, {n_weak} weak label). "
+            f"Akurasi: {acc:.1%} [{eval_method}]"
         ),
     }
 
@@ -572,9 +611,16 @@ def load_or_predict(sim_output: dict, real_context: dict, prebuilt: bool = False
 
     history = _load_history()
     n = len(history)
-    if not MODEL_FILE.exists() and n >= MIN_SAMPLES:
+
+    # Auto-train jika: model belum ada DAN data sudah cukup
+    # ATAU model sudah ada tapi data bertambah signifikan (kelipatan 5)
+    should_train = (
+        (not MODEL_FILE.exists() and n >= MIN_SAMPLES) or
+        (MODEL_FILE.exists() and n >= MIN_SAMPLES and n % 5 == 0)
+    )
+    if should_train:
         try:
-            result = train_model()
+            result = train_model(force=not MODEL_FILE.exists())
             if result.get("ok"):
                 print(f"[ML] Auto-trained: {result['message']}")
         except Exception as e:
@@ -606,6 +652,24 @@ def load_or_predict(sim_output: dict, real_context: dict, prebuilt: bool = False
 # ---------------------------------------------------------------------------
 # Utility — endpoint /ml-status di main.py
 # ---------------------------------------------------------------------------
+
+def force_train_if_ready() -> dict:
+    """
+    Paksa training jika data sudah >= MIN_SAMPLES.
+    Berguna dipanggil manual jika auto-train tidak terpicu.
+    Bisa di-expose via endpoint GET /ml-train di main.py.
+    """
+    rows = _load_history()
+    n = len(rows)
+    if n < MIN_SAMPLES:
+        return {
+            "ok": False,
+            "message": f"Data belum cukup: {n}/{MIN_SAMPLES} simulasi.",
+            "n_samples": n,
+            "min_samples": MIN_SAMPLES,
+        }
+    return train_model(force=True)
+
 
 def get_ml_status() -> dict:
     """Status ML pipeline untuk endpoint diagnostik."""
@@ -663,10 +727,17 @@ def get_ml_metrics() -> dict:
         return {"ok": False, "message": "scikit-learn tidak terinstall."}
 
     if not MODEL_FILE.exists() or not ENCODER_FILE.exists():
+        n_history = len(_load_history())
+        sisa = max(0, MIN_SAMPLES - n_history)
         return {
-            "ok":        False,
-            "message":   f"Model belum aktif. Jalankan minimal {MIN_SAMPLES} simulasi untuk mengaktifkan ML prediction.",
-            "n_samples":  len(_load_history()),
+            "ok":          False,
+            "message":     (
+                f"Butuh {sisa} simulasi lagi untuk mengaktifkan ML."
+                if sisa > 0 else
+                f"Data sudah cukup ({n_history} simulasi) — model sedang disiapkan. "
+                "Coba jalankan satu simulasi lagi untuk memicu training."
+            ),
+            "n_samples":   n_history,
             "min_samples": MIN_SAMPLES,
         }
 
@@ -694,9 +765,11 @@ def get_ml_metrics() -> dict:
             y_pred_enc = cross_val_predict(clf, X, y, cv=cv)
             eval_method = "5-fold CV"
         else:
-            # Data kurang untuk 5-fold — gunakan model ter-train langsung
-            y_pred_enc  = clf.predict(X)
-            eval_method = "train=test (data kurang)"
+            # Leave-One-Out CV untuk evaluasi jujur saat data < 20
+            from sklearn.model_selection import LeaveOneOut
+            loo = LeaveOneOut()
+            y_pred_enc = cross_val_predict(clf, X, y, cv=loo)
+            eval_method = f"Leave-One-Out CV ({n} fold)"
 
         y_pred_labels = le.inverse_transform(y_pred_enc)
         y_true_labels = le.inverse_transform(y)

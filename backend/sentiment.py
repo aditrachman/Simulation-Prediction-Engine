@@ -100,46 +100,42 @@ def _score_inline(teks: str, topik: str = "") -> dict:
 
 def _score_llm(teks: str, topik: str = "") -> dict:
     system = (
-        "Kamu sistem klasifikasi sentimen terhadap ISU publik Indonesia.\n"
-        "Nilai apakah pendapat berikut bersikap POSITIF, NEGATIF, atau NETRAL terhadap ISU.\n\n"
-        "DEFINISI KETAT:\n"
-        "  positif = secara keseluruhan MENDUKUNG / SETUJU / PRO terhadap isu atau kebijakan\n"
-        "  negatif = secara keseluruhan MENOLAK / KHAWATIR / KRITIS terhadap isu atau kebijakan\n"
-        "  netral  = berimbang (ada pro-kontra), skeptis terhadap klaim, atau tidak berpihak\n\n"
-        "ATURAN PENTING:\n"
-        "  - Jika ada kata kritis tapi DIIKUTI dukungan → positif\n"
-        "  - Jika ada kata positif tapi DIIKUTI penolakan kuat → negatif\n"
-        "  - Kalimat yang menyebut masalah tanpa solusi = negatif\n"
-        "  - 'Perlu dikaji' / 'harus diperhatikan' = netral\n\n"
-        "CONTOH (ISU: kenaikan harga BBM):\n"
-        "  'Kebijakan ini memberatkan rakyat kecil dan tidak adil' → negatif, skor -0.8\n"
-        "  'Kenaikan BBM memang perlu tapi dampaknya harus dimitigasi' → netral, skor -0.1\n"
-        "  'Saya mendukung kebijakan ini demi ketahanan energi jangka panjang' → positif, skor 0.7\n"
-        "  'Ada dampak positif dan negatif, perlu evaluasi lebih lanjut' → netral, skor 0.0\n"
-        "  'Ini kebijakan zalim yang hanya menguntungkan oligarki!' → negatif, skor -0.9\n\n"
-        'Kembalikan HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
+        "Klasifikasi sentimen pendapat terhadap isu Indonesia.\n"
+        "  positif = MENDUKUNG / SETUJU / PRO terhadap isu\n"
+        "  negatif = MENOLAK / KHAWATIR / KRITIS terhadap isu\n"
+        "  netral  = berimbang atau tidak berpihak\n"
+        "Contoh: 'memberatkan rakyat' → {\"label\":\"negatif\",\"skor\":-0.8}\n"
+        "Contoh: 'mendukung demi kebaikan bersama' → {\"label\":\"positif\",\"skor\":0.7}\n"
+        "Contoh: 'ada sisi positif dan negatif' → {\"label\":\"netral\",\"skor\":0.0}\n"
+        'Balas HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
-    user = (
-        f'ISU: "{topik[:80]}"\n'
-        f'Pendapat: "{teks[:220]}"'
-    )
+    user = f'Isu: "{topik[:60]}"\nPendapat: "{teks[:200]}"'
+
     result = call_llm_json(system, user, max_tokens=MAX_TOKENS_SENTIMENT, model=MODEL_AGENT)
 
-    label = result.get("label", "netral")
-    skor  = result.get("skor", 0.0)
+    # Jika LLM gagal hasilkan JSON valid (model 8B sering gagal) → fallback inline
+    if not result or not isinstance(result, dict):
+        return _score_inline(teks, topik)
 
-    if label not in ("positif", "netral", "negatif"):
-        label = "netral"
+    label = result.get("label", "")
+    skor  = result.get("skor", None)
+
+    # Fallback inline jika label tidak valid atau skor tidak ada
+    if label not in ("positif", "netral", "negatif") or skor is None:
+        return _score_inline(teks, topik)
+
     try:
         skor = max(-1.0, min(1.0, float(skor)))
     except Exception:
-        skor = 0.0
+        return _score_inline(teks, topik)
 
+    # Koreksi konsistensi label ↔ skor
     if label == "positif":
         skor = abs(skor) if skor != 0.0 else 0.5
     elif label == "negatif":
         skor = -abs(skor) if skor != 0.0 else -0.5
     else:
+        # netral tapi skor kuat → koreksi label
         if skor >= 0.35:
             label = "positif"
         elif skor <= -0.35:

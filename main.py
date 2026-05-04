@@ -527,9 +527,19 @@ def ml_status(request: Request):
     """
     Status ML pipeline: jumlah data terkumpul, apakah model sudah aktif,
     berapa sampel lagi yang dibutuhkan, dan berapa label dari feedback.
+    Termasuk path HISTORY_FILE untuk debugging lokasi file.
     """
     _enforce_rate_limit(request)
-    return {"status": "success", "ml": get_ml_status()}
+    from backend.ml_pipeline import DATA_DIR, HISTORY_FILE, MODEL_FILE
+    status = get_ml_status()
+    status["debug_paths"] = {
+        "data_dir":       str(DATA_DIR),
+        "history_file":   str(HISTORY_FILE),
+        "history_exists": HISTORY_FILE.exists(),
+        "model_file":     str(MODEL_FILE),
+        "model_exists":   MODEL_FILE.exists(),
+    }
+    return {"status": "success", "ml": status}
 
 
 @app.post("/ml-train", tags=["ML"])
@@ -627,6 +637,65 @@ def submit_feedback_endpoint(payload: FeedbackRequest, request: Request):
             "total_feedback":    result["total_feedback"],
             "retrain_triggered": result["retrain_triggered"],
         },
+    }
+
+
+@app.get("/ml-debug", tags=["ML"])
+def ml_debug(request: Request):
+    """
+    Diagnostik lengkap ML pipeline:
+    distribusi label, fitur paling berpengaruh, tanda-tanda overfitting,
+    dan peringatan imbalance data. Berguna setelah generate_dummy_data.py dijalankan.
+    """
+    _enforce_rate_limit(request)
+    from backend.ml_pipeline import (
+        build_training_dataset, FEATURE_COLS,
+        MODEL_FILE, _model_lock,
+    )
+    import pickle
+
+    dataset = build_training_dataset()
+    label_counts:  dict = {}
+    source_counts: dict = {"weak": 0, "feedback": 0, "dummy": 0}
+    for row in dataset:
+        lbl = row.get("label", "?")
+        src = "dummy" if row.get("_source") == "dummy" else row.get("label_source", "weak")
+        label_counts[lbl]  = label_counts.get(lbl, 0) + 1
+        source_counts[src] = source_counts.get(src, 0) + 1
+
+    total     = len(dataset) or 1
+    label_pct = {k: round(v / total * 100, 1) for k, v in label_counts.items()}
+    dominant  = max(label_counts, key=label_counts.get) if label_counts else None
+    imbalance_warning = (
+        label_counts.get(dominant, 0) / total > 0.7 if dominant else False
+    )
+
+    feature_importance: list = []
+    if MODEL_FILE.exists():
+        try:
+            with _model_lock:
+                clf = pickle.loads(MODEL_FILE.read_bytes())
+            fi = sorted(zip(FEATURE_COLS, clf.feature_importances_), key=lambda x: -x[1])
+            feature_importance = [
+                {"feature": f, "importance": round(float(i), 4)} for f, i in fi[:10]
+            ]
+        except Exception as e:
+            feature_importance = [{"error": str(e)}]
+
+    return {
+        "status":              "success",
+        "n_total":             len(dataset),
+        "label_distribution":  label_counts,
+        "label_pct":           label_pct,
+        "source_distribution": source_counts,
+        "dominant_label":      dominant,
+        "imbalance_warning":   imbalance_warning,
+        "top10_features":      feature_importance,
+        "overfitting_risk":    (
+            "HIGH"   if len(dataset) < 20 else
+            "MEDIUM" if len(dataset) < 50 else
+            "LOW"
+        ),
     }
 
 
@@ -768,6 +837,18 @@ def ml_dataset_stats(request: Request):
         "drift_summary":       drift_summary,
         "feature_cols":        FEATURE_COLS,
     }
+
+
+@app.get("/ml-train", tags=["ML"])
+def manual_train(request: Request):
+    """
+    Trigger training manual jika data sudah >= MIN_SAMPLES.
+    Berguna jika auto-train tidak terpicu atau ingin memaksa re-train.
+    """
+    _enforce_rate_limit(request)
+    from backend.ml_pipeline import force_train_if_ready
+    result = force_train_if_ready()
+    return {"ok": result.get("ok"), "data": result, "message": result.get("message", "")}
 
 
 @app.get("/ml-metrics", tags=["ML"])

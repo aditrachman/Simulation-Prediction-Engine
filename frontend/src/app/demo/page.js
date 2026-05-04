@@ -13,8 +13,8 @@ import {
 
 // ─── Konstanta ────────────────────────────────────────────────────────
 const WARNA_SENTIMEN  = { positif: "#22c55e", netral: "#6366f1", negatif: "#ef4444" };
-const LABEL_SENTIMEN  = { positif: "Positif", netral: "Netral", negatif: "Negatif" };
-const WARNA_SKENARIO  = { Konsensus: "#22c55e", Polarisasi: "#ef4444", "Status Quo": "#6366f1" };
+const LABEL_SENTIMEN  = { positif: "Mendukung", netral: "Netral", negatif: "Menolak" };
+const WARNA_SKENARIO  = { "Semua Setuju": "#22c55e", "Masyarakat Terpecah": "#ef4444", "Tidak Ada Perubahan": "#6366f1" };
 const WARNA_AGEN_LIST = ["#6366f1","#22c55e","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#ec4899","#14b8a6"];
 
 // ─── Export utils ─────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ const KartuMemoriAgen = ({ rondeDetail, warnaAgen }) => {
 
   return (
     <Kartu>
-      <JudulSeksi>🧠 Memori & Evolusi Pendapat Agen</JudulSeksi>
+      <JudulSeksi>🧠 Perubahan Pendapat Tiap Peserta</JudulSeksi>
       <p className="mb-4 text-xs text-slate-500">Klik nama agen untuk melihat bagaimana pendapatnya berubah dari putaran ke putaran.</p>
       <div className="space-y-2">
         {namaAgenList.map((nama, i) => {
@@ -125,10 +125,10 @@ const KartuMemoriAgen = ({ rondeDetail, warnaAgen }) => {
                         {/* Konten */}
                         <div className="pb-2">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[11px] font-bold text-slate-400">Putaran {item.ronde}</span>
+                            <span className="text-[11px] font-bold text-slate-400">Babak {item.ronde}</span>
                             <BadgeSentimen label={item.sentimen?.label} />
                             <span className="text-[10px] text-slate-600">
-                              skor: {item.sentimen?.skor > 0 ? "+" : ""}{item.sentimen?.skor ?? 0}
+                              nilai: {item.sentimen?.skor > 0 ? "+" : ""}{item.sentimen?.skor ?? 0}
                             </span>
                           </div>
                           <p className="text-xs leading-relaxed text-slate-300 italic">"{item.pendapat}"</p>
@@ -156,7 +156,7 @@ const DualModelBadge = ({ modelInfo }) => {
       <span className="text-[10px] font-bold tracking-widest uppercase text-slate-600">⚡ Dual-Model</span>
       <div className="flex items-center gap-1.5">
         <span className="rounded-md bg-violet-900/50 border border-violet-700/50 px-2 py-0.5 text-[10px] font-semibold text-violet-300">
-          Agen: {shortName(modelInfo.agen)}
+          Peserta: {shortName(modelInfo.agen)}
         </span>
         <span className="text-slate-700 text-xs">+</span>
         <span className="rounded-md bg-cyan-900/50 border border-cyan-700/50 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
@@ -425,7 +425,7 @@ const PanelIntervensiSosmed = ({ topik, kategori, jumlahTick, agenCustom, onHasi
         </button>
       </div>
       <p className="text-[11px] text-amber-700 mb-3">
-        Suntikkan breaking news ke dalam simulasi sosmed. Semua agen akan bereaksi terhadap berita baru ini.
+        Suntikkan berita baru ke dalam analisis sosmed. Semua peserta akan bereaksi terhadap berita baru ini.
       </p>
       {tampil && (
         <div className="space-y-3">
@@ -443,7 +443,7 @@ const PanelIntervensiSosmed = ({ topik, kategori, jumlahTick, agenCustom, onHasi
               disabled={memuat || !intervensi.trim()}
               className="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-black transition hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {memuat ? "⏳ Memproses..." : "🚀 Injeksi & Simulasi Ulang"}
+              {memuat ? "⏳ Memproses..." : "🚀 Suntik & Analisis Ulang"}
             </button>
             <button
               onClick={() => { setIntervensi(""); setPesanError(""); }}
@@ -511,7 +511,7 @@ const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru
         </button>
       </div>
       <p className="text-[11px] text-amber-700 mb-3">
-        Suntikkan skenario baru ke dalam simulasi yang sudah berjalan. Agen akan bereaksi ulang terhadap variabel baru ini.
+        Suntikkan isu baru ke dalam analisis yang sudah berjalan. Semua peserta akan bereaksi ulang terhadap variabel baru ini.
       </p>
 
       {tampil && (
@@ -530,7 +530,7 @@ const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru
               disabled={memuat || !intervensi.trim()}
               className="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-black transition hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {memuat ? "⏳ Memproses..." : "🚀 Injeksi & Simulasi Ulang"}
+              {memuat ? "⏳ Memproses..." : "🚀 Suntik & Analisis Ulang"}
             </button>
             <button
               onClick={() => { setIntervensi(""); setPesanError(""); }}
@@ -540,7 +540,7 @@ const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru
             </button>
           </div>
           <p className="text-[10px] text-amber-800">
-            ⚠️ Simulasi akan dijalankan ulang penuh dengan intervensi ini diinjeksikan di putaran tengah.
+            ⚠️ Analisis akan dijalankan ulang penuh dengan isu baru ini dimasukkan di tengah babak.
           </p>
         </div>
       )}
@@ -576,7 +576,7 @@ const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
           <span className="text-sm font-bold text-indigo-300">Tambah Agen Custom</span>
           {agenCustom.length > 0 && (
             <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-400">
-              {agenCustom.length} agen ditambahkan
+              {agenCustom.length} peserta ditambahkan
             </span>
           )}
         </div>
@@ -588,7 +588,7 @@ const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
         </button>
       </div>
       <p className="text-[11px] text-indigo-700 mb-2">
-        Tambahkan karakter agen baru dengan perspektif khusus yang tidak ada di daftar bawaan.
+        Tambahkan karakter peserta baru dengan perspektif khusus yang tidak ada di daftar bawaan.
       </p>
 
       {/* Daftar agen custom yang sudah ditambahkan */}
@@ -647,7 +647,7 @@ const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
             disabled={!nama.trim() || !role.trim()}
             className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            + Tambahkan Agen
+            + Tambahkan Peserta
           </button>
         </div>
       )}
@@ -693,7 +693,7 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
 
   return (
     <Kartu>
-      <JudulSeksi>🎯 Prediksi Aktor Kunci & Swing Voter</JudulSeksi>
+      <JudulSeksi>🎯 Siapa yang Paling Menentukan Hasil?</JudulSeksi>
       <p className="mb-5 text-xs text-slate-500">
         Siapa yang paling menentukan hasil akhir, dan siapa yang masih bisa berpindah pihak.
       </p>
@@ -715,7 +715,7 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
         {/* Aktor Kunci */}
         <div>
           <p className="mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-            🏛️ Aktor Kunci — Pengaruh Tinggi
+            🏛️ Tokoh Paling Berpengaruh
           </p>
           <div className="space-y-3">
             {aktorKunci.length === 0 && <p className="text-xs text-slate-600">Tidak ada data.</p>}
@@ -747,7 +747,7 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
         {/* Swing Voter */}
         <div>
           <p className="mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-            🔄 Swing Voter — Mudah Berubah
+            🔄 Peserta yang Mudah Goyah
           </p>
           <div className="space-y-3">
             {swingVoter.length === 0 && <p className="text-xs text-slate-600">Semua agen cukup konsisten.</p>}
@@ -773,7 +773,7 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
                   <div className="flex items-center gap-2 text-[10px] text-slate-600 mb-1">
                     <span>Tren: <span className="text-slate-400">{skorAwal} → {skorAkhir}</span></span>
                   </div>
-                  <p className="text-[10px] text-slate-600 mb-0.5">Volatilitas sikap</p>
+                  <p className="text-[10px] text-slate-600 mb-0.5">Seberapa sering berubah pikiran</p>
                   <VolatilitasBar vol={a.volatilitas} />
                 </div>
               );
@@ -835,13 +835,26 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
     setFeedbackLoading(false);
   };
 
-  const confPct = Math.round(feedbackConf * 100);
+  const safeConf = (typeof feedbackConf === "number" && !isNaN(feedbackConf)) ? feedbackConf : 1.0;
+  const confPct = Math.round(safeConf * 100);
   const confLabel = confPct <= 33 ? "Kurang yakin" : confPct <= 66 ? "Cukup yakin" : "Sangat yakin";
 
   const LABEL_OPTIONS = [
-    { value: "Konsensus",  display: "✅ Konsensus — semua pihak setuju / isu mereda" },
-    { value: "Polarisasi", display: "⚡ Polarisasi — masyarakat terbelah, debat panas" },
-    { value: "Status Quo", display: "😐 Status Quo — situasi tidak banyak berubah" },
+    {
+      value: "Konsensus",
+      display: "✅ Semua Setuju — semua pihak setuju / isu mereda",
+      tooltip: "Isu selesai: pemerintah dan publik mencapai titik temu, atau isu tidak lagi diperdebatkan"
+    },
+    {
+      value: "Polarisasi",
+      display: "⚡ Masyarakat Terpecah — pendapat terbelah, debat panas",
+      tooltip: "Isu memanas: dua kubu saling berseberangan, perdebatan publik intens di media sosial"
+    },
+    {
+      value: "Status Quo",
+      display: "😐 Tidak Ada Perubahan — situasi tidak banyak berubah",
+      tooltip: "Isu meredup begitu saja: tidak ada keputusan besar, situasi kembali normal"
+    },
   ];
 
   return (
@@ -853,15 +866,24 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
         makin akurat prediksi VoxSwarm ke depannya.
       </p>
 
+      <div className="mb-4 rounded-xl border border-indigo-500/10 bg-indigo-950/10 px-3 py-2.5">
+        <p className="text-[11px] text-indigo-400 font-semibold mb-1">⏰ Kapan mengisi ini?</p>
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          Isi panel ini beberapa hari atau minggu setelah simulasi dijalankan —
+          setelah kamu melihat sendiri bagaimana isu ini berkembang di berita atau media sosial.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
         {/* Label */}
         <div>
           <label className="block text-[11px] font-bold text-slate-400 mb-1.5">Outcome yang terjadi</label>
           <div className="flex flex-col gap-2">
-            {LABEL_OPTIONS.map(({ value, display }) => (
+            {LABEL_OPTIONS.map(({ value, display, tooltip }) => (
               <button
                 key={value}
                 onClick={() => setFeedbackLabel(value)}
+                title={tooltip}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold border text-left transition ${
                   feedbackLabel === value
                     ? "bg-indigo-600 border-indigo-500 text-white"
@@ -882,8 +904,8 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
           <p className="text-xs font-bold text-indigo-300 mb-2">{confLabel}</p>
           <input
             type="range" min="0" max="1" step="0.05"
-            value={feedbackConf}
-            onChange={e => setFeedbackConf(parseFloat(e.target.value))}
+            value={safeConf}
+            onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setFeedbackConf(v); }}
             className="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-indigo-500"
           />
           <div className="flex justify-between text-[10px] text-slate-600 mt-1">
@@ -897,7 +919,7 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
       <div className="mb-4">
         <label className="block text-[11px] font-bold text-slate-400 mb-1.5">Ceritakan konteksnya (opsional)</label>
         <textarea
-          value={feedbackCatatan}
+          value={feedbackCatatan ?? ""}
           onChange={e => setFeedbackCatatan(e.target.value)}
           placeholder="Misal: Setelah demo besar-besaran, pemerintah akhirnya mencabut kebijakan ini..."
           maxLength={1000}
@@ -937,13 +959,19 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
 // ─── Komponen: Panel ML Model Performance ────────────────────────────
 const PanelMLMetrics = ({ apiBase }) => {
   const [metrics,  setMetrics]  = useState(null);
+  const [debug,    setDebug]    = useState(null);
   const [loading,  setLoading]  = useState(false);
 
   const fetchMetrics = () => {
     setLoading(true);
-    fetch(`${apiBase}/ml-metrics`)
-      .then(r => r.json())
-      .then(d => setMetrics(d.metrics ?? null))
+    Promise.all([
+      fetch(`${apiBase}/ml-metrics`).then(r => r.json()),
+      fetch(`${apiBase}/ml-debug`).then(r => r.json()).catch(() => null),
+    ])
+      .then(([metricsData, debugData]) => {
+        setMetrics(metricsData.metrics ?? null);
+        setDebug(debugData ?? null);
+      })
       .catch(() => setMetrics(null))
       .finally(() => setLoading(false));
   };
@@ -960,10 +988,11 @@ const PanelMLMetrics = ({ apiBase }) => {
   );
 
   if (!metrics || !metrics.ok) {
-    const nSampel    = metrics?.n_samples   ?? 0;
-    const minSampel  = metrics?.min_samples ?? 5;
-    const sisa       = Math.max(0, minSampel - nSampel);
-    const progPct    = Math.min(100, (nSampel / minSampel) * 100);
+    const nSampel       = metrics?.n_samples   ?? 0;
+    const minSampel     = metrics?.min_samples ?? 5;
+    const sisa          = Math.max(0, minSampel - nSampel);
+    const progPct       = Math.min(100, (nSampel / minSampel) * 100);
+    const dataSudahCukup = nSampel >= minSampel;
 
     return (
       <Kartu>
@@ -971,12 +1000,12 @@ const PanelMLMetrics = ({ apiBase }) => {
         <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4">
           <p className="text-sm font-bold text-indigo-300 mb-1">
             {sisa > 0
-              ? `Butuh ${sisa} simulasi lagi untuk mengaktifkan ML`
+              ? `Butuh ${sisa} analisis lagi untuk mengaktifkan kecerdasan VoxSwarm`
               : (metrics?.message ?? "Model sedang disiapkan...")}
           </p>
           <p className="text-xs text-slate-500 leading-relaxed">
             VoxSwarm akan mulai belajar dari pola diskusi setelah cukup data terkumpul.
-            Setiap simulasi yang kamu jalankan membantu sistem jadi lebih cerdas.
+            Setiap analisis yang kamu jalankan membantu VoxSwarm belajar lebih baik.
           </p>
           {/* Progress bar menuju MIN_SAMPLES */}
           <div className="mt-3 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
@@ -986,8 +1015,23 @@ const PanelMLMetrics = ({ apiBase }) => {
             />
           </div>
           <p className="mt-1 text-[10px] text-slate-600">
-            {nSampel} / {minSampel} simulasi terkumpul
+            {nSampel} / {minSampel} analisis terkumpul
           </p>
+          {dataSudahCukup && (
+            <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  await fetch(`${apiBase}/ml-train`);
+                  await fetchMetrics();
+                } catch (_) {}
+                setLoading(false);
+              }}
+              className="mt-3 w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-bold text-white transition"
+            >
+              ⚡ Aktifkan ML Sekarang
+            </button>
+          )}
         </div>
       </Kartu>
     );
@@ -995,12 +1039,15 @@ const PanelMLMetrics = ({ apiBase }) => {
 
   const { accuracy_pct, eval_method, n_samples, n_feedback_labels, confusion_matrix: cm, classes, per_class, macro_avg, weighted_avg } = metrics;
   const accColor = accuracy_pct >= 80 ? "#22c55e" : accuracy_pct >= 60 ? "#f59e0b" : "#ef4444";
-  const K_ABBR = { "Konsensus": "K", "Polarisasi": "P", "Status Quo": "SQ" };
+
+  // Terjemahkan nama kelas ke bahasa mudah
+  const LABEL_MUDAH = { "Konsensus": "Semua Setuju", "Polarisasi": "Masyarakat Terpecah", "Status Quo": "Tidak Ada Perubahan" };
+  const labelMudah = (c) => LABEL_MUDAH[c] ?? c;
 
   return (
     <Kartu>
       <div className="flex items-center justify-between mb-5">
-        <JudulSeksi>🤖 ML Model Performance</JudulSeksi>
+        <JudulSeksi>🤖 Seberapa Pintar VoxSwarm?</JudulSeksi>
         <button
           onClick={fetchMetrics}
           className="text-[10px] text-slate-600 hover:text-indigo-400 transition border border-white/10 rounded-lg px-2.5 py-1 font-bold"
@@ -1008,12 +1055,25 @@ const PanelMLMetrics = ({ apiBase }) => {
           ↻ Refresh
         </button>
       </div>
+      <p className="mb-4 text-xs text-slate-400 leading-relaxed">
+        Ini "rapor" sistem tebakan VoxSwarm. Semakin tinggi angkanya,
+        semakin sering VoxSwarm berhasil menebak apa yang benar-benar terjadi.
+      </p>
 
-      {/* ── Sub-section 1: Header ── */}
+      {/* ── Sub-section 1: Akurasi ── */}
       <div className="mb-6 rounded-xl border border-white/10 bg-white/3 p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-black text-white">Akurasi: {accuracy_pct}%</span>
-          <span className="text-[11px] text-slate-500">{eval_method}</span>
+          <div>
+            <span className="text-sm font-black text-white">
+              Tingkat Kebenaran: {accuracy_pct}%
+            </span>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Dari 100 tebakan, sekitar {accuracy_pct} di antaranya tepat sasaran.
+            </p>
+          </div>
+          <span className="text-[11px] text-slate-500 text-right">
+            Diuji dari<br/>{n_samples} data
+          </span>
         </div>
         <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden mb-2">
           <div
@@ -1022,23 +1082,31 @@ const PanelMLMetrics = ({ apiBase }) => {
           />
         </div>
         <p className="text-[11px] text-slate-500">
-          Dataset: <span className="text-slate-300 font-semibold">{n_samples} sampel</span>
-          {n_feedback_labels > 0 && <span> (<span className="text-indigo-300">{n_feedback_labels} dengan label manual</span>)</span>}
+          Belajar dari <span className="text-slate-300 font-semibold">{n_samples} analisis</span>
+          {n_feedback_labels > 0 && <span> · <span className="text-indigo-300">{n_feedback_labels} di antaranya sudah dikoreksi manual</span></span>}
         </p>
       </div>
 
-      {/* ── Sub-section 2: Confusion Matrix ── */}
+      {/* ── Sub-section 2: Tabel Tebakan vs Kenyataan ── */}
       {cm && cm.length > 0 && (
         <div className="mb-6">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Confusion Matrix</p>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+            Tebakan vs Kenyataan
+          </p>
+          <p className="text-[10px] text-slate-600 mb-3">
+            Baris = yang benar-benar terjadi · Kolom = tebakan VoxSwarm ·
+            Hijau = benar · Merah = meleset
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px] border-collapse">
               <thead>
                 <tr>
-                  <th className="p-2 text-slate-600 font-normal text-right">Aktual →</th>
+                  <th className="p-2 text-slate-600 font-normal text-right text-[10px]">
+                    Kenyataan ↓ · Tebakan →
+                  </th>
                   {classes.map(c => (
-                    <th key={c} className="p-2 text-center text-slate-400 font-bold">
-                      Pred {K_ABBR[c] ?? c}
+                    <th key={c} className="p-2 text-center text-slate-400 font-bold text-[10px]">
+                      {labelMudah(c)}
                     </th>
                   ))}
                 </tr>
@@ -1046,7 +1114,7 @@ const PanelMLMetrics = ({ apiBase }) => {
               <tbody>
                 {cm.map((row, ri) => (
                   <tr key={ri}>
-                    <td className="p-2 text-right font-bold text-slate-400">{classes[ri]}</td>
+                    <td className="p-2 text-right font-bold text-slate-300 text-[10px]">{labelMudah(classes[ri])}</td>
                     {row.map((val, ci) => {
                       const isDiag = ri === ci;
                       const cellClass = isDiag
@@ -1057,6 +1125,7 @@ const PanelMLMetrics = ({ apiBase }) => {
                       return (
                         <td key={ci} className={`p-2 text-center rounded ${cellClass}`}>
                           {val}
+                          {isDiag && val > 0 && <span className="ml-1 text-[9px]">✓</span>}
                         </td>
                       );
                     })}
@@ -1068,70 +1137,104 @@ const PanelMLMetrics = ({ apiBase }) => {
         </div>
       )}
 
-      {/* ── Sub-section 3: Per-class metrics ── */}
+      {/* ── Sub-section 3: Keandalan per Hasil ── */}
       <div>
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Per-Kelas Metrics</p>
-        <table className="w-full text-[11px] border-collapse">
-          <thead>
-            <tr>
-              <th className="pb-1.5 text-left text-slate-500 font-bold">Kelas</th>
-              <th className="pb-1.5 text-center text-slate-500 font-bold">Precision</th>
-              <th className="pb-1.5 text-center text-slate-500 font-bold">Recall</th>
-              <th className="pb-1.5 text-center text-slate-500 font-bold">F1</th>
-              <th className="pb-1.5 text-center text-slate-500 font-bold">Support</th>
-            </tr>
-          </thead>
-          <tbody>
-            {classes.map(c => {
-              const m = per_class[c];
-              if (!m) return null;
-              const f1Pct = Math.round(m.f1 * 100);
-              return (
-                <tr key={c} className="border-t border-white/5">
-                  <td className="py-2 pr-2 font-bold text-slate-300">{c}</td>
-                  {["precision","recall","f1"].map(metric => (
-                    <td key={metric} className="py-2 px-1 text-center">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="font-semibold text-slate-200">{Math.round(m[metric] * 100)}%</span>
-                        <div className="h-1 w-12 rounded-full bg-white/10 overflow-hidden">
-                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.round(m[metric] * 100)}%` }} />
-                        </div>
-                      </div>
-                    </td>
-                  ))}
-                  <td className="py-2 text-center text-slate-400">{m.support}</td>
-                </tr>
-              );
-            })}
-            {/* Macro avg */}
-            <tr className="border-t border-white/10">
-              <td className="py-1.5 pr-2 italic text-slate-500">Macro Avg</td>
-              {["precision","recall","f1"].map(metric => (
-                <td key={metric} className="py-1.5 px-1 text-center italic text-slate-500">
-                  {Math.round(macro_avg[metric] * 100)}%
-                </td>
-              ))}
-              <td className="py-1.5 text-center text-slate-600">—</td>
-            </tr>
-            {/* Weighted avg */}
-            <tr className="border-t border-white/5">
-              <td className="py-1.5 pr-2 italic text-slate-500">Weighted Avg</td>
-              {["precision","recall","f1"].map(metric => (
-                <td key={metric} className="py-1.5 px-1 text-center italic text-slate-500">
-                  {Math.round(weighted_avg[metric] * 100)}%
-                </td>
-              ))}
-              <td className="py-1.5 text-center text-slate-600">—</td>
-            </tr>
-          </tbody>
-        </table>
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Seberapa Andal per Hasil?</p>
+        {classes.map(c => {
+          const m = per_class[c];
+          if (!m) return null;
+          const f1Pct = Math.round(m.f1 * 100);
+          const f1Color = f1Pct >= 70 ? "#22c55e" : f1Pct >= 50 ? "#f59e0b" : "#ef4444";
+          return (
+            <div key={c} className="mb-4 rounded-xl border border-white/5 bg-white/2 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-slate-300">{labelMudah(c)}</span>
+                <span className="text-xs font-black" style={{ color: f1Color }}>{f1Pct}%</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden mb-2">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${f1Pct}%`, backgroundColor: f1Color }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">
+                {m.support} kasus dipelajari
+              </p>
+              <p className="mt-1.5 text-[10px] text-slate-600 italic">
+                {f1Pct >= 70
+                  ? "VoxSwarm cukup andal mengenali hasil ini."
+                  : f1Pct >= 50
+                    ? "Masih belajar — butuh lebih banyak data untuk hasil ini."
+                    : "Belum cukup data. Coba jalankan lebih banyak analisis."}
+              </p>
+            </div>
+          );
+        })}
+
+        {/* Nilai keseluruhan */}
+        <div className="mt-3 rounded-xl border border-white/5 bg-white/2 p-3 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-slate-500">Nilai keseluruhan</p>
+            <p className="text-xs font-bold text-slate-300">
+              {Math.round(weighted_avg.f1 * 100)}% rata-rata keandalan
+            </p>
+          </div>
+        </div>
       </div>
+
+      {/* ── Peringatan data terlalu sedikit ── */}
+      {accuracy_pct >= 95 && n_samples < 20 && (
+        <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-950/20 px-3 py-2">
+          <p className="text-[11px] text-yellow-400 font-bold">
+            ⚠️ Angka tinggi tapi data masih sedikit — VoxSwarm mungkin baru menghafal, belum benar-benar belajar.
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">
+            Tambahkan lebih banyak analisis agar hasilnya lebih bisa dipercaya.
+          </p>
+        </div>
+      )}
+
+      {/* ── Data yang sudah dipelajari (dari /ml-debug) ── */}
+      {debug?.label_distribution && (
+        <div className="mt-5">
+          <p className="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">
+            Data yang Sudah Dipelajari
+          </p>
+          {Object.entries(debug.label_distribution).map(([lbl, count]) => (
+            <div key={lbl} className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] text-slate-400 w-36 shrink-0">{labelMudah(lbl)}</span>
+              <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-indigo-500"
+                  style={{ width: `${debug.label_pct?.[lbl] ?? 0}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 w-8 text-right">{count}</span>
+            </div>
+          ))}
+          {debug.imbalance_warning && (
+            <p className="text-[10px] text-yellow-500 mt-1.5">
+              ⚠️ Data tidak merata — hasil &quot;{labelMudah(debug.dominant_label)}&quot; terlalu mendominasi.
+              Coba jalankan analisis dengan topik yang lebih beragam.
+            </p>
+          )}
+          {debug.overfitting_risk && (
+            <p className="text-[10px] mt-1.5" style={{
+              color: debug.overfitting_risk === "HIGH"   ? "#f87171" :
+                     debug.overfitting_risk === "MEDIUM" ? "#fbbf24" : "#34d399"
+            }}>
+              {debug.overfitting_risk === "HIGH"
+                ? "⚠️ Data masih sangat sedikit — tambahkan lebih banyak analisis"
+                : debug.overfitting_risk === "MEDIUM"
+                  ? "🟡 Data cukup untuk mulai belajar, tapi masih bisa ditingkatkan"
+                  : "✅ Data sudah cukup banyak untuk belajar dengan baik"}
+            </p>
+          )}
+        </div>
+      )}
     </Kartu>
   );
 };
-
-
-// ─── Komponen Utama ───────────────────────────────────────────────────
 export default function VoxSwarmDashboard() {
   const [terpasang,    setTerpasang]    = useState(false);
   const [topik,        setTopik]        = useState("");
@@ -1159,9 +1262,8 @@ export default function VoxSwarmDashboard() {
   const [feedbackCatatan,    setFeedbackCatatan]    = useState("");
   const [feedbackLoading,    setFeedbackLoading]    = useState(false);
   const [feedbackResult,     setFeedbackResult]     = useState(null);   // hasil submit
-  // ── State ML metrics ──
-  const [mlMetrics,      setMlMetrics]      = useState(null);
-  const [loadingMetrics, setLoadingMetrics] = useState(false);
+  // ── State ML data untuk ekspor PDF ──
+  const [mlDataForExport,    setMlDataForExport]    = useState(null);
 
   const inputRef = useRef(null);
   const hasilRef = useRef(null);
@@ -1173,13 +1275,6 @@ export default function VoxSwarmDashboard() {
       .then(r => r.json())
       .then(d => { if (d.kategori?.length) setKategoriList(d.kategori); })
       .catch(() => {});
-    // Fetch ML metrics saat mount
-    setLoadingMetrics(true);
-    fetch(`${apiBase}/ml-metrics`)
-      .then(r => r.json())
-      .then(d => setMlMetrics(d.metrics ?? null))
-      .catch(() => setMlMetrics(null))
-      .finally(() => setLoadingMetrics(false));
   }, []);
 
   // ── Mulai simulasi sosmed ────────────────────────────────────────
@@ -1213,7 +1308,7 @@ export default function VoxSwarmDashboard() {
     setMemuat(false);
   };
 
-  // ── Mulai simulasi baru (dari form) ─────────────────────────────
+  // ── Mulai analisis baru (dari form) ─────────────────────────────
   const mulaiAnalisis = async () => {
     if (!topik.trim()) { inputRef.current?.focus(); return; }
     setMemuat(true);
@@ -1225,6 +1320,9 @@ export default function VoxSwarmDashboard() {
     setPrediksiSource(null);
     setPrediksiNote(null);
     setFeedbackResult(null);
+    setFeedbackLabel("Konsensus");   // reset pilihan label feedback
+    setFeedbackConf(1.0);            // reset confidence ke default
+    setFeedbackCatatan("");          // reset catatan feedback
     try {
       const body = {
         topik: topik.trim(),
@@ -1248,6 +1346,15 @@ export default function VoxSwarmDashboard() {
       setPrediksiSource(data.data?.prediksi_source ?? null);
       setPrediksiNote(data.data?.ml_info?.note ?? null);
       setFeedbackResult(null);   // reset feedback panel
+      // Fetch ML data untuk ekspor PDF (parallel, tidak block UI)
+      Promise.all([
+        fetch(`${apiBase}/ml-metrics`).then(r => r.json()).catch(() => null),
+        fetch(`${apiBase}/ml-debug`).then(r => r.json()).catch(() => null),
+      ]).then(([metricsData, debugData]) => {
+        if (metricsData?.metrics?.ok) {
+          setMlDataForExport({ metrics: metricsData.metrics, debug: debugData ?? null });
+        }
+      });
       setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
     } catch (err) {
       alert("❌ " + (err.message || "Server tidak dapat dihubungi."));
@@ -1282,6 +1389,8 @@ export default function VoxSwarmDashboard() {
       if (/^#{1,4}\s/.test(trimmed)) return false;
       if (/^\*{1,2}[^*]+\*{1,2}$/.test(trimmed)) return false;
       if (/^\d+\.\s+(Buat|Tugas|Narasi|Tabel|Prediksi)/i.test(trimmed)) return false;
+      if (/PREDIKSI SKENARIO:/i.test(trimmed)) return false;
+      if (/^(Konsensus|Polarisasi|Status Quo)\s+\d+%/i.test(trimmed)) return false;
       return true;
     })
     .join(" ")
@@ -1308,7 +1417,7 @@ export default function VoxSwarmDashboard() {
     const agen = Object.keys(sentimenAgr);
     if (!agen.length) return [];
     return Array.from({ length: sentimenAgr[agen[0]]?.length ?? 0 }, (_, i) => {
-      const obj = { label: `Putaran ${i + 1}` };
+      const obj = { label: `Babak ${i + 1}` };
       agen.forEach(n => { obj[n] = +(sentimenAgr[n]?.[i] ?? 0).toFixed(2); });
       return obj;
     });
@@ -1361,12 +1470,12 @@ export default function VoxSwarmDashboard() {
           </div>
 
           <p className="mb-1 text-base font-bold text-white">
-            {modeSosmed ? "Simulasikan isu di media sosial" : "Simulasikan isu apa hari ini?"}
+            {modeSosmed ? "Analisis isu di media sosial" : "Isu apa yang ingin kamu analisis hari ini?"}
           </p>
           <p className="mb-4 text-xs text-slate-500">
             {modeSosmed
-              ? "Agen akan berdebat di platform sosmed — posting, like, reply, quote. Pemerintah akan merespons konten viral."
-              : "Masukkan topik, pilih kategori dan jumlah putaran diskusi, lalu klik Analisis."}
+              ? "Para peserta akan berdebat di media sosial — posting, like, balas, dan kutip. Pemerintah akan ikut merespons bila viral."
+              : "Masukkan topik, pilih kategori dan jumlah babak diskusi, lalu klik Analisis."}
           </p>
 
           <div className="mb-3 flex gap-2">
@@ -1383,7 +1492,7 @@ export default function VoxSwarmDashboard() {
               disabled={memuat}
               className={`rounded-xl px-7 py-3 text-sm font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed ${modeSosmed ? "bg-violet-600 hover:bg-violet-500" : "bg-indigo-600 hover:bg-indigo-500"}`}
             >
-              {memuat ? "⏳ Memproses..." : modeSosmed ? "📱 Simulasi →" : "Analisis →"}
+              {memuat ? "⏳ Memproses..." : modeSosmed ? "📱 Analisis →" : "Analisis →"}
             </button>
           </div>
 
@@ -1434,7 +1543,7 @@ export default function VoxSwarmDashboard() {
                 onChange={e => setIntervensiSos(e.target.value)}
                 placeholder='Contoh: "Pemerintah umumkan kenaikan UMR 30%"'
               />
-              <p className="text-[10px] text-amber-700 mt-1">Diinjeksikan di tengah simulasi sebagai breaking news yang mempengaruhi semua agen.</p>
+              <p className="text-[10px] text-amber-700 mt-1">Dimasukkan di tengah analisis sebagai berita baru yang mempengaruhi semua peserta.</p>
             </div>
           )}
 
@@ -1446,10 +1555,10 @@ export default function VoxSwarmDashboard() {
         {!hasil && !hasilSosmed && !memuat && (
           <div className="rounded-2xl border border-dashed border-white/10 p-16 text-center">
             <div className="mb-3 text-5xl">{modeSosmed ? "📱" : "🧠"}</div>
-            <h2 className="mb-2 text-xl font-bold">Belum ada simulasi</h2>
+            <h2 className="mb-2 text-xl font-bold">Belum ada analisis</h2>
             <p className="text-sm text-slate-500">
               {modeSosmed
-                ? <>Masukkan topik di atas dan klik <strong className="text-white">Simulasi</strong> untuk memulai simulasi sosmed.</>
+                ? <>Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk mulai analisis sosmed.</>
                 : <>Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk memulai.</>}
             </p>
           </div>
@@ -1506,7 +1615,7 @@ export default function VoxSwarmDashboard() {
                 onClick={() => { setHasilSosmed(null); setTopik(""); setAgenCustom([]); setTimeout(() => inputRef.current?.focus(), 100); }}
                 className="text-xs text-slate-600 underline underline-offset-4 hover:text-slate-400 transition"
               >
-                Simulasi baru
+                Analisis baru
               </button>
             </div>
 
@@ -1521,7 +1630,7 @@ export default function VoxSwarmDashboard() {
             {/* ── Riwayat intervensi (badge) ── */}
             {riwayatSim.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap print:hidden">
-                <span className="text-xs text-slate-600">Riwayat simulasi:</span>
+                <span className="text-xs text-slate-600">Riwayat analisis:</span>
                 {riwayatSim.map((r, i) => (
                   <span key={i} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-500">
                     Run #{i + 1} {r.intervensi ? `— "${r.intervensi.slice(0, 30)}..."` : "(awal)"}
@@ -1559,7 +1668,7 @@ export default function VoxSwarmDashboard() {
                 {bukaEkspor && (
                   <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#131726] p-2 shadow-2xl">
                     {[
-                      { ikon: "🖨️", label: "Cetak / Simpan PDF",  aksi: () => { eksporPDF(hasil, topik, analisis, aktorAnalisis); setBukaEkspor(false); } },
+                      { ikon: "🖨️", label: "Cetak / Simpan PDF",  aksi: () => { eksporPDF(hasil, topik, analisis, aktorAnalisis, mlDataForExport); setBukaEkspor(false); } },
                       { ikon: "📊", label: "Unduh Excel / CSV",    aksi: () => { eksporCSV(hasil, topik); setBukaEkspor(false); } },
                       { ikon: "📄", label: "Unduh Word (.docx)",   aksi: () => { eksporWord(hasil, topik, analisis).catch(e => alert(e.message)); setBukaEkspor(false); } },
                     ].map(({ ikon, label, aksi }) => (
@@ -1616,7 +1725,7 @@ export default function VoxSwarmDashboard() {
                   <button key={i} onClick={() => setRondeAktif(i)}
                     className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${rondeAktif === i ? "bg-indigo-600 text-white" : "border border-white/10 text-slate-500 hover:border-indigo-400 hover:text-white"}`}
                   >
-                    Putaran {i + 1}
+                    Babak {i + 1}
                   </button>
                 ))}
               </div>
@@ -1625,7 +1734,7 @@ export default function VoxSwarmDashboard() {
             {/* ── Grid chart ── */}
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <Kartu>
-                <JudulSeksi>📊 Peta Dukungan — Putaran {rondeAktif + 1}</JudulSeksi>
+                <JudulSeksi>📊 Peta Dukungan — Babak {rondeAktif + 1}</JudulSeksi>
                 <p className="mb-4 text-xs text-slate-500">Skor 0 = sangat menolak, 100 = sangat mendukung.</p>
                 <div style={{ height: 220 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -1657,7 +1766,7 @@ export default function VoxSwarmDashboard() {
 
               {dataTren.length > 1 ? (
                 <Kartu>
-                  <JudulSeksi>📈 Perubahan Sikap Tiap Putaran</JudulSeksi>
+                  <JudulSeksi>📈 Perubahan Sikap Tiap Babak</JudulSeksi>
                   {/* Label sumbu Y */}
                   <div className="mb-2 flex items-center justify-between text-[10px] text-slate-600">
                     <span>← Menolak</span>
@@ -1750,7 +1859,7 @@ export default function VoxSwarmDashboard() {
 
             {/* ── Log diskusi ── */}
             <Kartu>
-              <JudulSeksi>💬 Jalannya Diskusi — Putaran {rondeAktif + 1}</JudulSeksi>
+              <JudulSeksi>💬 Jalannya Diskusi — Babak {rondeAktif + 1}</JudulSeksi>
               <p className="mb-4 text-xs text-slate-500">Berikut pendapat masing-masing agen pada putaran ini.</p>
               <div className="custom-scrollbar max-h-96 space-y-5 overflow-y-auto pr-2">
                 {(rondeIni?.agen ?? []).map((a, i) => {
@@ -1802,7 +1911,7 @@ export default function VoxSwarmDashboard() {
                 onClick={() => { setHasil(null); setTopik(""); setRiwayatSim([]); setAgenCustom([]); setTimeout(() => inputRef.current?.focus(), 100); }}
                 className="text-xs text-slate-600 underline underline-offset-4 hover:text-slate-400 transition"
               >
-                Mulai simulasi baru
+                Mulai analisis baru
               </button>
             </div>
           </div>
