@@ -839,11 +839,12 @@ def ml_dataset_stats(request: Request):
     }
 
 
-@app.get("/ml-train", tags=["ML"])
+@app.get("/ml-retrain-check", tags=["ML"])
 def manual_train(request: Request):
     """
-    Trigger training manual jika data sudah >= MIN_SAMPLES.
+    Cek dan trigger training jika data sudah >= MIN_SAMPLES.
     Berguna jika auto-train tidak terpicu atau ingin memaksa re-train.
+    Gunakan POST /ml-train untuk force re-train tanpa pengecekan threshold.
     """
     _enforce_rate_limit(request)
     from backend.ml_pipeline import force_train_if_ready

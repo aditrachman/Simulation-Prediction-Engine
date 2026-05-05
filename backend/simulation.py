@@ -17,6 +17,7 @@ from .llm      import (
     MODEL_AGENT, MODEL_ANALYSIS,
     MAX_TOKENS_AGENT, MAX_TOKENS_ANALYSIS,
     AGENT_CALL_DELAY, ROUND_DELAY,
+    SENTIMENT_MODE,
 )
 from .memory   import (
     update_agent_memory, build_memory_context, build_influence_context,
@@ -209,7 +210,7 @@ def run_simulation(
         "model_info": {
             "agen":           MODEL_AGENT,
             "analisis":       MODEL_ANALYSIS,
-            "sentiment_mode": __import__("os").getenv("SENTIMENT_MODE", "inline"),
+            "sentiment_mode": SENTIMENT_MODE,
         },
     }
 
