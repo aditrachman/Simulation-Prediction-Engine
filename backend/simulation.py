@@ -8,6 +8,8 @@
 #   - _build_ringkasan_agen() — helper pure Python (volatilitas + pengaruh)
 #   - _aktor_fallback()       — fallback tanpa LLM
 #   - _parse_prediksi()       — parse persentase skenario dari teks
+#   - _resolve_nama()         — resolve nama agen dari string bebas ke kanonik
+#   - _label_sentimen()       — konversi skor float ke label positif/negatif/netral
 
 import re
 import time
@@ -18,6 +20,7 @@ from .llm      import (
     MAX_TOKENS_AGENT, MAX_TOKENS_ANALYSIS,
     AGENT_CALL_DELAY, ROUND_DELAY,
     SENTIMENT_MODE,
+    _strip_emoji,
 )
 from .memory   import (
     update_agent_memory, build_memory_context, build_influence_context,
@@ -27,32 +30,6 @@ from .sentiment import score_sentiment
 from .graph     import extract_entities
 
 
-
-# ---------------------------------------------------------------------------
-# Emoji Stripper — untuk laporan profesional bebas emoji
-# ---------------------------------------------------------------------------
-
-def _strip_emoji(teks: str) -> str:
-    """Hapus emoji/unicode non-standar dari teks analisis."""
-    import re
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001f926-\U0001f937"
-        "\U00010000-\U0010ffff"
-        "\u2640-\u2642"
-        "\u2600-\u2B55"
-        "\u200d\u23cf\u23e9\u231a\ufe0f\u3030"
-        "]+",
-        flags=re.UNICODE,
-    )
-    hasil = emoji_pattern.sub("", teks)
-    return re.sub(r"  +", " ", hasil).strip()
 
 # ---------------------------------------------------------------------------
 # Simulation Core — Sequential + Jeda (solusi utama rate limit)
@@ -219,6 +196,29 @@ def run_simulation(
 # Analisis Gabungan — 1 call LLM-JSON (FIX #3)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Helper module-level private — dipakai oleh _analisis_dan_aktor()
+# dan analyze_key_actors() agar tidak ada duplikasi definisi.
+# ---------------------------------------------------------------------------
+
+def _resolve_nama(s: str, pengaruh_map: dict, nama_valid: list) -> str:
+    """Resolve nama agen dari string bebas ke nama kanonik di nama_valid."""
+    s = s.strip()
+    if s in pengaruh_map:
+        return s
+    for v in nama_valid:
+        if v.lower() == s.lower() or s.lower() in v.lower():
+            return v
+    return s
+
+
+def _label_sentimen(skor: float) -> str:
+    """Konversi skor sentimen float ke label teks."""
+    if skor > 0.2:  return "positif"
+    if skor < -0.2: return "negatif"
+    return "netral"
+
+
 def _build_ringkasan_agen(agents: list[dict], sentimen_agregat: dict) -> tuple[dict, dict, list[str]]:
     """Helper: hitung volatilitas + pengaruh_map + ringkasan per agen (pure Python)."""
     pengaruh_map = {a["nama"]: a.get("pengaruh", 0.5) for a in agents}
@@ -270,9 +270,8 @@ def _analisis_dan_aktor(
         f"Log diskusi:\n{log_diskusi[:1000]}\n\n"
         "Tulis analisis dalam bahasa Indonesia:\n"
         "1. Ringkasan 2 paragraf: dinamika diskusi dan posisi tiap agen.\n"
-        "2. Tabel markdown:\n"
-        "   | Partisipan | Sikap Akhir | Prediksi ke Depan | Kemungkinan Berubah |\n"
-        "   Isi kolom Sikap Akhir dengan: positif / negatif / netral\n"
+        "2. Untuk setiap partisipan, tulis satu kalimat yang menyebutkan nama, "
+        "sikap akhir (positif/negatif/netral), prediksi ke depan, dan kemungkinan berubah.\n"
         "3. Baris terakhir harus persis:\n"
         "   PREDIKSI SKENARIO: Konsensus X%, Polarisasi Y%, Status Quo Z%\n"
         "   (X+Y+Z = 100)"
@@ -308,29 +307,20 @@ def _analisis_dan_aktor(
         model=MODEL_ANALYSIS,
     )
 
-    def _resolve(s: str) -> str:
-        s = s.strip()
-        if s in pengaruh_map: return s
-        for v in nama_valid:
-            if v.lower() == s.lower() or s.lower() in v.lower(): return v
-        return s
-
-    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
-
     aktor_analisis: dict = {}
 
     if isinstance(raw, dict) and raw:
         for item in raw.get("aktor_kunci", []):
-            nama = _resolve(item.get("nama", ""))
+            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
             item["nama"] = nama
             tren = sentimen_agregat.get(nama, [])
             item.update({
                 "pengaruh_skor": pengaruh_map.get(nama, 0.5),
                 "sikap_akhir":   tren[-1] if tren else 0.0,
-                "sikap_label":   _lb(tren[-1] if tren else 0.0),
+                "sikap_label":   _label_sentimen(tren[-1] if tren else 0.0),
             })
         for item in raw.get("swing_voter", []):
-            nama = _resolve(item.get("nama", ""))
+            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
             item["nama"] = nama
             tren = sentimen_agregat.get(nama, [])
             item.update({
@@ -340,7 +330,7 @@ def _analisis_dan_aktor(
             })
         pg = raw.get("aktor_penggerak", "")
         if pg and pg != "-":
-            raw["aktor_penggerak"] = _resolve(pg)
+            raw["aktor_penggerak"] = _resolve_nama(pg, pengaruh_map, nama_valid)
 
         aktor_analisis = {
             k: raw[k] for k in ("aktor_kunci", "swing_voter", "aktor_penggerak", "rekomendasi")
@@ -355,7 +345,6 @@ def _analisis_dan_aktor(
 
 def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict) -> dict:
     """Fallback pure-Python tanpa LLM jika call JSON gagal."""
-    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
     sp = sorted(pengaruh_map.items(), key=lambda x: -x[1])
     sv = sorted(volatilitas.items(),  key=lambda x: -x[1])
     return {
@@ -364,7 +353,7 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
              "dampak_jika_berubah": "Dapat menggeser konsensus",
              "pengaruh_skor": s,
              "sikap_akhir":   sentimen_agregat.get(n, [0])[-1],
-             "sikap_label":   _lb(sentimen_agregat.get(n, [0])[-1])}
+             "sikap_label":   _label_sentimen(sentimen_agregat.get(n, [0])[-1])}
             for n, s in sp[:3]
         ],
         "swing_voter": [
@@ -391,42 +380,21 @@ def analyze_key_actors(
     ronde_detail: list[dict],
     sentimen_agregat: dict,
 ) -> dict:
-    volatilitas  = {}
-    pengaruh_map = {a["nama"]: a.get("pengaruh", 0.5) for a in agents}
-    nama_valid   = list(sentimen_agregat.keys())
+    """
+    Analisis aktor kunci untuk endpoint /extract-graph.
 
-    for nama, tren in sentimen_agregat.items():
-        if len(tren) < 2: volatilitas[nama] = 0.0
-        else:
-            volatilitas[nama] = round(
-                sum(abs(tren[i] - tren[i-1]) for i in range(1, len(tren))) / (len(tren)-1), 2
-            )
-
-    ringkasan_agen = []
-    for nama, tren in sentimen_agregat.items():
-        if not tren: continue
-        arah = "stabil"
-        if len(tren) >= 2:
-            if tren[-1] - tren[0] > 0.2:   arah = "→positif"
-            elif tren[0] - tren[-1] > 0.2: arah = "→negatif"
-        ringkasan_agen.append(
-            f"{nama}: pengaruh={pengaruh_map.get(nama,0.5)}, "
-            f"skor={tren[0]:.2f}→{tren[-1]:.2f}, vol={volatilitas.get(nama,0)}, {arah}"
-        )
-
-    def _resolve(s: str) -> str:
-        s = s.strip()
-        if s in pengaruh_map: return s
-        for v in nama_valid:
-            if v.lower() == s.lower() or s.lower() in v.lower(): return v
-        return s
-
-    def _lb(skor): return "positif" if skor > 0.2 else "negatif" if skor < -0.2 else "netral"
+    Refactored: menggunakan _build_ringkasan_agen() dan _aktor_fallback()
+    yang sudah ada — menghilangkan duplikasi logika dengan _analisis_dan_aktor().
+    Tetap melakukan 1 LLM call untuk JSON aktor (sama seperti sebelumnya).
+    Output schema tidak berubah.
+    """
+    pengaruh_map, volatilitas, ringkasan_agen = _build_ringkasan_agen(agents, sentimen_agregat)
+    nama_valid = list(sentimen_agregat.keys())
 
     prompt = (
         f"Topik: {topik}\nAgen: {', '.join(nama_valid)}\n"
         + "\n".join(ringkasan_agen) + "\n\n"
-        "JSON:\n"
+        "Balas HANYA JSON valid:\n"
         '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
         '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
         '"aktor_penggerak":"...","rekomendasi":"..."}'
@@ -438,16 +406,16 @@ def analyze_key_actors(
 
     if isinstance(hasil, dict) and hasil:
         for item in hasil.get("aktor_kunci", []):
-            nama = _resolve(item.get("nama", ""))
+            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
             item["nama"] = nama
             tren = sentimen_agregat.get(nama, [])
             item.update({
                 "pengaruh_skor": pengaruh_map.get(nama, 0.5),
                 "sikap_akhir":   tren[-1] if tren else 0.0,
-                "sikap_label":   _lb(tren[-1] if tren else 0.0),
+                "sikap_label":   _label_sentimen(tren[-1] if tren else 0.0),
             })
         for item in hasil.get("swing_voter", []):
-            nama = _resolve(item.get("nama", ""))
+            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
             item["nama"] = nama
             tren = sentimen_agregat.get(nama, [])
             item.update({
@@ -457,32 +425,11 @@ def analyze_key_actors(
             })
         pg = hasil.get("aktor_penggerak", "")
         if pg and pg != "-":
-            hasil["aktor_penggerak"] = _resolve(pg)
+            hasil["aktor_penggerak"] = _resolve_nama(pg, pengaruh_map, nama_valid)
         return hasil
 
-    # Fallback tanpa LLM
-    sp = sorted(pengaruh_map.items(), key=lambda x: -x[1])
-    sv = sorted(volatilitas.items(),  key=lambda x: -x[1])
-    return {
-        "aktor_kunci": [
-            {"nama": n, "alasan": "Pengaruh tertinggi",
-             "dampak_jika_berubah": "Dapat menggeser konsensus",
-             "pengaruh_skor": s,
-             "sikap_akhir":   sentimen_agregat.get(n, [0])[-1],
-             "sikap_label":   _lb(sentimen_agregat.get(n, [0])[-1])}
-            for n, s in sp[:3]
-        ],
-        "swing_voter": [
-            {"nama": n, "alasan_volatil": "Sering berubah pendapat",
-             "potensi_arah": "positif" if sentimen_agregat.get(n,[0])[-1] > 0 else "negatif",
-             "volatilitas": v,
-             "sikap_awal":  sentimen_agregat.get(n,[0])[0],
-             "sikap_akhir": sentimen_agregat.get(n,[0])[-1]}
-            for n, v in sv[:3] if v > 0
-        ],
-        "aktor_penggerak": sp[0][0] if sp else "-",
-        "rekomendasi": "Fokus pada aktor paling berpengaruh.",
-    }
+    # Fallback tanpa LLM — gunakan helper yang sudah ada
+    return _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
 
 
 # ---------------------------------------------------------------------------

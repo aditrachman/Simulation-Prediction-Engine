@@ -50,19 +50,23 @@ MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
 MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "80"))
 
 # ─── RATE LIMIT CONFIG ─────────────────────────────────────────────────────
-RETRY_MAX        = int(os.getenv("RETRY_MAX",        "4"))
-RETRY_BASE_DELAY = float(os.getenv("RETRY_BASE_DELAY", "5.0"))
-AGENT_CALL_DELAY = float(os.getenv("AGENT_CALL_DELAY", "3.0"))   # dinaikkan dari 2.0 → kompensasi token lebih besar
-ROUND_DELAY      = float(os.getenv("ROUND_DELAY",      "3.0"))
-SENTIMENT_MODE   = os.getenv("SENTIMENT_MODE", "llm")   # "llm" (default, akurat) atau "inline" (hemat token)
+RETRY_MAX         = int(os.getenv("RETRY_MAX",         "4"))
+RETRY_BASE_DELAY  = float(os.getenv("RETRY_BASE_DELAY",  "5.0"))
+AGENT_CALL_DELAY  = float(os.getenv("AGENT_CALL_DELAY",  "3.0"))   # dinaikkan dari 2.0 → kompensasi token lebih besar
+ROUND_DELAY       = float(os.getenv("ROUND_DELAY",       "3.0"))
+SOCIAL_TICK_DELAY = float(os.getenv("SOCIAL_TICK_DELAY", "1.0"))   # jeda antar tick sosmed
+SENTIMENT_MODE    = os.getenv("SENTIMENT_MODE", "llm")             # "llm" (default, akurat) atau "inline" (hemat token)
+CACHE_TTL         = int(os.getenv("CACHE_TTL",           "3600"))  # detik, default 1 jam; 0 = cache selamanya
 # ───────────────────────────────────────────────────────────────────────────
 
 
 # ---------------------------------------------------------------------------
-# In-Memory LLM Cache
+# In-Memory LLM Cache (dengan TTL)
 # ---------------------------------------------------------------------------
+# Format entry: {"value": str, "ts": float}
+# Entry dianggap stale jika (now - ts) > CACHE_TTL detik (kecuali CACHE_TTL == 0).
 
-_llm_cache: dict[str, str] = {}
+_llm_cache: dict[str, dict] = {}
 _llm_cache_lock = threading.Lock()
 
 
@@ -70,6 +74,18 @@ def _cache_key(system_prompt: str, user_prompt: str, max_tokens: int, model: str
     """Buat cache key dari hash SHA-256 parameter request."""
     raw = f"{model}|{max_tokens}|{system_prompt}|{user_prompt}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def clear_llm_cache() -> int:
+    """
+    Hapus seluruh isi LLM cache.
+    Return jumlah entry yang dihapus.
+    Berguna untuk testing atau manual flush saat topik berulang dengan konteks baru.
+    """
+    with _llm_cache_lock:
+        count = len(_llm_cache)
+        _llm_cache.clear()
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -102,11 +118,16 @@ def call_llm(
     - Jitter random +0-2s untuk hindari thundering herd
     - Hasil di-cache in-memory berdasarkan hash parameter
     """
-    # ── Cache lookup ─────────────────────────────────────────────────────
+    # ── Cache lookup (dengan TTL check) ──────────────────────────────────
     key = _cache_key(system_prompt, user_prompt, max_tokens, model)
     with _llm_cache_lock:
-        if key in _llm_cache:
-            return _llm_cache[key]
+        entry = _llm_cache.get(key)
+        if entry is not None:
+            expired = CACHE_TTL > 0 and (time.time() - entry["ts"]) > CACHE_TTL
+            if expired:
+                del _llm_cache[key]   # hapus entry stale, lanjut ke LLM call
+            else:
+                return entry["value"]
     # ─────────────────────────────────────────────────────────────────────
 
     if model in AGENT_FALLBACK_CHAIN:
@@ -138,7 +159,7 @@ def call_llm(
                     if last_punct > len(result) * 0.5:  # ada kalimat lengkap di >50% teks
                         result = result[:last_punct + 1]
                 with _llm_cache_lock:
-                    _llm_cache[key] = result
+                    _llm_cache[key] = {"value": result, "ts": time.time()}
                 return result
 
             except Exception as e:
@@ -187,3 +208,33 @@ def call_llm_json(
             except Exception:
                 pass
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Emoji Stripper — shared utility, digunakan simulation.py & social_engine.py
+# ---------------------------------------------------------------------------
+
+_EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"
+    "\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F1E0-\U0001F1FF"
+    "\U00002702-\U000027B0"
+    "\U000024C2-\U0001F251"
+    "\U0001f926-\U0001f937"
+    "\U00010000-\U0010ffff"
+    "\u2640-\u2642"
+    "\u2600-\u2B55"
+    "\u200d\u23cf\u23e9\u231a\ufe0f\u3030"
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def _strip_emoji(teks: str) -> str:
+    """Hapus emoji/unicode non-standar dari teks analisis."""
+    if not teks:
+        return ""
+    hasil = _EMOJI_PATTERN.sub("", teks)
+    return re.sub(r"  +", " ", hasil).strip()

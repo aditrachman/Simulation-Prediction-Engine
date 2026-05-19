@@ -386,9 +386,14 @@ def train_model(force: bool = False) -> dict:
         acc = _accuracy_score(y, y_pred_loo)
         eval_method = f"Leave-One-Out CV ({len(rows)} fold)"
 
+    import datetime
+    TRAINED_AT_FILE = DATA_DIR / "model_trained_at.txt"
+    trained_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
     with _model_lock:
         MODEL_FILE.write_bytes(pickle.dumps(clf))
         ENCODER_FILE.write_bytes(pickle.dumps(le))
+        TRAINED_AT_FILE.write_text(trained_at, encoding="utf-8")
 
     n_weak = len(rows) - n_feedback
     return {
@@ -398,6 +403,7 @@ def train_model(force: bool = False) -> dict:
         "accuracy":   round(acc, 4),
         "classes":    list(le.classes_),
         "eval_method": eval_method,
+        "trained_at": trained_at,
         "message":    (
             f"Model dilatih dari {len(rows)} sampel "
             f"({n_feedback} feedback, {n_weak} weak label). "
@@ -677,6 +683,8 @@ def get_ml_status() -> dict:
     dataset = build_training_dataset()
     n_fb    = sum(1 for r in dataset if r.get("label_source") == "feedback")
 
+    TRAINED_AT_FILE = DATA_DIR / "model_trained_at.txt"
+
     return {
         "sklearn_available": _SKLEARN_AVAILABLE,
         "n_samples":         len(rows),
@@ -688,6 +696,10 @@ def get_ml_status() -> dict:
         "model_file":        str(MODEL_FILE),
         "ml_active":         MODEL_FILE.exists() and len(rows) >= MIN_SAMPLES,
         "samples_needed":    max(0, MIN_SAMPLES - len(rows)),
+        "model_trained_at":  (
+            TRAINED_AT_FILE.read_text(encoding="utf-8").strip()
+            if TRAINED_AT_FILE.exists() else None
+        ),
     }
 
 

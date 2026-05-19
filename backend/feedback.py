@@ -24,14 +24,18 @@ from typing import Optional
 # Config
 # ---------------------------------------------------------------------------
 
-BASE_DIR      = Path(__file__).parent
-DATA_DIR      = BASE_DIR / "data"
+# DATA_DIR di-import dari ml_pipeline agar keduanya selalu resolve ke path
+# yang sama — menghindari feedback.jsonl dan simulation_history.jsonl berada
+# di direktori berbeda (ISSUE #7).
+from .ml_pipeline import DATA_DIR  # noqa: E402
+
 FEEDBACK_FILE = DATA_DIR / "feedback.jsonl"
 
 VALID_LABELS            = {"Konsensus", "Polarisasi", "Status Quo"}
 MAX_FEEDBACK            = 2000   # cap file agar tidak bloat
 MIN_FEEDBACK_TO_RETRAIN = 3      # trigger auto re-train setelah n feedback masuk
 
+# DATA_DIR sudah di-resolve oleh ml_pipeline; pastikan tetap ada jika belum dibuat.
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 _feedback_lock = threading.Lock()
@@ -297,6 +301,32 @@ def submit_feedback(
     result["total_feedback"]    = n_total
     return result
 
+
+# ---------------------------------------------------------------------------
+# Public: delete by hash
+# ---------------------------------------------------------------------------
+
+def delete_feedback_by_hash(topik_hash: str) -> bool:
+    """
+    Hapus satu entry feedback berdasarkan topik_hash.
+
+    - Thread-safe menggunakan _feedback_lock.
+    - Baca semua baris, filter yang cocok, tulis ulang file.
+    - Return True jika ada entry yang dihapus, False jika tidak ditemukan.
+    """
+    topik_hash = (topik_hash or "").strip()
+    with _feedback_lock:
+        existing = _load_all_feedback()
+        filtered = [fb for fb in existing if fb.get("topik_hash") != topik_hash]
+        if len(filtered) == len(existing):
+            return False  # tidak ada yang cocok
+        _write_all_feedback(filtered)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Public: submit by hash
+# ---------------------------------------------------------------------------
 
 def submit_feedback_by_hash(
     topik_hash: str,

@@ -1,7 +1,7 @@
 # backend/social_engine.py
 # Mode Sosmed VoxSwarm — diperbaiki:
 #   FIX INTERAKSI: Eksekusi aksi SEQUENTIAL per tick dalam 2 fase:
-#     Fase 1 — semua agen "berpikir" (LLM call paralel) dan memilih aksi
+#     Fase 1 — semua agen "berpikir" satu per satu (SEQUENTIAL) dan memilih aksi
 #     Fase 2 — aksi dieksekusi SEQUENTIAL agar interaksi antar-agen nyata:
 #              REPLY/LIKE/QUOTE bisa merujuk post yang dibuat agen lain
 #              di fase 1 yang sama (bukan hanya post dari tick sebelumnya)
@@ -14,7 +14,8 @@ import uuid
 import time
 from datetime import datetime, timezone
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from .llm import _strip_emoji, SOCIAL_TICK_DELAY
 
 # ---------------------------------------------------------------------------
 # Tipe data dasar
@@ -25,38 +26,6 @@ def _now_iso() -> str:
 
 def _uid() -> str:
     return str(uuid.uuid4())[:8]
-
-
-def strip_emoji(teks: str) -> str:
-    """Hapus emoji/simbol unicode non-ASCII dari teks, untuk laporan profesional."""
-    if not teks:
-        return ""
-    # Hapus karakter emoji (blok unicode umum)
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"  # emoticons
-        "\U0001F300-\U0001F5FF"  # symbols & pictographs
-        "\U0001F680-\U0001F6FF"  # transport & map
-        "\U0001F1E0-\U0001F1FF"  # flags
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001f926-\U0001f937"
-        "\U00010000-\U0010ffff"
-        "\u2640-\u2642"
-        "\u2600-\u2B55"
-        "\u200d"
-        "\u23cf"
-        "\u23e9"
-        "\u231a"
-        "\ufe0f"
-        "\u3030"
-        "]+",
-        flags=re.UNICODE,
-    )
-    hasil = emoji_pattern.sub("", teks)
-    # Bersihkan spasi berlebih
-    hasil = re.sub(r"  +", " ", hasil).strip()
-    return hasil
 
 
 def buat_akun(agen: dict) -> dict:
@@ -132,11 +101,11 @@ def run_social_simulation(
     """
     Jalankan simulasi sosial media multi-agen.
 
-    PERBAIKAN UTAMA — Interaksi 2-Fase per Tick:
+    PERBAIKAN UTAMA — Interaksi 2-Fase per Tick (SEQUENTIAL):
     ─────────────────────────────────────────────────────────────────────
-    Setiap tick dijalankan dalam dua fase terpisah:
+    Setiap tick dijalankan dalam dua fase terpisah, keduanya sequential:
 
-    FASE 1 (paralel): Semua agen "berpikir" bersamaan dan menghasilkan
+    FASE 1 (sequential): Setiap agen "berpikir" satu per satu dan menghasilkan
         rencana aksi (JSON). POST dieksekusi langsung di fase ini agar
         hasilnya tersedia di fase 2.
 
@@ -213,8 +182,8 @@ def run_social_simulation(
         tick_aksi:  list[dict] = []
 
         # ═══════════════════════════════════════════════════════════════
-        # FASE 1 — LLM calls paralel: semua agen "berpikir" bersamaan
-        #          dan menghasilkan rencana aksi.
+        # FASE 1 — LLM calls sequential: setiap agen "berpikir" satu
+        #          per satu untuk menghindari rate limit 429 Groq.
         #          POST langsung dieksekusi agar tersedia di Fase 2.
         # ═══════════════════════════════════════════════════════════════
 
@@ -269,14 +238,15 @@ def run_social_simulation(
                 "alasan":    str(raw.get("alasan",    "")).strip(),
             }
 
-        with ThreadPoolExecutor(max_workers=min(len(agents), 6)) as executor:
-            futures = {executor.submit(_pikirkan_aksi, a["nama"]): a["nama"] for a in agents}
-            for future in as_completed(futures):
-                try:
-                    rencana = future.result()
-                    rencana_fase1.append(rencana)
-                except Exception as e:
-                    print(f"[Fase1 Error] {futures[future]}: {e}")
+        for idx, agen in enumerate(agents):
+            try:
+                rencana = _pikirkan_aksi(agen["nama"])
+                rencana_fase1.append(rencana)
+            except Exception as e:
+                print(f"[Fase1 Error] {agen['nama']}: {e}")
+            # Jeda kecil antar agen jika lebih dari 3 agen
+            if len(agents) > 3 and idx < len(agents) - 1:
+                time.sleep(0.3)
 
         # POST dieksekusi di akhir Fase 1 agar semua post tersedia di Fase 2
         for rencana in rencana_fase1:
@@ -426,6 +396,10 @@ def run_social_simulation(
         })
 
         log_aktivitas.extend(tick_aksi)
+
+        # Jeda antar tick untuk mengurangi kepadatan request ke Groq (kecuali tick terakhir)
+        if tick < jumlah_tick:
+            time.sleep(SOCIAL_TICK_DELAY)
 
     # ── Analisis akhir sosmed ────────────────────────────────────────────
     analisis_sosmed = _analisis_sosmed(
@@ -694,7 +668,7 @@ def _analisis_sosmed(
         model=model_analysis,
     )
     # Strip emoji dari hasil analisis
-    narasi = strip_emoji(narasi_raw)
+    narasi = _strip_emoji(narasi_raw)
 
     return {
         "narasi": narasi,

@@ -15,10 +15,11 @@ from typing import Literal, Optional
 
 from backend.agents import get_agents, get_all_categories
 from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
+from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
 from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
 from backend.social_engine import run_social_simulation
 from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model, build_feature_row_from_social
-from backend.feedback import submit_feedback, submit_feedback_by_hash, get_feedback_stats, FeedbackValidationError
+from backend.feedback import submit_feedback, submit_feedback_by_hash, get_feedback_stats, delete_feedback_by_hash, FeedbackValidationError
 
 app = FastAPI(
     title="VoxSwarm API",
@@ -47,7 +48,7 @@ def _parse_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_origins(),
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -329,7 +330,7 @@ class SosmedRequest(BaseModel):
     topik: str = Field(
         ...,
         min_length=3,
-        max_length=300,
+        max_length=MAX_TOPIC_LENGTH,
         description="Topik / isu yang akan disimulasikan di sosmed",
     )
     kategori: str = Field(
@@ -497,9 +498,19 @@ def extract_graph(payload: SimRequest, request: Request):
 def cache_status(request: Request):
     """
     Info cache konteks real: jumlah entri, valid vs expired, TTL, path file.
+    Termasuk info cache LLM: jumlah entri aktif dan nilai TTL.
     """
     _enforce_rate_limit(request)
-    return {"status": "success", "cache": get_cache_stats()}
+    with _llm_cache_lock:
+        llm_entries = len(_llm_cache)
+    return {
+        "status": "success",
+        "cache":  get_cache_stats(),
+        "llm_cache": {
+            "entries":     llm_entries,
+            "ttl_seconds": CACHE_TTL,
+        },
+    }
 
 
 @app.post("/cache-clear", tags=["Cache"])
@@ -515,6 +526,23 @@ def cache_clear(request: Request, topik: Optional[str] = None):
         "status":  "success",
         "cleared": n,
         "scope":   topik if topik else "all",
+    }
+
+
+@app.post("/cache-clear-llm", tags=["Cache"])
+def cache_clear_llm(request: Request):
+    """
+    Flush seluruh isi LLM cache (in-memory).
+
+    Berguna setelah deploy topik baru yang sama dengan topik lama di cache,
+    atau untuk memaksa LLM menghasilkan respons segar tanpa cache lama.
+    Response mencakup jumlah entry yang berhasil dihapus.
+    """
+    _enforce_rate_limit(request)
+    cleared = clear_llm_cache()
+    return {
+        "status":  "success",
+        "cleared": cleared,
     }
 
 
@@ -719,6 +747,30 @@ def feedback_stats_endpoint(request: Request):
     }
 
 
+@app.delete("/feedback/{topik_hash}", tags=["Feedback"])
+def delete_feedback_endpoint(topik_hash: str, request: Request):
+    """
+    Hapus satu entry feedback berdasarkan topik_hash (16 karakter hex).
+
+    Berguna untuk menghapus label yang salah tanpa harus edit file .jsonl secara manual.
+    Gunakan nilai `data.topik_hash` dari response `/start-simulation` atau `/feedback-export`.
+
+    - **200**: entry berhasil dihapus
+    - **404**: topik_hash tidak ditemukan di feedback.jsonl
+    """
+    _enforce_rate_limit(request)
+    deleted = delete_feedback_by_hash(topik_hash)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Feedback dengan topik_hash '{topik_hash}' tidak ditemukan.",
+        )
+    return {
+        "status":  "success",
+        "deleted": True,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Observability & Export Endpoints
 # ---------------------------------------------------------------------------
@@ -849,7 +901,12 @@ def manual_train(request: Request):
     _enforce_rate_limit(request)
     from backend.ml_pipeline import force_train_if_ready
     result = force_train_if_ready()
-    return {"ok": result.get("ok"), "data": result, "message": result.get("message", "")}
+    return {
+        "status":  "success" if result.get("ok") else "not_ready",
+        "ok":      result.get("ok"),
+        "data":    result,
+        "message": result.get("message", ""),
+    }
 
 
 @app.get("/ml-metrics", tags=["ML"])

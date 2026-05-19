@@ -960,6 +960,7 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
 const PanelMLMetrics = ({ apiBase }) => {
   const [metrics,  setMetrics]  = useState(null);
   const [debug,    setDebug]    = useState(null);
+  const [mlStatus, setMlStatus] = useState(null);
   const [loading,  setLoading]  = useState(false);
 
   const fetchMetrics = () => {
@@ -967,10 +968,12 @@ const PanelMLMetrics = ({ apiBase }) => {
     Promise.all([
       fetch(`${apiBase}/ml-metrics`).then(r => r.json()),
       fetch(`${apiBase}/ml-debug`).then(r => r.json()).catch(() => null),
+      fetch(`${apiBase}/ml-status`).then(r => r.json()).catch(() => null),
     ])
-      .then(([metricsData, debugData]) => {
+      .then(([metricsData, debugData, statusData]) => {
         setMetrics(metricsData.metrics ?? null);
         setDebug(debugData ?? null);
+        setMlStatus(statusData?.ml ?? statusData ?? null);
       })
       .catch(() => setMetrics(null))
       .finally(() => setLoading(false));
@@ -1022,7 +1025,7 @@ const PanelMLMetrics = ({ apiBase }) => {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  await fetch(`${apiBase}/ml-train`);
+                  await fetch(`${apiBase}/ml-train`, { method: "POST" });
                   await fetchMetrics();
                 } catch (_) {}
                 setLoading(false);
@@ -1085,6 +1088,11 @@ const PanelMLMetrics = ({ apiBase }) => {
           Belajar dari <span className="text-slate-300 font-semibold">{n_samples} analisis</span>
           {n_feedback_labels > 0 && <span> · <span className="text-indigo-300">{n_feedback_labels} di antaranya sudah dikoreksi manual</span></span>}
         </p>
+        {eval_method && (
+          <p className="text-[10px] text-slate-600 mt-1">
+            Metode evaluasi: <span className="text-indigo-400 font-mono">{eval_method}</span>
+          </p>
+        )}
       </div>
 
       {/* ── Sub-section 2: Tabel Tebakan vs Kenyataan ── */}
@@ -1231,6 +1239,16 @@ const PanelMLMetrics = ({ apiBase }) => {
             </p>
           )}
         </div>
+      )}
+
+      {/* ── Timestamp model terakhir dilatih ── */}
+      {mlStatus?.model_trained_at && (
+        <p className="text-[10px] text-slate-600 mt-2">
+          Model terakhir dilatih:{" "}
+          <span className="text-slate-400">
+            {new Date(mlStatus.model_trained_at).toLocaleString("id-ID")}
+          </span>
+        </p>
       )}
     </Kartu>
   );
