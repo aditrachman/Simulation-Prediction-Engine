@@ -91,7 +91,9 @@ def run_simulation(
             "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
             "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
             "JANGAN buka kalimat dengan 'Saya pikir' atau 'Saya rasa' — langsung ke poin. "
-            "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik."
+            "JANGAN kutip atau ulangi kata-kata peserta lain secara verbatim — parafrase atau langsung respons. "
+            "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
+            "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim."
         )
 
         parts = []

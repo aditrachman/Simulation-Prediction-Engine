@@ -115,8 +115,8 @@ def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str
         if len(kalimat_pertama) > 90:
             kalimat_pertama = kalimat_pertama[:90].rsplit(" ", 1)[0]
         kutipan = kalimat_pertama + ("..." if len(pendapat_full) > len(kalimat_pertama) + 1 else "")
-        baris.append(f'- {p["nama"]} bilang: "{kutipan}"')
+        baris.append(f'- {p["nama"]}: {kutipan}')
 
-    konteks  = "Yang sudah disampaikan peserta lain:\n" + "\n".join(baris) + "\n"
-    konteks += "Pilih SATU yang paling kamu tidak setuju atau paling menarik, lalu respons langsung ke mereka."
+    konteks  = "Posisi peserta lain sejauh ini:\n" + "\n".join(baris) + "\n"
+    konteks += "Respons LANGSUNG ke salah satu — gunakan kata-katamu sendiri, jangan kutip ulang."
     return konteks
