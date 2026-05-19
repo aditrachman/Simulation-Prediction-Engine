@@ -83,14 +83,35 @@ def build_memory_context(agent: dict) -> str:
 
 
 def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str:
-    """Bangun string konteks pengaruh agen lain dengan pengaruh tinggi."""
+    """
+    Bangun string konteks pengaruh agen lain dengan pengaruh tinggi.
+    
+    FIX BUG #18: Sekarang include kutipan pendapat dari 2 agen paling berpengaruh,
+    dengan instruksi eksplisit untuk merespons atau membantah argumen mereka.
+    """
     if not semua_pendapat_ronde:
         return ""
+    
+    # Ambil 2 agen paling berpengaruh (selain diri sendiri)
     kuat = [
         p for p in semua_pendapat_ronde
         if p["nama"] != agen["nama"] and p.get("pengaruh", 0) >= 0.75
     ][:2]  # max 2 (hemat token)
+    
     if not kuat:
         return ""
-    baris = [f'- {p["nama"]} berpendapat: "{p["pendapat"][:70]}"' for p in kuat]
-    return "Respons atau tanggapi pendapat ini:\n" + "\n".join(baris)
+    
+    # Format: kutipan max 80 char per agen, dengan instruksi respons silang
+    baris = []
+    for p in kuat:
+        kutipan = p["pendapat"][:80].rstrip()
+        # Potong di kata terakhir yang lengkap jika terlalu panjang
+        if len(p["pendapat"]) > 80:
+            kutipan = kutipan.rsplit(' ', 1)[0] + '...' if ' ' in kutipan else kutipan
+        baris.append(f"- {p['nama']}: \"{kutipan}\"")
+    
+    # Tambah instruksi eksplisit untuk respons silang
+    konteks = "Pendapat yang perlu direspons:\n" + "\n".join(baris) + "\n"
+    konteks += "Tanggapi atau balas argumen salah satu dari mereka secara langsung."
+    
+    return konteks

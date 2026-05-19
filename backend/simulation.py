@@ -13,6 +13,7 @@
 
 import re
 import time
+import random
 
 from .llm      import (
     call_llm, call_llm_json,
@@ -71,9 +72,15 @@ def run_simulation(
         gaya_str     = _compute_gaya_str(agen)
         role_singkat = agen.get("_role_singkat") or agen["role"][:250].rstrip()
 
+        # FIX BUG #17: Larangan eksplisit self-intro + jangan bilang "tidak punya opini"
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
-            f"Gaya bicara: {gaya_str}. "
+            f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
+            "kalau santai ya pakai bahasa sehari-hari, kalau formal ya pakai bahasa resmi, "
+            "kalau suka debat ya tunjukkan dengan nada kritis. "
+            "LARANGAN KERAS: "
+            "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X'). "
+            "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang. "
             f"PENTING: Berikan sudut pandang UNIK dari peranmu — "
             f"jangan ulangi argumen agen lain. "
             "Tulis TEPAT 2-3 kalimat. Setiap kalimat HARUS diakhiri tanda titik. "
@@ -85,6 +92,13 @@ def run_simulation(
         if konteks_pengaruh: parts.append(konteks_pengaruh)
         if ronde_ke == 1 and briefing_real:
             parts.append(f"Info: {briefing_real[:200]}")
+        
+        # FIX BUG #18: Tambah instruksi respons silang
+        if konteks_pengaruh:
+            parts.append("Responslah argumen yang paling menarik atau paling kamu tidak setuju dari peserta lain.")
+        else:
+            parts.append("Sampaikan posisimu langsung tanpa basa-basi.")
+        
         parts.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
         user_p = "\n".join(parts)
 
@@ -95,6 +109,10 @@ def run_simulation(
             if konteks_pengaruh: parts_trimmed.append(konteks_pengaruh[:100])
             if ronde_ke == 1 and briefing_real:
                 parts_trimmed.append(f"Info: {briefing_real[:100]}")
+            if konteks_pengaruh:
+                parts_trimmed.append("Responslah argumen dari peserta lain.")
+            else:
+                parts_trimmed.append("Sampaikan posisimu.")
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
             user_p = "\n".join(parts_trimmed)
 
@@ -117,8 +135,14 @@ def run_simulation(
         output_ronde       = {"ronde": ronde_ke, "agen": []}
         pendapat_ronde_ini = []
 
+        # FIX BUG #18: Shuffle urutan agen mulai ronde 2 agar percakapan lebih organik
+        urutan_agen = list(agents)
+        if ronde_ke > 1:
+            # Gunakan seed berbeda per ronde agar urutan acak tapi deterministic
+            random.Random(ronde_ke).shuffle(urutan_agen)
+
         # ── SEQUENTIAL — satu agen per call, bukan paralel ───────────────
-        for idx, agen in enumerate(agents):
+        for idx, agen in enumerate(urutan_agen):
             try:
                 res = _proses_satu_agen(agen, ronde_ke, topik_ronde)
             except Exception as e:
@@ -142,7 +166,7 @@ def run_simulation(
             })
 
             # Jeda antar agen (kecuali terakhir di ronde terakhir)
-            bukan_akhir = not (idx == len(agents) - 1 and ronde_ke == jumlah_ronde)
+            bukan_akhir = not (idx == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)
             if bukan_akhir:
                 time.sleep(AGENT_CALL_DELAY)
 

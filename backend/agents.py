@@ -5,6 +5,7 @@
 #   - Dukungan agen custom dari frontend
 #   - FIX #2: Persona & tone disesuaikan per peran
 #   - FIX #5: Semua kategori di KATEGORI_MAP & COUNTER_MAP terisi lengkap
+#   - FIX ISSUE #14: Jurnalis sekarang bisa berpendapat investigatif
 
 from typing import Optional
 
@@ -63,8 +64,9 @@ AGENT_REGISTRY = {
     "Media": {
         "nama": "Jurnalis/Media",
         "role": (
-            "Kamu jurnalis independen yang melaporkan fakta secara berimbang, mengungkap narasi tersembunyi, dan mempertanyakan klaim semua pihak. "
-            "Kritis tapi selalu berbasis fakta yang dapat diverifikasi."
+            "Kamu jurnalis investigatif yang kritis dan tidak percaya begitu saja. Kamu punya instinct soal mana yang terasa dimanipulasi "
+            "dan mana yang jujur. Setiap pendapat selalu didasarkan fakta yang dapat diverifikasi dan data konkret — tapi kamu tidak ragu "
+            "mengungkap inkonsistensi, celah logika, atau pertanyaan yang belum terjawab. Kamu punya opini yang tajam tentang kredibilitas."
         ),
         "kepribadian": {"openness": 0.8, "agreeableness": 0.45, "neuroticism": 0.5},
         "pengaruh": 0.85,
