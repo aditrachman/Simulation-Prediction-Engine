@@ -65,55 +65,62 @@ def run_simulation(
         agen.setdefault("_role_singkat", agen["role"][:250].rstrip())
         _compute_gaya_str(agen)
 
-    def _proses_satu_agen(agen: dict, ronde_ke: int, topik_ronde: str) -> dict:
-        konteks_memori   = build_memory_context(agen)
-        konteks_pengaruh = build_influence_context(agen, pendapat_ronde_sebelumnya)
+    def _proses_satu_agen(
+        agen: dict, ronde_ke: int, topik_ronde: str,
+        pendapat_dalam_ronde_ini: list[dict],
+    ) -> dict:
+        konteks_memori = build_memory_context(agen)
+
+        # Gabungkan pendapat ronde sebelumnya + yang sudah bicara di ronde ini
+        # → agen ke-3 bisa merespons agen ke-1 dan ke-2 yang baru ngomong
+        konteks_sumber = pendapat_ronde_sebelumnya + pendapat_dalam_ronde_ini
+        konteks_pengaruh = build_influence_context(agen, konteks_sumber)
 
         gaya_str     = _compute_gaya_str(agen)
         role_singkat = agen.get("_role_singkat") or agen["role"][:250].rstrip()
 
-        # FIX BUG #17: Larangan eksplisit self-intro + jangan bilang "tidak punya opini"
+        ada_yang_sudah_bicara = bool(pendapat_dalam_ronde_ini or pendapat_ronde_sebelumnya)
+
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
             f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
-            "kalau santai ya pakai bahasa sehari-hari, kalau formal ya pakai bahasa resmi, "
-            "kalau suka debat ya tunjukkan dengan nada kritis. "
+            "kalau santai pakai bahasa sehari-hari, kalau formal pakai bahasa resmi, "
+            "kalau suka debat tunjukkan dengan nada kritis dan tajam. "
             "LARANGAN KERAS: "
-            "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X'). "
-            "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang. "
-            f"PENTING: Berikan sudut pandang UNIK dari peranmu — "
-            f"jangan ulangi argumen agen lain. "
-            "Tulis TEPAT 2-3 kalimat. Setiap kalimat HARUS diakhiri tanda titik. "
-            "JANGAN potong kalimat di tengah."
+            "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X', 'saya sebagai X'). "
+            "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
+            "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
+            "JANGAN buka kalimat dengan 'Saya pikir' atau 'Saya rasa' — langsung ke poin. "
+            "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik."
         )
 
         parts = []
-        if konteks_memori:   parts.append(konteks_memori)
-        if konteks_pengaruh: parts.append(konteks_pengaruh)
-        if ronde_ke == 1 and briefing_real:
+        if konteks_memori:
+            parts.append(konteks_memori)
+
+        if ada_yang_sudah_bicara and konteks_pengaruh:
+            parts.append(konteks_pengaruh)
+            parts.append(
+                "WAJIB: Sebut nama peserta yang kamu respons di kalimat pertama "
+                "(contoh: 'Poin [Nama] soal X kurang tepat karena...' atau '[Nama], angkamu dari mana?')."
+            )
+        elif ronde_ke == 1 and briefing_real:
             parts.append(f"Info: {briefing_real[:200]}")
-        
-        # FIX BUG #18: Tambah instruksi respons silang
-        if konteks_pengaruh:
-            parts.append("Responslah argumen yang paling menarik atau paling kamu tidak setuju dari peserta lain.")
-        else:
-            parts.append("Sampaikan posisimu langsung tanpa basa-basi.")
-        
-        parts.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
+
+        parts.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu (2-3 kalimat)?")
         user_p = "\n".join(parts)
 
-        # BUG #1b: Batasi total panjang user prompt — pangkas konteks jika > 600 char
-        if len(user_p) > 600:
+        # Pangkas jika > 700 char — tapi pertahankan konteks pengaruh (jangan dipotong kasar)
+        if len(user_p) > 700:
             parts_trimmed = []
-            if konteks_memori:   parts_trimmed.append(konteks_memori[:80])
-            if konteks_pengaruh: parts_trimmed.append(konteks_pengaruh[:100])
-            if ronde_ke == 1 and briefing_real:
-                parts_trimmed.append(f"Info: {briefing_real[:100]}")
-            if konteks_pengaruh:
-                parts_trimmed.append("Responslah argumen dari peserta lain.")
-            else:
-                parts_trimmed.append("Sampaikan posisimu.")
-            parts_trimmed.append(f"Topik: {topik_ronde[:130]}\nPendapatmu?")
+            if konteks_memori:
+                parts_trimmed.append(konteks_memori[:80])
+            if ada_yang_sudah_bicara and konteks_pengaruh:
+                # Potong konteks pengaruh tapi tetap utuh per baris
+                baris_pengaruh = konteks_pengaruh.split("\n")
+                parts_trimmed.append("\n".join(baris_pengaruh[:4]))  # max 4 baris
+                parts_trimmed.append("Sebut nama peserta yang kamu respons.")
+            parts_trimmed.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu (2-3 kalimat)?")
             user_p = "\n".join(parts_trimmed)
 
         jawaban  = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
@@ -134,17 +141,18 @@ def run_simulation(
 
         output_ronde       = {"ronde": ronde_ke, "agen": []}
         pendapat_ronde_ini = []
+        # Pendapat yang sudah terkumpul di ronde ini (diupdate setiap agen selesai bicara)
+        pendapat_dalam_ronde_ini: list[dict] = []
 
-        # FIX BUG #18: Shuffle urutan agen mulai ronde 2 agar percakapan lebih organik
+        # Shuffle urutan agen mulai ronde 2 agar percakapan lebih organik
         urutan_agen = list(agents)
         if ronde_ke > 1:
-            # Gunakan seed berbeda per ronde agar urutan acak tapi deterministic
             random.Random(ronde_ke).shuffle(urutan_agen)
 
         # ── SEQUENTIAL — satu agen per call, bukan paralel ───────────────
         for idx, agen in enumerate(urutan_agen):
             try:
-                res = _proses_satu_agen(agen, ronde_ke, topik_ronde)
+                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini)
             except Exception as e:
                 print(f"[Skip] {agen['nama']} ronde {ronde_ke}: {e}")
                 res = {
@@ -160,10 +168,13 @@ def run_simulation(
             output_ronde["agen"].append({
                 "nama": res["nama"], "pendapat": res["pendapat"], "sentimen": res["sentimen"],
             })
-            pendapat_ronde_ini.append({
+            entry = {
                 "nama": res["nama"], "pendapat": res["pendapat"],
                 "sentimen": res["sentimen"], "pengaruh": res["pengaruh"],
-            })
+            }
+            pendapat_ronde_ini.append(entry)
+            # Update in-round context → agen berikutnya bisa merespons agen ini
+            pendapat_dalam_ronde_ini.append(entry)
 
             # Jeda antar agen (kecuali terakhir di ronde terakhir)
             bukan_akhir = not (idx == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)

@@ -84,34 +84,39 @@ def build_memory_context(agent: dict) -> str:
 
 def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str:
     """
-    Bangun string konteks pengaruh agen lain dengan pengaruh tinggi.
-    
-    FIX BUG #18: Sekarang include kutipan pendapat dari 2 agen paling berpengaruh,
-    dengan instruksi eksplisit untuk merespons atau membantah argumen mereka.
+    Bangun string konteks pengaruh agen lain — termasuk yang sudah bicara
+    di ronde yang sama (in-round context) maupun ronde sebelumnya.
+
+    Perubahan vs versi lama:
+    - Threshold pengaruh diturunkan dari 0.75 → 0.4 agar semua agen masuk
+    - Prioritas: agen yang baru bicara di ronde sama (paling fresh)
+    - Ambil max 3 agen (bukan 2) agar lebih banyak yang bisa direspons
+    - Kutipan dipotong di kalimat pertama agar lebih natural
     """
     if not semua_pendapat_ronde:
         return ""
-    
-    # Ambil 2 agen paling berpengaruh (selain diri sendiri)
-    kuat = [
-        p for p in semua_pendapat_ronde
-        if p["nama"] != agen["nama"] and p.get("pengaruh", 0) >= 0.75
-    ][:2]  # max 2 (hemat token)
-    
-    if not kuat:
+
+    # Semua agen lain, sorted pengaruh tertinggi duluan
+    kandidat = sorted(
+        [p for p in semua_pendapat_ronde if p["nama"] != agen["nama"]],
+        key=lambda p: p.get("pengaruh", 0.5),
+        reverse=True,
+    )[:3]  # max 3 agen
+
+    if not kandidat:
         return ""
-    
-    # Format: kutipan max 80 char per agen, dengan instruksi respons silang
+
     baris = []
-    for p in kuat:
-        kutipan = p["pendapat"][:80].rstrip()
-        # Potong di kata terakhir yang lengkap jika terlalu panjang
-        if len(p["pendapat"]) > 80:
-            kutipan = kutipan.rsplit(' ', 1)[0] + '...' if ' ' in kutipan else kutipan
-        baris.append(f"- {p['nama']}: \"{kutipan}\"")
-    
-    # Tambah instruksi eksplisit untuk respons silang
-    konteks = "Pendapat yang perlu direspons:\n" + "\n".join(baris) + "\n"
-    konteks += "Tanggapi atau balas argumen salah satu dari mereka secara langsung."
-    
+    for p in kandidat:
+        pendapat_full = p["pendapat"]
+        # Ambil kalimat pertama saja (potong di titik pertama)
+        kalimat_pertama = pendapat_full.split(".")[0].strip()
+        # Batasi 90 karakter, potong di kata terakhir yang lengkap
+        if len(kalimat_pertama) > 90:
+            kalimat_pertama = kalimat_pertama[:90].rsplit(" ", 1)[0]
+        kutipan = kalimat_pertama + ("..." if len(pendapat_full) > len(kalimat_pertama) + 1 else "")
+        baris.append(f'- {p["nama"]} bilang: "{kutipan}"')
+
+    konteks  = "Yang sudah disampaikan peserta lain:\n" + "\n".join(baris) + "\n"
+    konteks += "Pilih SATU yang paling kamu tidak setuju atau paling menarik, lalu respons langsung ke mereka."
     return konteks
