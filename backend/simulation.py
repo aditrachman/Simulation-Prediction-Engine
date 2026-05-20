@@ -187,15 +187,22 @@ def run_simulation(
         if konteks_memori:
             parts.append(konteks_memori)
 
-        # Sesi 15 — BUG #27: change_rule — wajib jelaskan jika posisi berubah signifikan
+        # Stabilization PR — BUG #27: change_rule berbasis skor sentimen nyata
         if skor_ronde_lalu is not None and len(agen.get("memori", [])) >= 2:
-            parts.append(
-                "PENTING: Posisimu sudah tercatat dari ronde-ronde sebelumnya. "
-                "Jika responsmu kali ini BERBEDA dari yang terakhir kamu bilang, "
-                "JELASKAN di kalimat pertama atau kedua: argumen atau data baru APA yang membuatmu berubah. "
-                "Contoh: 'Ronde lalu saya khawatir tentang X, tapi sekarang saya lihat bukti baru Y — so saya revisi posisi.' "
-                "Jangan geser posisi diam-diam tanpa alasan."
-            )
+            if skor_ronde_lalu > 0.2:
+                parts.append(
+                    "Ronde sebelumnya posisimu cenderung MENDUKUNG. "
+                    "Jika sekarang kamu menolak atau netral, jelaskan data/argumen baru yang mengubah posisimu."
+                )
+            elif skor_ronde_lalu < -0.2:
+                parts.append(
+                    "Ronde sebelumnya posisimu cenderung MENOLAK. "
+                    "Jika sekarang kamu mendukung atau netral, jelaskan data/argumen baru yang mengubah posisimu."
+                )
+            else:
+                parts.append(
+                    "Ronde sebelumnya posisimu netral. Jika sekarang kamu mengambil posisi kuat, jelaskan alasan atau data yang membuatmu condong."
+                )
 
         if ada_yang_sudah_bicara and konteks_pengaruh:
             parts.append(konteks_pengaruh)
@@ -231,10 +238,12 @@ def run_simulation(
             user_p = "\n".join(parts_trimmed)
 
         jawaban  = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
-        # Sesi 15 — BUG #26: filter forbidden opening patterns sebelum dipakai
+        # Stabilization PR — BUG #26: filter forbidden opens (sebelum potong)
         jawaban  = filter_forbidden_opens(jawaban)
         # BUG #23 — post-processing: pastikan output maksimal 3 kalimat
         jawaban  = _batasi_kalimat(jawaban, max_kalimat=3)
+        # Stabilization PR — BUG #26: filter lagi sesudah dipotong (kalimat baru bisa jadi pembuka baru)
+        jawaban  = filter_forbidden_opens(jawaban)
         sentimen = score_sentiment(jawaban, topik=topik_ronde)
 
         return {
@@ -273,7 +282,7 @@ def run_simulation(
                     "pengaruh": agen.get("pengaruh", 0.5),
                 }
 
-            update_agent_memory(agen, ronde_ke, res["pendapat"])
+            update_agent_memory(agen, ronde_ke, res["pendapat"], res["sentimen"])
             log_diskusi += f"\n[R{ronde_ke}] {agen['nama']}: {res['pendapat']}\n"
 
             output_ronde["agen"].append({

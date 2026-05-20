@@ -164,7 +164,7 @@ function buildMLSection(mlData) {
   const accBar = `
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:12px;font-weight:700;color:#1e293b">Ketepatan Prediksi</span>
+        <span style="font-size:12px;font-weight:700;color:#1e293b">Akurasi Internal Model</span>
         <span style="font-size:18px;font-weight:900;color:${accColor}">${m.accuracy_pct}%</span>
       </div>
       <div style="height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden">
@@ -284,6 +284,11 @@ function buildMLSection(mlData) {
       <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Tebakan vs Kenyataan (Confusion Matrix)</p>
       ${cmTable}
       ${labelDist}
+      <div style="margin-top:14px;padding:10px 12px;border:1px solid #fcd34d;border-radius:8px;background:#fefce8">
+        <p style="font-size:10px;color:#92400e;margin:0">
+          <strong>Catatan:</strong> Evaluasi ML bersifat internal. Mayoritas label dapat berasal dari weak label simulasi kecuali sudah tersedia feedback manual yang cukup.
+        </p>
+      </div>
     </div>`;
 }
 

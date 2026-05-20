@@ -151,29 +151,54 @@ def _score_llm(teks: str, topik: str = "") -> dict:
 # ---------------------------------------------------------------------------
 
 _FORBIDDEN_OPENS = [
-    r"^Gue tidak bisa menerima",
-    r"^Saya tidak bisa menerima",
-    r"^Gue tidak setuju dengan klaim",
-    r"^Saya tidak setuju dengan klaim",
+    # Opini eksplisit
+    r"^Gue rasa\b",
+    r"^Gue pikir\b",
+    r"^Saya rasa\b",
+    r"^Saya pikir\b",
+    r"^Menurut saya\b",
+    r"^Menurut gue\b",
+    # Penolakan / ketidaksetujuan
+    r"^Saya tidak setuju\b",
+    r"^Gue tidak setuju\b",
+    r"^Saya tidak bisa menerima\b",
+    r"^Gue tidak bisa menerima\b",
+    r"^Saya tidak cocok\b",
+    r"^Saya kurang setuju\b",
+    r"^Gue tidak setuju dengan klaim\b",
+    r"^Saya tidak setuju dengan klaim\b",
+    # Negasi langsung
+    r"^Klaim bahwa\b",
+    r"^Tidak sepenuhnya akurat\b",
+    r"^Itu tidak\b",
     r"^Klaim bahwa .+tidak (tepat|akurat|benar)",
     r"^Itu tidak (tepat|akurat|benar)",
 ]
 
+_FALLBACK_FORBIDDEN = (
+    "Data dan dampak langsungnya perlu dilihat lebih jernih sebelum menyimpulkan."
+)
+
 
 def filter_forbidden_opens(jawaban: str) -> str:
     """
-    Sesi 15 — BUG #26: Hapus kalimat pertama jika menggunakan frasa terlarang.
-    Dipanggil dari simulation.py setelah jawaban LLM diterima.
+    Stabilization PR — perkuat BUG #26:
+    Hapus kalimat pertama jika menggunakan frasa terlarang.
+    Jika setelah dihapus hasilnya kosong, gunakan fallback pendek.
+    Dipanggil dua kali di simulation.py (sebelum & sesudah _batasi_kalimat).
+    Pure Python — tidak menambah LLM call.
     """
     if not jawaban:
         return jawaban
+    teks = jawaban.strip()
     for pattern in _FORBIDDEN_OPENS:
-        if re.match(pattern, jawaban.strip(), re.IGNORECASE):
-            kalimat = re.split(r'(?<=[.!?])\s+', jawaban.strip())
+        if re.match(pattern, teks, re.IGNORECASE):
+            kalimat = re.split(r'(?<=[.!?])\s+', teks)
+            kalimat = [k for k in kalimat if k.strip()]
             if len(kalimat) > 1:
                 return " ".join(kalimat[1:]).strip()
-            # Hanya satu kalimat — kembalikan tanpa perubahan (biarkan prompt do the work)
-            return jawaban
+            # Satu kalimat terlarang → ganti fallback
+            return _FALLBACK_FORBIDDEN
     return jawaban
 
 

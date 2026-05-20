@@ -12,9 +12,23 @@ from .llm import call_llm, MODEL_AGENT, MAX_TOKENS_SUMMARY
 # Memory Update
 # ---------------------------------------------------------------------------
 
-def update_agent_memory(agent: dict, ronde: int, pendapat: str) -> None:
-    """Simpan pendapat agen ke memori dan invalidasi cache ringkasan."""
-    agent["memori"].append({"ronde": ronde, "pendapat": pendapat})
+def update_agent_memory(
+    agent: dict,
+    ronde: int,
+    pendapat: str,
+    sentimen: dict | None = None,
+) -> None:
+    """
+    Simpan pendapat agen ke memori dan invalidasi cache ringkasan.
+    Stabilization PR: juga simpan label & skor sentimen jika tersedia,
+    agar change-justification di simulation.py bisa membaca skor ronde lalu.
+    Backward compatible — pemanggil lama tanpa sentimen tetap tidak error.
+    """
+    entry: dict = {"ronde": ronde, "pendapat": pendapat}
+    if sentimen:
+        entry["label"] = sentimen.get("label")
+        entry["skor"]  = sentimen.get("skor")
+    agent["memori"].append(entry)
     agent.pop("_ringkasan_cache", None)
 
 

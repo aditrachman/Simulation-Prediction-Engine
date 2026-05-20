@@ -1059,8 +1059,7 @@ const PanelMLMetrics = ({ apiBase }) => {
         </button>
       </div>
       <p className="mb-4 text-xs text-slate-400 leading-relaxed">
-        Ini "rapor" sistem tebakan VoxSwarm. Semakin tinggi angkanya,
-        semakin sering VoxSwarm berhasil menebak apa yang benar-benar terjadi.
+        Evaluasi internal model VoxSwarm berdasarkan dataset simulasi. Skor ini bukan validasi dunia nyata.
       </p>
 
       {/* ── Sub-section 1: Akurasi ── */}
@@ -1068,10 +1067,10 @@ const PanelMLMetrics = ({ apiBase }) => {
         <div className="flex items-center justify-between mb-2">
           <div>
             <span className="text-sm font-black text-white">
-              Tingkat Kebenaran: {accuracy_pct}%
+              Evaluasi Internal: {accuracy_pct}%
             </span>
             <p className="text-[11px] text-slate-500 mt-1">
-              Dari 100 tebakan, sekitar {accuracy_pct} di antaranya tepat sasaran.
+              Skor ini dihitung dari dataset internal simulasi/feedback, bukan validasi dunia nyata.
             </p>
           </div>
           <span className="text-[11px] text-slate-500 text-right">

@@ -700,6 +700,9 @@ def get_ml_status() -> dict:
             TRAINED_AT_FILE.read_text(encoding="utf-8").strip()
             if TRAINED_AT_FILE.exists() else None
         ),
+        # Stabilization PR — ML honesty fields
+        "model_warning":          "Model uses pickle. Re-train model after dependency changes. ML output is experimental.",
+        "prediction_disclaimer":  "ML predictions are experimental and trained mostly from weak simulation labels unless feedback labels are available.",
     }
 
 
