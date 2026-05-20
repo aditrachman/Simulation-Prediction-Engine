@@ -637,7 +637,7 @@ const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
             <input
               type="range" min="0.1" max="1.0" step="0.1"
               value={pengaruh}
-              onChange={e => setPengaruh(e.target.value)}
+              onChange={e => setPengaruh(parseFloat(e.target.value))}
               className="flex-1"
             />
             <span className="text-xs font-bold text-indigo-300 w-6 text-right">{pengaruh}</span>

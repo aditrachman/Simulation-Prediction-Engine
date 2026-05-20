@@ -65,35 +65,96 @@ def run_simulation(
         agen.setdefault("_role_singkat", agen["role"][:250].rstrip())
         _compute_gaya_str(agen)
 
+    def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
+        """
+        Post-processing pure Python — potong output agen di batas kalimat ke-N.
+        Tidak merusak teks, tidak menambah LLM call.
+        """
+        if not teks:
+            return teks
+        # Split di titik, tanda tanya, atau tanda seru diikuti spasi/akhir string
+        pecahan = re.split(r'(?<=[.!?])\s+', teks.strip())
+        # Buang fragmen kosong
+        pecahan = [k for k in pecahan if k.strip()]
+        if len(pecahan) <= max_kalimat:
+            return teks
+        hasil = " ".join(pecahan[:max_kalimat])
+        # Pastikan diakhiri tanda baca
+        if hasil and hasil[-1] not in ".!?":
+            hasil += "."
+        return hasil
+
     def _proses_satu_agen(
-        agen: dict, ronde_ke: int, topik_ronde: str,
+        agen: dict,
+        ronde_ke: int,
+        topik_ronde: str,
         pendapat_dalam_ronde_ini: list[dict],
+        idx_agen: int = 0,
     ) -> dict:
         konteks_memori = build_memory_context(agen)
 
         # Gabungkan pendapat ronde sebelumnya + yang sudah bicara di ronde ini
         # → agen ke-3 bisa merespons agen ke-1 dan ke-2 yang baru ngomong
         konteks_sumber = pendapat_ronde_sebelumnya + pendapat_dalam_ronde_ini
-        konteks_pengaruh = build_influence_context(agen, konteks_sumber)
+        konteks_pengaruh = build_influence_context(agen, konteks_sumber, idx_agen=idx_agen)
 
         gaya_str     = _compute_gaya_str(agen)
         role_singkat = agen.get("_role_singkat") or agen["role"][:250].rstrip()
 
         ada_yang_sudah_bicara = bool(pendapat_dalam_ronde_ini or pendapat_ronde_sebelumnya)
 
+        # ISSUE #23 — stance rule khusus Pemerintah (diperkuat Sesi 14)
+        stance_rule = ""
+        if "pemerintah" in agen["nama"].lower() or "pejabat pemerintah" in agen.get("role", "").lower():
+            stance_rule = (
+                "Khusus posisimu: kamu mewakili pemerintah dalam topik ini — kamu berbicara UNTUK pemerintah, bukan tentang pemerintah dari luar. "
+                "JANGAN menyerang, mengkritik, atau menyerukan pemerintah untuk berubah. "
+                "Jika dikritik: akui tantangan sebagai sesuatu yang sudah diketahui dan sedang ditangani. "
+                "Selalu akhiri dengan langkah konkret yang sudah atau akan dilakukan pemerintah. "
+                "Kata-kata seperti 'pemerintah harus' atau 'pemerintah perlu' DILARANG — kamu IS pemerintah. "
+            )
+
+        # ISSUE #24 — escape phrase rule khusus Akademisi
+        akademisi_rule = ""
+        if "akademisi" in agen["nama"].lower() or "dosen" in agen.get("role", "").lower():
+            akademisi_rule = (
+                "JANGAN tutup argumen dengan frasa terbuka seperti 'perlu dipertimbangkan', "
+                "'perlu diteliti lebih lanjut', 'sebelum menarik kesimpulan', atau 'perlu dilihat lebih komprehensif'. "
+                "Kamu SUDAH mempertimbangkan — sekarang berikan kesimpulanmu yang tegas. "
+            )
+
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
             f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
             "kalau santai pakai bahasa sehari-hari, kalau formal pakai bahasa resmi, "
             "kalau suka debat tunjukkan dengan nada kritis dan tajam. "
+            # BUG #24 — position anchor diperkuat
+            "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat dan data baru yang mengubah pandangan. "
+            "Berubah posisi tanpa alasan konkret adalah kelemahan — bukan fleksibilitas. "
+            + stance_rule
+            + akademisi_rule +
             "LARANGAN KERAS: "
             "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X', 'saya sebagai X'). "
             "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
             "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
-            "JANGAN buka kalimat dengan 'Saya pikir' atau 'Saya rasa' — langsung ke poin. "
+            "JANGAN buka kalimat dengan frasa pendapat seperti 'Saya pikir', 'Saya rasa', "
+            "'Gue rasa', 'Gue pikir', 'Menurut saya', 'Menurut gue' — langsung ke poin atau fakta. "
+            # BUG #25 — larangan template counter generic (diperluas Sesi 14)
+            "JANGAN buka kalimat dengan frasa counter generic seperti "
+            "'Saya tidak bisa menerima', 'Saya tidak setuju dengan klaim', 'Klaim bahwa', "
+            "'Gue tidak bisa menerima', 'Tidak sepenuhnya akurat', 'Itu tidak tepat', "
+            "'Saya tidak cocok dengan', atau 'Saya kurang setuju' — "
+            "langsung ke argumenmu sendiri dengan data atau logika, bukan reaksi terhadap klaim. "
             "JANGAN kutip atau ulangi kata-kata peserta lain secara verbatim — parafrase atau langsung respons. "
             "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
             "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim."
+        )
+
+        # ISSUE #22 — guard agen pembuka ronde 1
+        adalah_pembuka = (
+            ronde_ke == 1
+            and not pendapat_dalam_ronde_ini
+            and not pendapat_ronde_sebelumnya
         )
 
         parts = []
@@ -102,10 +163,15 @@ def run_simulation(
 
         if ada_yang_sudah_bicara and konteks_pengaruh:
             parts.append(konteks_pengaruh)
+            # BUG #21 — instruksi respons lebih fleksibel, tidak paksa sebut nama
             parts.append(
-                "WAJIB: Sebut nama peserta yang kamu respons di kalimat pertama "
-                "(contoh: 'Poin [Nama] soal X kurang tepat karena...' atau '[Nama], angkamu dari mana?')."
+                "Respons ke salah satu peserta — boleh sebut namanya, boleh juga langsung counter argumennya "
+                "tanpa sebut nama. Yang penting posisimu jelas dan berbeda dari yang sudah bicara."
             )
+        elif adalah_pembuka:
+            if briefing_real:
+                parts.append(f"Info konteks: {briefing_real[:200]}")
+            parts.append("Buka diskusi dengan posisimu yang paling kuat tentang topik ini.")
         elif ronde_ke == 1 and briefing_real:
             parts.append(f"Info: {briefing_real[:200]}")
 
@@ -121,11 +187,16 @@ def run_simulation(
                 # Potong konteks pengaruh tapi tetap utuh per baris
                 baris_pengaruh = konteks_pengaruh.split("\n")
                 parts_trimmed.append("\n".join(baris_pengaruh[:4]))  # max 4 baris
-                parts_trimmed.append("Sebut nama peserta yang kamu respons.")
+                parts_trimmed.append(
+                    "Respons ke salah satu peserta — boleh sebut namanya, "
+                    "boleh juga langsung counter argumennya tanpa sebut nama."
+                )
             parts_trimmed.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu (2-3 kalimat)?")
             user_p = "\n".join(parts_trimmed)
 
         jawaban  = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+        # BUG #23 — post-processing: pastikan output maksimal 3 kalimat
+        jawaban  = _batasi_kalimat(jawaban, max_kalimat=3)
         sentimen = score_sentiment(jawaban, topik=topik_ronde)
 
         return {
@@ -154,7 +225,7 @@ def run_simulation(
         # ── SEQUENTIAL — satu agen per call, bukan paralel ───────────────
         for idx, agen in enumerate(urutan_agen):
             try:
-                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini)
+                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini, idx_agen=idx)
             except Exception as e:
                 print(f"[Skip] {agen['nama']} ronde {ronde_ke}: {e}")
                 res = {

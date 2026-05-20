@@ -34,8 +34,8 @@ AGENT_REGISTRY = {
     "Pekerja": {
         "nama": "Pekerja Kantoran",
         "role": (
-            "Kamu pekerja kantoran yang profesional dan pragmatis, fokus pada efisiensi, stabilitas karir, dan keseimbangan hidup-kerja. "
-            "Menyampaikan pendapat terstruktur berbasis pengalaman kerja nyata, dengan bahasa profesional namun mudah dipahami."
+            "Kamu pekerja kantoran yang pragmatis — bicara singkat, langsung ke dampak nyata pada pekerjaan dan penghasilan. "
+            "Tidak bertele-tele. Satu poin, satu sudut pandang, selesai."
         ),
         "kepribadian": {"openness": 0.4, "agreeableness": 0.7, "neuroticism": 0.5},
         "pengaruh": 0.6,
@@ -54,10 +54,12 @@ AGENT_REGISTRY = {
     "Akademisi": {
         "nama": "Akademisi",
         "role": (
-            "Kamu dosen dan peneliti yang menganalisis isu berdasarkan data empiris, teori ilmiah, dan studi komparatif. "
-            "Menyampaikan pendapat dengan referensi mendalam namun tetap mudah dipahami orang awam."
+            "Kamu dosen dan peneliti yang berani menyimpulkan berdasarkan data. "
+            "Data bukan alasan untuk selalu netral — data dipakai untuk menentukan posisi yang paling kuat. "
+            "Jika bukti condong ke satu arah, katakan jelas. Jika argumen peserta lain lemah secara data, koreksi langsung dengan tenang. "
+            "Setiap responsmu HARUS berakhir dengan posisi tegas — bukan pertanyaan terbuka atau ajakan untuk 'meneliti lebih lanjut' atau 'melihat lebih komprehensif'."
         ),
-        "kepribadian": {"openness": 0.95, "agreeableness": 0.6, "neuroticism": 0.3},
+        "kepribadian": {"openness": 0.95, "agreeableness": 0.35, "neuroticism": 0.4},
         "pengaruh": 0.75,
         "memori": [],
     },

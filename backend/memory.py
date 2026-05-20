@@ -72,17 +72,25 @@ def summarize_memory(agent: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def build_memory_context(agent: dict) -> str:
-    """Bangun string konteks memori singkat untuk prompt agen."""
+    """Bangun string konteks memori singkat untuk prompt agen — fokus sebagai pengingat posisi."""
     if not agent["memori"]:
         return ""
     terakhir = agent["memori"][-1]
     if len(agent["memori"]) >= 3:
         ringkasan = summarize_memory(agent)
-        return f"Sikapmu: {ringkasan} Terakhir: \"{terakhir['pendapat'][:80]}\""
-    return f"Kamu bilang: \"{terakhir['pendapat'][:80]}\""
+        return (
+            f"POSISIMU SEJAUH INI: {ringkasan} "
+            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+            f"— pertahankan jika tidak ada alasan kuat untuk berubah."
+        )
+    return f"Kamu bilang: \"{terakhir['pendapat'][:80]}\" — ini posisimu, pertahankan kecuali ada argumen baru yang sangat kuat."
 
 
-def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str:
+def build_influence_context(
+    agen: dict,
+    semua_pendapat_ronde: list[dict],
+    idx_agen: int = 0,
+) -> str:
     """
     Bangun string konteks pengaruh agen lain — termasuk yang sudah bicara
     di ronde yang sama (in-round context) maupun ronde sebelumnya.
@@ -92,16 +100,24 @@ def build_influence_context(agen: dict, semua_pendapat_ronde: list[dict]) -> str
     - Prioritas: agen yang baru bicara di ronde sama (paling fresh)
     - Ambil max 3 agen (bukan 2) agar lebih banyak yang bisa direspons
     - Kutipan dipotong di kalimat pertama agar lebih natural
+    - idx_agen dipakai untuk rotasi kandidat agar agen tidak semua menyerang target sama
     """
     if not semua_pendapat_ronde:
         return ""
 
-    # Semua agen lain, sorted pengaruh tertinggi duluan
-    kandidat = sorted(
+    # Sort berdasarkan pengaruh, ambil top-5, lalu rotate berdasarkan idx_agen
+    # agar setiap agen mendapat "perspektif" kandidat yang berbeda
+    kandidat_sorted = sorted(
         [p for p in semua_pendapat_ronde if p["nama"] != agen["nama"]],
         key=lambda p: p.get("pengaruh", 0.5),
         reverse=True,
-    )[:3]  # max 3 agen
+    )[:5]
+
+    if not kandidat_sorted:
+        return ""
+
+    start = idx_agen % len(kandidat_sorted)
+    kandidat = (kandidat_sorted[start:] + kandidat_sorted[:start])[:3]
 
     if not kandidat:
         return ""
