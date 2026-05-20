@@ -27,7 +27,7 @@ from .memory   import (
     update_agent_memory, build_memory_context, build_influence_context,
     _compute_gaya_str,
 )
-from .sentiment import score_sentiment
+from .sentiment import score_sentiment, filter_forbidden_opens
 from .graph     import extract_entities
 
 
@@ -123,6 +123,19 @@ def run_simulation(
                 "Kamu SUDAH mempertimbangkan — sekarang berikan kesimpulanmu yang tegas. "
             )
 
+        # Sesi 15 — ISSUE #25: conviction_rule — cegah Akademisi jadi fence-sitter
+        conviction_rule = ""
+        if "akademisi" in agen["nama"].lower() or "dosen" in agen.get("role", "").lower():
+            conviction_rule = (
+                "ATURAN POSISI AKADEMISI: Kamu HARUS memiliki posisi yang JELAS — bukan netral tanpa alasan. "
+                "Netral (skor 0) hanya valid jika: "
+                "(1) bukti truly seimbang DAN (2) kamu JELASKAN di respons: 'Bukti seimbang antara X dan Y.' "
+                "Jika ronde sebelumnya posisimu bukan netral, JANGAN jadi netral sekarang "
+                "kecuali ada DATA BARU yang fundamental mengubah kesimpulan. "
+                "CONTOH VALID netral: 'Bukti seimbang: 40% mahasiswa malas, 60% tetap rajin. Perlu data lebih untuk simpulan.' "
+                "CONTOH INVALID: Hanya bilang 'Ada dua sisi, so netral.' — itu bukan argumen. "
+            )
+
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
             f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
@@ -132,19 +145,26 @@ def run_simulation(
             "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat dan data baru yang mengubah pandangan. "
             "Berubah posisi tanpa alasan konkret adalah kelemahan — bukan fleksibilitas. "
             + stance_rule
-            + akademisi_rule +
+            + akademisi_rule
+            + conviction_rule +  # Sesi 15 — ISSUE #25
             "LARANGAN KERAS: "
             "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X', 'saya sebagai X'). "
             "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
             "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
             "JANGAN buka kalimat dengan frasa pendapat seperti 'Saya pikir', 'Saya rasa', "
             "'Gue rasa', 'Gue pikir', 'Menurut saya', 'Menurut gue' — langsung ke poin atau fakta. "
-            # BUG #25 — larangan template counter generic (diperluas Sesi 14)
-            "JANGAN buka kalimat dengan frasa counter generic seperti "
-            "'Saya tidak bisa menerima', 'Saya tidak setuju dengan klaim', 'Klaim bahwa', "
-            "'Gue tidak bisa menerima', 'Tidak sepenuhnya akurat', 'Itu tidak tepat', "
-            "'Saya tidak cocok dengan', atau 'Saya kurang setuju' — "
-            "langsung ke argumenmu sendiri dengan data atau logika, bukan reaksi terhadap klaim. "
+            # Sesi 15 — BUG #26: Larangan diperketat — frasa lebih lengkap + instruksi ulang eksplisit
+            "LARANGAN ABSOLUT — Frasa berikut TIDAK BOLEH digunakan sebagai pembuka kalimat pertama: "
+            "'Gue tidak bisa menerima', 'Saya tidak bisa menerima', "
+            "'Gue tidak setuju dengan klaim', 'Saya tidak setuju dengan klaim', "
+            "'Klaim bahwa', 'Tidak sepenuhnya akurat', 'Itu tidak tepat', "
+            "'Itu tidak akurat', 'Itu tidak benar', "
+            "'Saya tidak cocok dengan', 'Saya kurang setuju'. "
+            "JIKA KALIMAT PERTAMAMU MENGGUNAKAN SALAH SATU FRASA INI: ULANGI dan mulai ulang. "
+            "SELALU mulai dengan ARGUMEN atau DATA LANGSUNG, bukan NEGASI. "
+            "CONTOH BENAR: 'Data menunjukkan 75% mahasiswa masih membaca, jadi AI tidak membuat mereka malas.' "
+            "CONTOH SALAH: 'Saya tidak bisa menerima klaim itu. Data menunjukkan 75% mahasiswa masih membaca.' "
+            "Lihat bedanya? Jangan mulai dengan negasi. Mulai dengan statement positif atau data. "
             "JANGAN kutip atau ulangi kata-kata peserta lain secara verbatim — parafrase atau langsung respons. "
             "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
             "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim."
@@ -157,9 +177,25 @@ def run_simulation(
             and not pendapat_ronde_sebelumnya
         )
 
+        # Sesi 15 — BUG #27: Hitung skor ronde lalu untuk change justification
+        skor_ronde_lalu = None
+        if len(agen.get("memori", [])) > 0:
+            last_mem = agen["memori"][-1]
+            skor_ronde_lalu = last_mem.get("skor", None)
+
         parts = []
         if konteks_memori:
             parts.append(konteks_memori)
+
+        # Sesi 15 — BUG #27: change_rule — wajib jelaskan jika posisi berubah signifikan
+        if skor_ronde_lalu is not None and len(agen.get("memori", [])) >= 2:
+            parts.append(
+                "PENTING: Posisimu sudah tercatat dari ronde-ronde sebelumnya. "
+                "Jika responsmu kali ini BERBEDA dari yang terakhir kamu bilang, "
+                "JELASKAN di kalimat pertama atau kedua: argumen atau data baru APA yang membuatmu berubah. "
+                "Contoh: 'Ronde lalu saya khawatir tentang X, tapi sekarang saya lihat bukti baru Y — so saya revisi posisi.' "
+                "Jangan geser posisi diam-diam tanpa alasan."
+            )
 
         if ada_yang_sudah_bicara and konteks_pengaruh:
             parts.append(konteks_pengaruh)
@@ -195,6 +231,8 @@ def run_simulation(
             user_p = "\n".join(parts_trimmed)
 
         jawaban  = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+        # Sesi 15 — BUG #26: filter forbidden opening patterns sebelum dipakai
+        jawaban  = filter_forbidden_opens(jawaban)
         # BUG #23 — post-processing: pastikan output maksimal 3 kalimat
         jawaban  = _batasi_kalimat(jawaban, max_kalimat=3)
         sentimen = score_sentiment(jawaban, topik=topik_ronde)

@@ -72,18 +72,42 @@ def summarize_memory(agent: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def build_memory_context(agent: dict) -> str:
-    """Bangun string konteks memori singkat untuk prompt agen — fokus sebagai pengingat posisi."""
+    """Bangun string konteks memori singkat untuk prompt agen.
+
+    Sesi 15 — BUG #27:
+    Selain mengingatkan posisi terakhir, sekarang juga menyertakan posisi
+    ronde sebelumnya agar agen WAJIB menjelaskan alasan jika berubah posisi.
+    """
     if not agent["memori"]:
         return ""
+
     terakhir = agent["memori"][-1]
+    has_previous = len(agent["memori"]) >= 2
+
     if len(agent["memori"]) >= 3:
         ringkasan = summarize_memory(agent)
-        return (
+        base_context = (
             f"POSISIMU SEJAUH INI: {ringkasan} "
             f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
-            f"— pertahankan jika tidak ada alasan kuat untuk berubah."
         )
-    return f"Kamu bilang: \"{terakhir['pendapat'][:80]}\" — ini posisimu, pertahankan kecuali ada argumen baru yang sangat kuat."
+        if has_previous:
+            pendapat_sebelumnya = agent["memori"][-2]["pendapat"][:40]
+            # BUG #27 fix: minta justifikasi eksplisit jika posisi berubah
+            return (
+                base_context +
+                f"— Ronde sebelumnya kamu bilang: '{pendapat_sebelumnya}...' "
+                f"Jika kamu berubah posisi dari situ, JELASKAN di responsmu "
+                f"argumen atau data baru apa yang membuatmu berubah pikiran. "
+                f"Contoh: 'Ronde lalu saya bilang X, tapi sekarang saya lihat bukti Y — jadi saya revisi.'"
+            )
+        else:
+            return base_context + "— pertahankan jika tidak ada alasan kuat untuk berubah."
+
+    # Hanya 1 entri memori
+    return (
+        f"Kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+        f"— ini posisimu, pertahankan kecuali ada argumen baru yang sangat kuat."
+    )
 
 
 def build_influence_context(

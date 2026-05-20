@@ -147,6 +147,37 @@ def _score_llm(teks: str, topik: str = "") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Sesi 15 — BUG #26: Post-processing filter untuk forbidden opening patterns
+# ---------------------------------------------------------------------------
+
+_FORBIDDEN_OPENS = [
+    r"^Gue tidak bisa menerima",
+    r"^Saya tidak bisa menerima",
+    r"^Gue tidak setuju dengan klaim",
+    r"^Saya tidak setuju dengan klaim",
+    r"^Klaim bahwa .+tidak (tepat|akurat|benar)",
+    r"^Itu tidak (tepat|akurat|benar)",
+]
+
+
+def filter_forbidden_opens(jawaban: str) -> str:
+    """
+    Sesi 15 — BUG #26: Hapus kalimat pertama jika menggunakan frasa terlarang.
+    Dipanggil dari simulation.py setelah jawaban LLM diterima.
+    """
+    if not jawaban:
+        return jawaban
+    for pattern in _FORBIDDEN_OPENS:
+        if re.match(pattern, jawaban.strip(), re.IGNORECASE):
+            kalimat = re.split(r'(?<=[.!?])\s+', jawaban.strip())
+            if len(kalimat) > 1:
+                return " ".join(kalimat[1:]).strip()
+            # Hanya satu kalimat — kembalikan tanpa perubahan (biarkan prompt do the work)
+            return jawaban
+    return jawaban
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
