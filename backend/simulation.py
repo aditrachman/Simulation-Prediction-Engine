@@ -183,6 +183,16 @@ def run_simulation(
             last_mem = agen["memori"][-1]
             skor_ronde_lalu = last_mem.get("skor", None)
 
+        # BUG-08 FIX: stance lock khusus Pemerintah — tidak boleh flip ke Menolak
+        is_pemerintah = "pemerintah" in agen["nama"].lower()
+        if is_pemerintah and skor_ronde_lalu is not None and skor_ronde_lalu > 0.0:
+            stance_rule += (
+                "STANCE LOCK PEMERINTAH: Posisimu sebelumnya MENDUKUNG atau NETRAL. "
+                "Kamu TIDAK BOLEH bergerak ke posisi MENOLAK — pemerintah tidak mengkritik kebijakannya sendiri. "
+                "Jika ada tekanan, akui tantangan tapi tetap pertahankan bahwa langkah yang diambil sudah benar. "
+                "Maksimal posisimu adalah NETRAL jika situasi memang kompleks. "
+            )
+
         parts = []
         if konteks_memori:
             parts.append(konteks_memori)
@@ -274,10 +284,16 @@ def run_simulation(
             try:
                 res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini, idx_agen=idx)
             except Exception as e:
-                print(f"[Skip] {agen['nama']} ronde {ronde_ke}: {e}")
+                # BUG-06 FIX: log tipe error secara eksplisit agar tidak silent-swallow
+                import traceback
+                error_type = type(e).__name__
+                error_msg  = str(e)
+                print(f"[Error] {agen['nama']} ronde {ronde_ke}: {error_type}: {error_msg}")
+                print(f"[Traceback] {traceback.format_exc()}")
+                # Fallback response menyertakan tipe error agar bisa di-debug dari laporan
                 res = {
                     "nama":     agen["nama"],
-                    "pendapat": "(tidak dapat merespons saat ini)",
+                    "pendapat": f"(tidak dapat merespons saat ini — {error_type})",
                     "sentimen": {"label": "netral", "skor": 0.0},
                     "pengaruh": agen.get("pengaruh", 0.5),
                 }

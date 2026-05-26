@@ -45,7 +45,7 @@ AGENT_FALLBACK_CHAIN = [
 # ─── TOKEN BUDGET ──────────────────────────────────────────────────────────
 MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "350"))  # 350 ≈ 250-280 kata BI = 3-4 kalimat penuh, lebih stabil di model 8B
 MAX_TOKENS_RESPONSE  = int(os.getenv("MAX_TOKENS_RESPONSE",  "400"))
-MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "900"))
+MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "1200"))
 MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
 MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "80"))
 

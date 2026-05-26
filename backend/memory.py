@@ -88,9 +88,8 @@ def summarize_memory(agent: dict) -> str:
 def build_memory_context(agent: dict) -> str:
     """Bangun string konteks memori singkat untuk prompt agen.
 
-    Sesi 15 — BUG #27:
-    Selain mengingatkan posisi terakhir, sekarang juga menyertakan posisi
-    ronde sebelumnya agar agen WAJIB menjelaskan alasan jika berubah posisi.
+    BUG-03 fix: menyertakan label stance (MENDUKUNG/NETRAL/MENOLAK) dan skor
+    di setiap entri memori agar agen tidak bisa flip posisi secara diam-diam.
     """
     if not agent["memori"]:
         return ""
@@ -98,29 +97,49 @@ def build_memory_context(agent: dict) -> str:
     terakhir = agent["memori"][-1]
     has_previous = len(agent["memori"]) >= 2
 
+    def _stance_label_from_skor(skor) -> str:
+        """Konversi skor ke label posisi yang jelas."""
+        if skor is None:
+            return "NETRAL"
+        if skor > 0.2:
+            return "MENDUKUNG"
+        if skor < -0.2:
+            return "MENOLAK"
+        return "NETRAL"
+
+    skor_terakhir = terakhir.get("skor")
+    label_terakhir = _stance_label_from_skor(skor_terakhir)
+    skor_str = f" (skor {skor_terakhir:.2f})" if skor_terakhir is not None else ""
+
     if len(agent["memori"]) >= 3:
         ringkasan = summarize_memory(agent)
         base_context = (
             f"POSISIMU SEJAUH INI: {ringkasan} "
-            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+            f"Ronde terakhir — Posisi: {label_terakhir}{skor_str} "
+            f"— Argumen: \"{terakhir['pendapat'][:80]}\" "
         )
         if has_previous:
-            pendapat_sebelumnya = agent["memori"][-2]["pendapat"][:40]
-            # BUG #27 fix: minta justifikasi eksplisit jika posisi berubah
+            mem_sebelumnya = agent["memori"][-2]
+            skor_sblm = mem_sebelumnya.get("skor")
+            label_sblm = _stance_label_from_skor(skor_sblm)
+            skor_sblm_str = f" (skor {skor_sblm:.2f})" if skor_sblm is not None else ""
+            pendapat_sblm = mem_sebelumnya["pendapat"][:40]
             return (
                 base_context +
-                f"— Ronde sebelumnya kamu bilang: '{pendapat_sebelumnya}...' "
-                f"Jika kamu berubah posisi dari situ, JELASKAN di responsmu "
-                f"argumen atau data baru apa yang membuatmu berubah pikiran. "
-                f"Contoh: 'Ronde lalu saya bilang X, tapi sekarang saya lihat bukti Y — jadi saya revisi.'"
+                f"Ronde sebelumnya — Posisi: {label_sblm}{skor_sblm_str} "
+                f"— Argumen: '{pendapat_sblm}...' "
+                f"Jika kamu berubah dari {label_sblm} ke posisi berbeda, "
+                f"WAJIB jelaskan di responsmu: data atau argumen baru apa yang mengubah posisimu. "
+                f"Contoh: 'Ronde lalu saya {label_sblm.lower()}, tapi sekarang saya lihat bukti Y — jadi saya revisi.'"
             )
         else:
-            return base_context + "— pertahankan jika tidak ada alasan kuat untuk berubah."
+            return base_context + f"— posisi: {label_terakhir}. Pertahankan kecuali ada alasan kuat."
 
     # Hanya 1 entri memori
     return (
-        f"Kamu bilang: \"{terakhir['pendapat'][:80]}\" "
-        f"— ini posisimu, pertahankan kecuali ada argumen baru yang sangat kuat."
+        f"Posisimu sebelumnya: {label_terakhir}{skor_str} "
+        f"— Kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+        f"— Pertahankan posisi ini kecuali ada argumen baru yang sangat kuat."
     )
 
 

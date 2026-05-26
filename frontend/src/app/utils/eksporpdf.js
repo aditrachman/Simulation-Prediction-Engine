@@ -30,7 +30,6 @@ function buildNarasi(analisis) {
       })
       .join(" ")
       .replace(/\*{1,2}/g, "")
-      .slice(0, 1200)
   );
 }
 

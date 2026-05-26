@@ -105,6 +105,8 @@ COUNTER_AGENT_REGISTRY = {
         "pengaruh": 0.75,
         "memori": [],
         "is_counter": True,
+        "voice_example": "",
+        "initial_stance": -0.4,
     },
     "Kontra_Politik": {
         "nama": "Oposisi Kritis",
@@ -117,6 +119,8 @@ COUNTER_AGENT_REGISTRY = {
         "pengaruh": 0.8,
         "memori": [],
         "is_counter": True,
+        "voice_example": "",
+        "initial_stance": -0.5,
     },
     "Kontra_Sosial": {
         "nama": "Advokat Minoritas",
@@ -128,6 +132,8 @@ COUNTER_AGENT_REGISTRY = {
         "pengaruh": 0.7,
         "memori": [],
         "is_counter": True,
+        "voice_example": "",
+        "initial_stance": -0.4,
     },
     "Kontra_Hukum": {
         "nama": "Pengacara Publik",
@@ -139,6 +145,8 @@ COUNTER_AGENT_REGISTRY = {
         "pengaruh": 0.72,
         "memori": [],
         "is_counter": True,
+        "voice_example": "",
+        "initial_stance": -0.4,
     },
     "Kontra_Teknologi": {
         "nama": "Etikawan Digital",
@@ -150,6 +158,8 @@ COUNTER_AGENT_REGISTRY = {
         "pengaruh": 0.71,
         "memori": [],
         "is_counter": True,
+        "voice_example": "",
+        "initial_stance": -0.35,
     },
 }
 

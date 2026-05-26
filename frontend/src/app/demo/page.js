@@ -637,7 +637,7 @@ const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
             <input
               type="range" min="0.1" max="1.0" step="0.1"
               value={pengaruh}
-              onChange={e => setPengaruh(parseFloat(e.target.value))}
+              onChange={e => { const v = parseFloat(parseFloat(e.target.value).toFixed(1)); if (!isNaN(v) && v !== pengaruh) setPengaruh(v); }}
               className="flex-1"
             />
             <span className="text-xs font-bold text-indigo-300 w-6 text-right">{pengaruh}</span>
@@ -835,7 +835,7 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
     setFeedbackLoading(false);
   };
 
-  const safeConf = (typeof feedbackConf === "number" && !isNaN(feedbackConf)) ? feedbackConf : 1.0;
+  const safeConf = (typeof feedbackConf === "number" && !isNaN(feedbackConf)) ? parseFloat(feedbackConf.toFixed(2)) : 1.0;
   const confPct = Math.round(safeConf * 100);
   const confLabel = confPct <= 33 ? "Kurang yakin" : confPct <= 66 ? "Cukup yakin" : "Sangat yakin";
 
@@ -905,7 +905,7 @@ const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, fe
           <input
             type="range" min="0" max="1" step="0.05"
             value={safeConf}
-            onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) setFeedbackConf(v); }}
+            onChange={e => { const v = parseFloat(parseFloat(e.target.value).toFixed(2)); if (!isNaN(v) && v !== feedbackConf) setFeedbackConf(v); }}
             className="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-indigo-500"
           />
           <div className="flex justify-between text-[10px] text-slate-600 mt-1">

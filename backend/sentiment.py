@@ -104,9 +104,18 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "  positif = MENDUKUNG / SETUJU / PRO terhadap isu\n"
         "  negatif = MENOLAK / KHAWATIR / KRITIS terhadap isu\n"
         "  netral  = berimbang atau tidak berpihak\n"
+        # BUG-07 FIX: instruksi eksplisit untuk negasi kontekstual dan frasa pembalik
+        "PERHATIAN KHUSUS — baca keseluruhan kalimat, bukan hanya keyword:\n"
+        "  • Frasa 'bahkan sebaliknya', 'justru berlawanan', 'tidak ada bukti', "
+        "'terbukti gagal', 'saya tidak melihat ada bukti' → sinyal NEGATIF "
+        "meski ada kata positif di sekitarnya.\n"
+        "  • Frasa 'tidak efektif', 'tidak akan berdampak', 'membebani', 'mengganggu' → NEGATIF.\n"
+        "  • Ironi dan pertanyaan retoris kritis (mis. 'apakah benar-benar efektif?') → cenderung NEGATIF.\n"
+        "  • Kata positif di awal kalimat yang langsung diikuti klarifikasi negatif → ikuti kesimpulan akhir.\n"
         "Contoh: 'memberatkan rakyat' → {\"label\":\"negatif\",\"skor\":-0.8}\n"
         "Contoh: 'mendukung demi kebaikan bersama' → {\"label\":\"positif\",\"skor\":0.7}\n"
         "Contoh: 'ada sisi positif dan negatif' → {\"label\":\"netral\",\"skor\":0.0}\n"
+        "Contoh: 'tidak ada bukti kuat bahwa kebijakan ini efektif, bahkan sebaliknya' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
         'Balas HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
     user = f'Isu: "{topik[:60]}"\nPendapat: "{teks[:200]}"'
