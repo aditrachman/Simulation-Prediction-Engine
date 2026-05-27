@@ -1,4 +1,4 @@
-# VoxSwarm — Simulation Prediction Engine  
+# VoxSwarm — Simulation Prediction Engine
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.2.0-indigo?style=flat-square" />
