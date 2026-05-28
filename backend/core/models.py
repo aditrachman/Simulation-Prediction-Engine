@@ -111,15 +111,38 @@ class SimulationEvent(BaseModel):
         tipe            : Jenis event
         ronde           : Ronde saat event terjadi
         deskripsi       : Deskripsi lengkap event
-        dampak_hint     : Hint perubahan stance per agen.
-                          Contoh: {"Mahasiswa": 0.3, "Pemerintah": -0.2}
-                          Nilai positif = mendorong ke mendukung, negatif = ke menolak.
+        dampak_hint     : Hint perubahan stance per agen (dari user/system).
+        actual_impacts  : Impact yang benar-benar diterapkan ke setiap agen.
     """
 
-    tipe: Literal["intervensi", "berita_baru", "pernyataan_pemerintah", "protes"]
+    tipe: Literal["intervensi", "berita_baru", "pernyataan_pemerintah", "protes", "eksternal"]
     ronde: int
     deskripsi: str
     dampak_hint: dict[str, float] = Field(default_factory=dict)
+    actual_impacts: dict[str, float] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# AgentAction — aksi yang diambil agent dalam satu ronde
+# ---------------------------------------------------------------------------
+
+class AgentAction(BaseModel):
+    """
+    Aksi yang diambil agen dalam satu ronde.
+
+    Fields:
+        agent_nama  : Nama agen yang melakukan aksi
+        ronde       : Ronde saat aksi terjadi
+        tipe_aksi   : Jenis aksi (berpendapat, merespons, intervensi)
+        pendapat    : Teks pendapat yang dihasilkan
+        sentimen    : Hasil scoring sentimen {"label", "skor"}
+    """
+
+    agent_nama: str
+    ronde: int
+    tipe_aksi: Literal["berpendapat", "merespons", "intervensi"] = "berpendapat"
+    pendapat: str = ""
+    sentimen: dict = Field(default_factory=lambda: {"label": "netral", "skor": 0.0})
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +180,24 @@ class SimulationState(BaseModel):
 # ---------------------------------------------------------------------------
 # Adapter — jembatan antara format dict lama dan model baru
 # ---------------------------------------------------------------------------
+
+def agent_profile_to_dict(profile: AgentProfile) -> dict:
+    """
+    Konversi AgentProfile kembali ke dict untuk backward compatibility.
+    Menambahkan field _role_singkat dan gaya_str yang diharapkan kode lama.
+    """
+    return {
+        "nama":        profile.nama,
+        "role":        profile.role,
+        "_role_singkat": profile.role[:250].rstrip(),
+        "kepribadian": profile.kepribadian,
+        "pengaruh":    profile.pengaruh,
+        "memori":      [],
+        "initial_stance": profile.initial_stance,
+        "voice_example": profile.voice_example,
+        "is_counter":  profile.is_counter,
+    }
+
 
 def agent_dict_to_profile(d: dict) -> AgentProfile:
     """
@@ -219,6 +260,7 @@ def simulation_result_to_state(
     ronde_ke: int,
     agents: list[dict],
     sentimen_agregat: dict,
+    events: list[SimulationEvent] | None = None,
 ) -> SimulationState:
     """
     Konversi hasil simulasi lama ke SimulationState.
@@ -230,6 +272,7 @@ def simulation_result_to_state(
         ronde_ke        : Ronde terakhir yang selesai
         agents          : List dict agen (dengan field memori terisi)
         sentimen_agregat: {nama_agen: [skor_r1, skor_r2, ...]}
+        events          : Event/intervensi yang terjadi selama simulasi
 
     Returns:
         SimulationState yang merepresentasikan kondisi akhir simulasi
@@ -251,6 +294,11 @@ def simulation_result_to_state(
         if agen.get("memori"):
             pendapat_terakhir = agen["memori"][-1].get("pendapat", "")
 
+        # Phase 5: populate argumen_kunci dari structured memory
+        argumen_kunci: list[str] = []
+        if "_memory_store" in agen:
+            argumen_kunci = agen["_memory_store"].arguments.unique_arguments
+
         agent_states.append(AgentState(
             agent_nama=nama,
             ronde=ronde_ke,
@@ -258,6 +306,7 @@ def simulation_result_to_state(
             stance_label=label,
             pendapat=pendapat_terakhir,
             stance_history=tren,
+            argumen_kunci=argumen_kunci,
         ))
 
     # Hitung polarization_score dari variansi skor agen
@@ -275,6 +324,7 @@ def simulation_result_to_state(
         topik=topik,
         ronde_saat_ini=ronde_ke,
         agent_states=agent_states,
+        events=events or [],
         polarization_score=round(polarization, 3),
         consensus_score=round(consensus, 3),
     )

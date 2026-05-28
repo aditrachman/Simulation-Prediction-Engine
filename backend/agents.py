@@ -20,6 +20,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.9, "agreeableness": 0.4, "neuroticism": 0.6},
         "pengaruh": 0.7,
         "memori": [],
+        "initial_stance": -0.3,  # BUG-14 FIX: anchor — Mahasiswa cenderung kritis
     },
     "Pengusaha": {
         "nama": "Pengusaha/UMKM",
@@ -30,6 +31,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.5, "agreeableness": 0.6, "neuroticism": 0.3},
         "pengaruh": 0.8,
         "memori": [],
+        "initial_stance": 0.0,  # BUG-14 FIX: anchor — Pengusaha mulai netral, pragmatis
     },
     "Pekerja": {
         "nama": "Pekerja Kantoran",
@@ -40,6 +42,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.4, "agreeableness": 0.7, "neuroticism": 0.5},
         "pengaruh": 0.6,
         "memori": [],
+        "initial_stance": 0.0,  # BUG-14 FIX: anchor — Pekerja netral tergantung dampak
     },
     "Pemerintah": {
         "nama": "Pemerintah",
@@ -48,8 +51,9 @@ AGENT_REGISTRY = {
             "Gunakan maksimal 2 kalimat per respons. Tidak perlu menyebutkan semua faktor — pilih satu poin terkuat dan pertahankan."
         ),
         "kepribadian": {"openness": 0.3, "agreeableness": 0.5, "neuroticism": 0.2},
-        "pengaruh": 0.9,
+        "pengaruh": 0.75,
         "memori": [],
+        "initial_stance": 0.6,  # BUG-14 FIX: anchor — Pemerintah mulai mendukung kebijakannya
     },
     "Akademisi": {
         "nama": "Akademisi",
@@ -69,6 +73,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.95, "agreeableness": 0.35, "neuroticism": 0.4},
         "pengaruh": 0.75,
         "memori": [],
+        "initial_stance": 0.0,  # BUG-14 FIX: anchor — Akademisi mulai netral, butuh bukti
     },
     "Media": {
         "nama": "Jurnalis/Media",
@@ -80,6 +85,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.85, "agreeableness": 0.2, "neuroticism": 0.65},
         "pengaruh": 0.85,
         "memori": [],
+        "initial_stance": -0.2,  # BUG-14 FIX: anchor — Jurnalis investigatif mulai sedikit skeptis
     },
     "Masyarakat": {
         "nama": "Masyarakat Umum",
@@ -90,6 +96,7 @@ AGENT_REGISTRY = {
         "kepribadian": {"openness": 0.4, "agreeableness": 0.75, "neuroticism": 0.6},
         "pengaruh": 0.65,
         "memori": [],
+        "initial_stance": 0.0,  # BUG-14 FIX: anchor — Masyarakat netral, ikut kondisi lapangan
     },
 }
 
@@ -232,6 +239,7 @@ def get_agents(kategori: str = "Umum", agen_custom: list[dict] | None = None) ->
                 "kepribadian": ac.get("kepribadian") or {"openness": 0.6, "agreeableness": 0.6, "neuroticism": 0.4},
                 "pengaruh":    float(ac.get("pengaruh") or 0.7),
                 "memori":      [],
+                "initial_stance": float(ac.get("initial_stance") or 0.0),
             }
             hasil.append(agen_baru)
 

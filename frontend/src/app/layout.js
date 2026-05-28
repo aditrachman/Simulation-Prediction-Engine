@@ -10,7 +10,7 @@ const jetbrains = JetBrains_Mono({
 export const metadata = {
   title: "VoxSwarm",
   description:
-    "VoxSwarm is a simulation intelligence platform for modeling social dynamics, testing scenarios, and predicting collective reactions to high-stakes events.",
+    "VoxSwarm is a scenario rehearsal engine for Indonesian public opinion — explore social dynamics, polarization risk, and key actors before issues go public.",
 };
 
 export default function RootLayout({ children }) {

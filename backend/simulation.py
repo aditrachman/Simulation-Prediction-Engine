@@ -13,13 +13,13 @@
 
 import re
 import time
-import random
 
 from .llm      import (
     call_llm, call_llm_json,
     MODEL_AGENT, MODEL_ANALYSIS,
     MAX_TOKENS_AGENT, MAX_TOKENS_ANALYSIS,
     AGENT_CALL_DELAY, ROUND_DELAY,
+    DISABLE_GRAPH_LLM, DISABLE_FINAL_ANALYSIS_LLM,
     SENTIMENT_MODE,
     _strip_emoji,
 )
@@ -29,6 +29,23 @@ from .memory   import (
 )
 from .sentiment import score_sentiment, filter_forbidden_opens
 from .graph     import extract_entities
+from .core.models import (
+    SimulationEvent, simulation_result_to_state,
+    AgentProfile, AgentAction, agent_dict_to_profile, agent_profile_to_dict,
+)
+from .core.event_system import (
+    compute_event_impact,
+    build_event_narrative,
+    get_agent_impact_note,
+    generate_event_explanation,
+)
+from .core.scheduler import (
+    get_speaking_order,
+    select_response_target,
+    get_strategy_display,
+)
+from .core.prediction import heuristic_predict, compute_confidence
+from .core.swarm import CrowdPool
 
 
 
@@ -42,6 +59,9 @@ def run_simulation(
     jumlah_ronde: int = 3,
     intervensi: str | None = None,
     briefing_real: str = "",
+    tier: str = "free",
+    scheduler_strategy: str = "influence_aware",
+    n_crowd: int = 0,
 ) -> dict:
     """
     Jalankan simulasi multi-agen multi-ronde.
@@ -59,16 +79,45 @@ def run_simulation(
     ronde_detail              = []
     log_diskusi               = f"TOPIK: {topik}\n"
     pendapat_ronde_sebelumnya: list[dict] = []
+    events: list[SimulationEvent] = []
+    n_agents = len(agents)
+    sentiment_mode = "inline" if tier == "free" else "llm"
+    estimated_llm_calls = (
+        n_agents * jumlah_ronde
+        + (0 if sentiment_mode == "inline" else n_agents * jumlah_ronde)
+        + (0 if tier == "free" else 1)
+        + (0 if tier == "free" else 2)
+    )
 
-    # Precompute field statis per agen — tidak berubah sepanjang simulasi
-    for agen in agents:
-        agen.setdefault("_role_singkat", agen["role"][:250].rstrip())
-        _compute_gaya_str(agen)
+    # ── Phase 8: Inisialisasi CrowdPool ──
+    crowd_pool: CrowdPool | None = None
+    if n_crowd > 0:
+        crowd_pool = CrowdPool(seed=hash(topik) % (2**31))
+        crowd_pool.generate(n=n_crowd)
+
+    # ── Phase 2: Normalisasi agents ke AgentProfile ──
+    agent_profiles: list[AgentProfile] = []
+    agent_dicts: list[dict] = []
+    for a in agents:
+        if isinstance(a, AgentProfile):
+            profile = a
+            d = agent_profile_to_dict(profile)
+        else:
+            profile = agent_dict_to_profile(a)
+            d = dict(a)
+        d.setdefault("_role_singkat", d["role"][:250].rstrip())
+        _compute_gaya_str(d)
+        agent_profiles.append(profile)
+        agent_dicts.append(d)
+    agents = agent_dicts  # kode lama tetap pakai dict
+
+    # Phase 2: track actions via AgentAction
+    agent_actions: list[AgentAction] = []
 
     def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
         """
         Post-processing pure Python — potong output agen di batas kalimat ke-N.
-        Tidak merusak teks, tidak menambah LLM call.
+        BUG-20 FIX: batas kata turun 60→40, tambah pemisah alami untuk kalimat tunggal panjang.
         """
         if not teks:
             return teks
@@ -77,6 +126,19 @@ def run_simulation(
         # Buang fragmen kosong
         pecahan = [k for k in pecahan if k.strip()]
         if len(pecahan) <= max_kalimat:
+            # BUG-20: turunkan threshold dari 60 → 40 kata
+            kata_kata = teks.split()
+            if len(kata_kata) > 40:
+                # Potong di kata ke-30, lalu cari pemisah alami terdekat
+                potongan = " ".join(kata_kata[:30])
+                # Cari pemisah alami — tambah "Kami juga", "Selain itu", "Dengan demikian"
+                for pemisah in [". ", "; ", ", namun ", ", padahal ", ", sehingga ",
+                                ", tetapi ", ", tapi ", "Kami juga ", "Selain itu ", "Dengan demikian "]:
+                    idx = potongan.rfind(pemisah)
+                    if idx > 15:
+                        return potongan[:idx + 1].rstrip(",;") + "."
+                # Tidak ketemu pemisah natural → potong di kata ke-25
+                return " ".join(kata_kata[:25]) + "."
             return teks
         hasil = " ".join(pecahan[:max_kalimat])
         # Pastikan diakhiri tanda baca
@@ -103,6 +165,63 @@ def run_simulation(
 
         ada_yang_sudah_bicara = bool(pendapat_dalam_ronde_ini or pendapat_ronde_sebelumnya)
 
+        # BUG-12 FIX: voice_anchor per persona — cegah template "Data menunjukkan bahwa" mendominasi semua agen
+        voice_anchor = ""
+        nama_lower = agen["nama"].lower()
+        if "mahasiswa" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB MAHASISWA: Langsung, emosional, pakai bahasa gaul 'gue/lu/bro'. "
+                "CONTOH PEMBUKA YANG BENAR: '75% temen gue bilang...', 'Fakta di lapangan: TNI masih...', 'Ini nggak masuk akal bro...'. "
+                "DILARANG KERAS membuka dengan: 'Data menunjukkan bahwa', 'Berdasarkan data', 'Studi menunjukkan', 'Penelitian menunjukkan'. "
+            )
+        elif "pengusaha" in nama_lower or "umkm" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB PENGUSAHA: Pragmatis, langsung ke angka dan dampak bisnis. "
+                "CONTOH PEMBUKA YANG BENAR: 'Dari sisi bisnis, ini artinya...', 'Anggaran militer Rp X triliun itu...', 'Dampak terhadap UMKM: penjualan turun 20%'. "
+                "DILARANG KERAS membuka dengan: 'Data menunjukkan bahwa', 'Berdasarkan data'. "
+            )
+        elif "pekerja" in nama_lower or "kantoran" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB PEKERJA: Singkat, pragmatis, langsung dampak nyata. "
+                "CONTOH PEMBUKA: 'Dari pengalaman kerja, ini berarti...', 'Efek langsungnya ke gaji dan jam kerja...'. "
+                "DILARANG KERAS: 'Data menunjukkan bahwa', 'Berdasarkan data'. "
+            )
+        elif "pemerintah" in nama_lower or "pejabat" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB PEMERINTAH: Formal, diplomatis, padat. "
+                "CONTOH PEMBUKA: 'Kami telah mengambil langkah...', 'Dari perspektif kebijakan, solusinya adalah...'. "
+                "JANGAN: 'Data menunjukkan bahwa', 'Berdasarkan data' — terlalu akademis untuk pemerintah. "
+                "VARIASI: Jangan ulangi pola kalimat yang sama setiap ronde. Variasikan argumen: kadang bicara kebijakan, "
+                "kadang bicara data dampak, kadang respons terhadap kritik dengan data konkret. "
+            )
+        elif "akademisi" in nama_lower or "dosen" in nama_lower or "peneliti" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB AKADEMISI: Berbasis riset dan statistik, tapi SINGKAT. "
+                "CONTOH PEMBUKA: 'Studi 2024 menunjukkan...', 'Dari data survei: 65% responden...', 'Meta-analisis dari 12 penelitian menunjukkan...'. "
+                "HINDARI: 'Data menunjukkan bahwa' (terlalu umum), gunakan spesifik: 'Studi X dari universitas Y menunjukkan...'. "
+                "VARIASI: JANGAN pakai studi/statistik yang SAMA di setiap ronde. Jika sudah pakai 'Studi 2024' di ronde sebelumnya, "
+                "ronde ini pakai sumber atau tahun yang BERBEDA. Boleh juga pakai data dari sumber berita, observasi lapangan, atau laporan pemerintah. "
+            )
+        elif "media" in nama_lower or "jurnalis" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB JURNALIS: Investigatif, kritis, kesimpulannya tegas bukan 'ada dua sisi'. "
+                "CONTOH PEMBUKA: 'Temuan investigasi kami menemukan...', 'Testimoni dari lapangan: ...', 'Dokumen menunjukkan...'. "
+                "DILARANG: 'Data menunjukkan bahwa' (terlalu netral untuk jurnalis investigatif). "
+            )
+        elif "masyarakat" in nama_lower or "umum" in nama_lower or "warga" in nama_lower:
+            voice_anchor = (
+                "GAYA BICARA WAJIB MASYARAKAT UMUM: Sederhana, berdasarkan pengalaman hidup. "
+                "CONTOH PEMBUKA: 'Dari cerita teman saya...', 'Yang saya lihat di lingkungan: ...', 'Untuk rakyat kecil, artinya...'. "
+                "JANGAN: 'Data menunjukkan bahwa', 'Berdasarkan data' — itu bukan cara orang biasa ngomong. "
+            )
+
+        # ERROR-1 FIX: hitung skor_ronde_lalu DI SINI — sebelum conviction_rule & stance_rule
+        # yang keduanya bergantung pada nilai ini. Sebelumnya dihitung di baris 241 (terlambat).
+        skor_ronde_lalu = None
+        if len(agen.get("memori", [])) > 0:
+            last_mem = agen["memori"][-1]
+            skor_ronde_lalu = last_mem.get("skor", None)
+
         # ISSUE #23 — stance rule khusus Pemerintah (diperkuat Sesi 14)
         stance_rule = ""
         if "pemerintah" in agen["nama"].lower() or "pejabat pemerintah" in agen.get("role", "").lower():
@@ -115,6 +234,16 @@ def run_simulation(
             )
 
         # ISSUE #24 — escape phrase rule khusus Akademisi
+        # BUG-08 FIX: stance lock khusus Pemerintah harus masuk sebelum system_p dibuat.
+        is_pemerintah = "pemerintah" in agen["nama"].lower()
+        if is_pemerintah and skor_ronde_lalu is not None and skor_ronde_lalu > 0.0:
+            stance_rule += (
+                "STANCE LOCK PEMERINTAH: Posisimu sebelumnya MENDUKUNG atau NETRAL. "
+                "Kamu TIDAK BOLEH bergerak ke posisi MENOLAK â€” pemerintah tidak mengkritik kebijakannya sendiri. "
+                "Jika ada tekanan, akui tantangan tapi tetap pertahankan bahwa langkah yang diambil sudah benar. "
+                "Maksimal posisimu adalah NETRAL jika situasi memang kompleks. "
+            )
+
         akademisi_rule = ""
         if "akademisi" in agen["nama"].lower() or "dosen" in agen.get("role", "").lower():
             akademisi_rule = (
@@ -126,6 +255,10 @@ def run_simulation(
         # Sesi 15 — ISSUE #25: conviction_rule — cegah Akademisi jadi fence-sitter
         conviction_rule = ""
         if "akademisi" in agen["nama"].lower() or "dosen" in agen.get("role", "").lower():
+            # BUG-19 FIX: cek apakah 2 ronde terakhir netral → force ambil posisi
+            memori_skor = [m.get("skor", 0) for m in agen.get("memori", []) if "skor" in m]
+            dua_ronde_netral = len(memori_skor) >= 2 and all(abs(s) < 0.2 for s in memori_skor[-2:])
+            
             conviction_rule = (
                 "ATURAN POSISI AKADEMISI: Kamu HARUS memiliki posisi yang JELAS — bukan netral tanpa alasan. "
                 "Netral (skor 0) hanya valid jika: "
@@ -135,19 +268,40 @@ def run_simulation(
                 "CONTOH VALID netral: 'Bukti seimbang: 40% mahasiswa malas, 60% tetap rajin. Perlu data lebih untuk simpulan.' "
                 "CONTOH INVALID: Hanya bilang 'Ada dua sisi, so netral.' — itu bukan argumen. "
             )
+            if dua_ronde_netral:
+                conviction_rule += (
+                    "PERINGATAN: Kamu SUDAH 2 RONDE BERTURUT-TURUT NETRAL. "
+                    "Ini TIDAK DIPERBOLEHKAN lagi. WAJIB ambil posisi di ronde ini — "
+                    "PILIH: Mendukung atau Menolak. Jelaskan data mana yang membuatmu condong. "
+                    "Tidak ada alasan 'butuh data lebih' setelah 2 ronde diskusi. "
+                )
+            
+            # BUG-11 FIX: Tambahkan delta_cap_rule — cegah flip dramatis dalam 1 ronde
+            if skor_ronde_lalu is not None and abs(skor_ronde_lalu) > 0.4:
+                conviction_rule += (
+                    "\nATURAN PERUBAHAN AKADEMISI (delta_cap): "
+                    "Posisimu ronde lalu KUAT (mendukung atau menolak dengan yakin: |skor| > 0.4). "
+                    "Perubahan posisi yang drastis dalam SATU ronde TIDAK VALID secara ilmiah. "
+                    "Kamu hanya bisa bergerak SATU LANGKAH dalam 1 ronde:\n"
+                    "  • Mendukung kuat (>0.5) → Mendukung lemah (0.2-0.5) ATAU Netral (±0.2) [jangan langsung Menolak]\n"
+                    "  • Menolak kuat (<-0.5) → Menolak lemah (-0.5 ke -0.2) ATAU Netral (±0.2) [jangan langsung Mendukung]\n"
+                    "Jika ingin berubah posisi total (positif ke negatif atau sebaliknya), butuh MINIMAL DUA RONDE "
+                    "dengan argumen BERBEDA dan PENJELASAN EKSPLISIT di tiap ronde. "
+                )
+
 
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
             f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
             "kalau santai pakai bahasa sehari-hari, kalau formal pakai bahasa resmi, "
             "kalau suka debat tunjukkan dengan nada kritis dan tajam. "
-            # BUG #24 — position anchor diperkuat
-            "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat dan data baru yang mengubah pandangan. "
+            + voice_anchor  # BUG-12 FIX: voice_anchor per persona
+            + "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat dan data baru yang mengubah pandangan. "
             "Berubah posisi tanpa alasan konkret adalah kelemahan — bukan fleksibilitas. "
             + stance_rule
             + akademisi_rule
-            + conviction_rule +  # Sesi 15 — ISSUE #25
-            "LARANGAN KERAS: "
+            + conviction_rule
+            + "LARANGAN KERAS: "
             "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X', 'saya sebagai X'). "
             "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
             "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
@@ -165,7 +319,8 @@ def run_simulation(
             "CONTOH BENAR: 'Data menunjukkan 75% mahasiswa masih membaca, jadi AI tidak membuat mereka malas.' "
             "CONTOH SALAH: 'Saya tidak bisa menerima klaim itu. Data menunjukkan 75% mahasiswa masih membaca.' "
             "Lihat bedanya? Jangan mulai dengan negasi. Mulai dengan statement positif atau data. "
-            "JANGAN kutip atau ulangi kata-kata peserta lain secara verbatim — parafrase atau langsung respons. "
+            "JANGAN pernah memulai output dengan nama agen lain diikuti titik dua ('Pengusaha: ...', 'Akademisi: ...'). "
+            "Langsung ke argumenmu sendiri tanpa menyebut nama agen lain di awal kalimat. "
             "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
             "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim."
         )
@@ -176,12 +331,6 @@ def run_simulation(
             and not pendapat_dalam_ronde_ini
             and not pendapat_ronde_sebelumnya
         )
-
-        # Sesi 15 — BUG #27: Hitung skor ronde lalu untuk change justification
-        skor_ronde_lalu = None
-        if len(agen.get("memori", [])) > 0:
-            last_mem = agen["memori"][-1]
-            skor_ronde_lalu = last_mem.get("skor", None)
 
         # BUG-08 FIX: stance lock khusus Pemerintah — tidak boleh flip ke Menolak
         is_pemerintah = "pemerintah" in agen["nama"].lower()
@@ -194,6 +343,30 @@ def run_simulation(
             )
 
         parts = []
+        
+        # BUG-10 FIX: Jika ronde 1 dan agen punya initial_stance, tambahkan sebagai anchor ke parts
+        if ronde_ke == 1 and "initial_stance" in agen and not konteks_memori:
+            initial = agen.get("initial_stance", 0.0)
+            if isinstance(initial, (int, float)):
+                if initial > 0.2:
+                    arah = "MENDUKUNG"
+                    parts.append(
+                        "POSISI AWALMU (anchor): MENDUKUNG topik ini. "
+                        "Mulai dari posisi ini dan pertahankan kecuali ada argumen data baru yang kuat dan fundamental mengubah pandangan."
+                    )
+                elif initial < -0.2:
+                    arah = "MENOLAK"
+                    parts.append(
+                        "POSISI AWALMU (anchor): MENOLAK topik ini. "
+                        "Mulai dari posisi ini dan pertahankan kecuali ada argumen data baru yang kuat dan fundamental mengubah pandangan."
+                    )
+                else:
+                    arah = "NETRAL"
+                    parts.append(
+                        "POSISI AWALMU (anchor): NETRAL tentang topik ini. "
+                        "Jika ada bukti kuat yang condong ke satu arah, ambil posisi itu dan jelaskan alasan ilmiahnya."
+                    )
+        
         if konteks_memori:
             parts.append(konteks_memori)
 
@@ -216,17 +389,39 @@ def run_simulation(
 
         if ada_yang_sudah_bicara and konteks_pengaruh:
             parts.append(konteks_pengaruh)
-            # BUG #21 — instruksi respons lebih fleksibel, tidak paksa sebut nama
-            parts.append(
-                "Respons ke salah satu peserta — boleh sebut namanya, boleh juga langsung counter argumennya "
-                "tanpa sebut nama. Yang penting posisimu jelas dan berbeda dari yang sudah bicara."
-            )
+            # Phase 4: explicit response target (jika ada)
+            if current_response_target and current_response_target != agen["nama"]:
+                parts.append(
+                    f"Respons khusus untuk {current_response_target}. "
+                    f"Counter argumen {current_response_target} dengan data dan posisimu. "
+                    "Jangan ulangi argumen yang sudah disampaikan."
+                )
+            else:
+                # BUG #21 — instruksi respons lebih fleksibel, tidak paksa sebut nama
+                parts.append(
+                    "Respons ke salah satu peserta — boleh sebut namanya, boleh juga langsung counter argumennya "
+                    "tanpa sebut nama. Yang penting posisimu jelas dan berbeda dari yang sudah bicara."
+                )
         elif adalah_pembuka:
             if briefing_real:
                 parts.append(f"Info konteks: {briefing_real[:200]}")
             parts.append("Buka diskusi dengan posisimu yang paling kuat tentang topik ini.")
         elif ronde_ke == 1 and briefing_real:
             parts.append(f"Info: {briefing_real[:200]}")
+
+        # Phase 3: inject event impact note for this agent
+        _event_impacts = event_impacts.get(intervensi, {}) if intervensi else {}
+        impact_note = get_agent_impact_note(agen["nama"], _event_impacts)
+        if impact_note:
+            parts.append(impact_note)
+
+        # Phase 5: cegah repetisi argumen dari structured memory
+        from .core.memory_store import AgentMemoryStore
+        if "_memory_store" in agen:
+            _store: AgentMemoryStore = agen["_memory_store"]
+            _fresh_prompt = _store.arguments.get_fresh_argument_prompt()
+            if _fresh_prompt:
+                parts.append(_fresh_prompt)
 
         parts.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu (2-3 kalimat)?")
         user_p = "\n".join(parts)
@@ -254,7 +449,28 @@ def run_simulation(
         jawaban  = _batasi_kalimat(jawaban, max_kalimat=3)
         # Stabilization PR — BUG #26: filter lagi sesudah dipotong (kalimat baru bisa jadi pembuka baru)
         jawaban  = filter_forbidden_opens(jawaban)
-        sentimen = score_sentiment(jawaban, topik=topik_ronde)
+        sentimen = score_sentiment(jawaban, topik=topik_ronde, sentiment_mode=sentiment_mode)
+
+        # BUG-19 ENFORCEMENT: post-processing untuk Akademisi
+        # Prompt-level conviction_rule sering diabaikan LLM → retry dengan instruksi lebih keras
+        if ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
+            if sentimen["label"] == "netral":
+                memori_skor = [m.get("skor", 0.0) for m in agen.get("memori", []) if "skor" in m]
+                if len(memori_skor) >= 2 and all(abs(s) < 0.2 for s in memori_skor[-2:]):
+                    user_p += (
+                        "\nPERINTAH TERAKHIR — Kamu SUDAH 2+ RONDE NETRAL. "
+                        "WAJIB ambil posisi SEKARANG: MENDUKUNG atau MENOLAK. "
+                        "Tulis argumen data yang membuatmu condong ke satu arah. "
+                        "JANGAN KEMBALIKAN NETRAL."
+                    )
+                    _retry_jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+                    _retry_jawaban = filter_forbidden_opens(_retry_jawaban)
+                    _retry_jawaban = _batasi_kalimat(_retry_jawaban, max_kalimat=3)
+                    _retry_jawaban = filter_forbidden_opens(_retry_jawaban)
+                    _retry_sentimen = score_sentiment(_retry_jawaban, topik=topik_ronde, sentiment_mode=sentiment_mode)
+                    if _retry_sentimen["label"] != "netral":
+                        jawaban = _retry_jawaban
+                        sentimen = _retry_sentimen
 
         return {
             "nama":     agen["nama"],
@@ -263,24 +479,51 @@ def run_simulation(
             "pengaruh": agen.get("pengaruh", 0.5),
         }
 
+    # Phase 3: track event impacts per-agent
+    event_impacts: dict[str, dict[str, float]] = {}  # agent_name -> impact_score
+    # Phase 4: current response target (set before each agent call)
+    current_response_target: str | None = None
+
     for ronde_ke in range(1, jumlah_ronde + 1):
         topik_ronde = topik
+        active_event_impacts: dict[str, float] = {}
         if intervensi and ronde_ke == (jumlah_ronde // 2) + 1:
-            topik_ronde = f"{topik} [INTERVENSI: {intervensi}]"
+            agent_names = [a["nama"] for a in agents]
+            event = SimulationEvent(
+                tipe="intervensi",
+                ronde=ronde_ke,
+                deskripsi=intervensi,
+                dampak_hint={},
+            )
+            active_event_impacts = compute_event_impact(event, agent_names)
+            event.actual_impacts = active_event_impacts
+            events.append(event)
+            event_narasi = build_event_narrative(event, active_event_impacts)
+            topik_ronde = f"{topik}\n{event_narasi}"
             log_diskusi += f"\n--- INTERVENSI RONDE {ronde_ke}: {intervensi} ---\n"
+            # Simpan impact untuk referensi per-agen nanti
+            event_impacts[intervensi] = active_event_impacts
 
         output_ronde       = {"ronde": ronde_ke, "agen": []}
         pendapat_ronde_ini = []
         # Pendapat yang sudah terkumpul di ronde ini (diupdate setiap agen selesai bicara)
         pendapat_dalam_ronde_ini: list[dict] = []
 
-        # Shuffle urutan agen mulai ronde 2 agar percakapan lebih organik
-        urutan_agen = list(agents)
-        if ronde_ke > 1:
-            random.Random(ronde_ke).shuffle(urutan_agen)
+        # Phase 4: tentukan urutan bicara via scheduler
+        order = get_speaking_order(agents, ronde_ke, strategy=scheduler_strategy)
+        urutan_agen = [agents[i] for i in order]
 
         # ── SEQUENTIAL — satu agen per call, bukan paralel ───────────────
         for idx, agen in enumerate(urutan_agen):
+            # Phase 4: pilih target respons sebelum agen bicara
+            current_response_target = select_response_target(
+                current_nama=agen["nama"],
+                agents=agents,
+                ronde_ke=ronde_ke,
+                pendapat_dalam_ronde_ini=pendapat_dalam_ronde_ini,
+                pendapat_ronde_sebelumnya=pendapat_ronde_sebelumnya,
+                strategy=scheduler_strategy,
+            )
             try:
                 res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini, idx_agen=idx)
             except Exception as e:
@@ -298,7 +541,17 @@ def run_simulation(
                     "pengaruh": agen.get("pengaruh", 0.5),
                 }
 
-            update_agent_memory(agen, ronde_ke, res["pendapat"], res["sentimen"])
+            # Phase 2: track AgentAction
+            agent_actions.append(AgentAction(
+                agent_nama=agen["nama"],
+                ronde=ronde_ke,
+                tipe_aksi="berpendapat",
+                pendapat=res["pendapat"],
+                sentimen=res["sentimen"],
+            ))
+
+            update_agent_memory(agen, ronde_ke, res["pendapat"], res["sentimen"],
+                                all_opinions=pendapat_ronde_ini)
             log_diskusi += f"\n[R{ronde_ke}] {agen['nama']}: {res['pendapat']}\n"
 
             output_ronde["agen"].append({
@@ -320,12 +573,19 @@ def run_simulation(
         ronde_detail.append(output_ronde)
         pendapat_ronde_sebelumnya = pendapat_ronde_ini
 
+        # Phase 8: update crowd setelah tiap ronde
+        if crowd_pool:
+            crowd_pool.update_from_llm_agents(pendapat_ronde_ini, ronde_ke)
+
         # Jeda antar ronde
         if ronde_ke < jumlah_ronde:
             time.sleep(ROUND_DELAY)
 
     # ── GraphRAG extraction ──────────────────────────────────────────────
-    graf_data = extract_entities(topik, log_diskusi)
+    graf_data = (
+        {"entitas": [], "relasi": [], "disabled": True, "reason": "free_tier_mode"}
+        if tier == "free" else extract_entities(topik, log_diskusi)
+    )
 
     # ── Sentimen agregat ─────────────────────────────────────────────────
     sentimen_agregat = {}
@@ -339,22 +599,98 @@ def run_simulation(
         sentimen_agregat[agen["nama"]] = tren
 
     # ── Analisis akhir + aktor kunci — digabung 1 call (FIX #3) ─────────
-    analisis_raw, aktor_analisis = _analisis_dan_aktor(
-        topik, log_diskusi, agents, sentimen_agregat
-    )
+    if tier == "free":
+        analisis_raw = _analisis_fallback_text(topik, sentimen_agregat)
+        pengaruh_map, volatilitas, _ = _build_ringkasan_agen(agents, sentimen_agregat)
+        aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
+    else:
+        analisis_raw, aktor_analisis = _analisis_dan_aktor(
+            topik, log_diskusi, agents, sentimen_agregat
+        )
     analisis_raw = _strip_emoji(analisis_raw)
     prediksi = _parse_prediksi(analisis_raw)
 
+    # Phase 2: Rebuild simulation_state from AgentAction records
+    simulation_state = simulation_result_to_state(
+        topik=topik,
+        ronde_ke=jumlah_ronde,
+        agents=agents,
+        sentimen_agregat=sentimen_agregat,
+        events=events,
+    )
+    simulation_state_payload = (
+        simulation_state.model_dump()
+        if hasattr(simulation_state, "model_dump")
+        else simulation_state.dict()
+    )
+    simulation_state_payload["agent_actions"] = [
+        a.model_dump() for a in agent_actions
+    ]
+
+    # Phase 3: Generate event_explanations
+    agent_names = [a["nama"] for a in agents]
+    event_explanations = generate_event_explanation(events, agent_names)
+
+    simulation_quality = _build_simulation_quality(
+        n_agents=n_agents,
+        jumlah_ronde=jumlah_ronde,
+        estimated_llm_calls=estimated_llm_calls,
+        tier=tier,
+    )
+
+    # Phase 8: Crowd data
+    crowd_data = crowd_pool.to_dict() if crowd_pool else None
+    if crowd_data:
+        # Tambah crowd distribution ke metrics
+        pass
+
+    # Phase 6: Heuristic prediction + confidence
+    quality_score = float(simulation_quality.get("score", 1.0) or 1.0)
+    heuristic_result = heuristic_predict(
+        sentimen_agregat=sentimen_agregat,
+        n_agents=n_agents,
+        n_rounds=jumlah_ronde,
+        quality_score=quality_score,
+        events=events,
+    )
+    prediction_confidence = heuristic_result["confidence"]
+    prediction_reasoning = heuristic_result["reasoning"]
+
     return {
-        "ronde_detail":     ronde_detail,
-        "graf_data":        graf_data,
-        "analisis":         analisis_raw,
-        "prediksi":         prediksi,
-        "sentimen_agregat": sentimen_agregat,
+        "ronde_detail":      ronde_detail,
+        "graf_data":         graf_data,
+        "analisis":          analisis_raw,
+        "prediksi":          prediksi,
+        "sentimen_agregat":  sentimen_agregat,
+        "crowd_data":        crowd_data,
+        "simulation_state":   simulation_state_payload,
+        "event_explanations": event_explanations,
+        "simulation_metrics": {
+            "polarization_score": simulation_state.polarization_score,
+            "consensus_score":    simulation_state.consensus_score,
+            "event_count":        len(events),
+            "agent_count":        len(simulation_state.agent_states),
+            "crowd_size":         n_crowd,
+        },
+        "simulation_quality": simulation_quality,
+        "runtime_mode": {
+            "tier": tier,
+            "free_tier_like": tier == "free",
+            "sentiment_mode": sentiment_mode,
+            "graph_llm_enabled": tier != "free",
+            "final_analysis_llm_enabled": tier != "free",
+            "estimated_llm_calls": estimated_llm_calls,
+            "scheduler_strategy": scheduler_strategy,
+            "scheduler_label": get_strategy_display(scheduler_strategy),
+            "n_crowd": n_crowd,
+        },
+        "events":           simulation_state_payload.get("events", []),
         "jumlah_ronde":     jumlah_ronde,
         "topik":            topik,
         "intervensi":       intervensi,
-        "aktor_analisis":   aktor_analisis,
+        "aktor_analisis":       aktor_analisis,
+        "prediction_confidence": prediction_confidence,
+        "prediction_reasoning":  prediction_reasoning,
         "model_info": {
             "agen":           MODEL_AGENT,
             "analisis":       MODEL_ANALYSIS,
@@ -538,6 +874,104 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
         "aktor_penggerak": sp[0][0] if sp else "-",
         "rekomendasi": "Fokus pada aktor paling berpengaruh.",
     }
+
+
+def _build_simulation_quality(
+    n_agents: int,
+    jumlah_ronde: int,
+    estimated_llm_calls: int,
+    tier: str = "free",
+) -> dict:
+    """Nilai kualitas metodologis simulasi tanpa memanggil LLM."""
+    score = 1.0
+    limitations = []
+
+    sentiment_mode_efektif = "inline" if tier == "free" else SENTIMENT_MODE
+    graph_llm_enabled = tier != "free" and not DISABLE_GRAPH_LLM
+    analysis_llm_enabled = tier != "free" and not DISABLE_FINAL_ANALYSIS_LLM
+
+    if sentiment_mode_efektif == "inline":
+        score -= 0.18
+        limitations.append("Sentiment scoring memakai mode inline, jadi pembacaan konteks/negasi lebih kasar.")
+    if not graph_llm_enabled:
+        score -= 0.12
+        limitations.append("GraphRAG LLM dimatikan, peta entitas dan relasi tidak diekstrak penuh.")
+    if not analysis_llm_enabled:
+        score -= 0.16
+        limitations.append("Analisis akhir memakai fallback rule-based, bukan narasi analis LLM.")
+    if n_agents < 5:
+        score -= 0.12
+        limitations.append(f"Jumlah agen hanya {n_agents}; keragaman perspektif terbatas.")
+    if jumlah_ronde < 3:
+        score -= 0.12
+        limitations.append(f"Jumlah ronde hanya {jumlah_ronde}; dinamika perubahan opini masih pendek.")
+
+    score = max(0.0, min(1.0, round(score, 2)))
+    if score >= 0.8:
+        tier = "high"
+        label = "Eksplorasi kuat"
+    elif score >= 0.6:
+        tier = "medium"
+        label = "Eksplorasi menengah"
+    else:
+        tier = "low"
+        label = "Draft cepat"
+
+    return {
+        "score": score,
+        "tier": tier,
+        "label": label,
+        "estimated_llm_calls": estimated_llm_calls,
+        "limitations": limitations,
+        "interpretation": (
+            "Hasil ini layak dibaca sebagai simulasi eksploratif, bukan prediksi faktual."
+        ),
+    }
+
+
+def _analisis_fallback_text(topik: str, sentimen_agregat: dict) -> str:
+    """Analisis ringkas tanpa LLM untuk mode hemat/free tier."""
+    final_scores = {
+        nama: (tren[-1] if tren else 0.0)
+        for nama, tren in sentimen_agregat.items()
+    }
+    if not final_scores:
+        return (
+            f"Simulasi untuk topik '{topik}' belum menghasilkan cukup data. "
+            "PREDIKSI SKENARIO: Konsensus 33%, Polarisasi 34%, Status Quo 33%"
+        )
+
+    pos = sum(1 for s in final_scores.values() if s > 0.2)
+    neg = sum(1 for s in final_scores.values() if s < -0.2)
+    net = len(final_scores) - pos - neg
+    total = max(len(final_scores), 1)
+
+    if pos / total >= 0.6:
+        prediksi = (60, 20, 20)
+        dinamika = "mayoritas agen cenderung mendukung"
+    elif neg / total >= 0.5 or (pos > 0 and neg > 0):
+        prediksi = (20, 60, 20)
+        dinamika = "diskusi menunjukkan perbedaan posisi yang cukup kuat"
+    else:
+        prediksi = (25, 25, 50)
+        dinamika = "mayoritas posisi masih tertahan di area netral atau belum berubah tajam"
+
+    ringkas_agen = []
+    for nama, skor in final_scores.items():
+        if skor > 0.2:
+            label = "mendukung"
+        elif skor < -0.2:
+            label = "menolak"
+        else:
+            label = "netral"
+        ringkas_agen.append(f"{nama} cenderung {label} ({skor:+.2f})")
+
+    return (
+        f"Mode hemat aktif, jadi analisis ini dibuat dari skor simulasi tanpa LLM tambahan. "
+        f"Untuk topik '{topik}', {dinamika}. "
+        f"Ringkasan posisi akhir: {', '.join(ringkas_agen)}.\n"
+        f"PREDIKSI SKENARIO: Konsensus {prediksi[0]}%, Polarisasi {prediksi[1]}%, Status Quo {prediksi[2]}%"
+    )
 
 
 # ---------------------------------------------------------------------------

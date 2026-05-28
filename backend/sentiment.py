@@ -112,10 +112,47 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "  • Frasa 'tidak efektif', 'tidak akan berdampak', 'membebani', 'mengganggu' → NEGATIF.\n"
         "  • Ironi dan pertanyaan retoris kritis (mis. 'apakah benar-benar efektif?') → cenderung NEGATIF.\n"
         "  • Kata positif di awal kalimat yang langsung diikuti klarifikasi negatif → ikuti kesimpulan akhir.\n"
-        "Contoh: 'memberatkan rakyat' → {\"label\":\"negatif\",\"skor\":-0.8}\n"
-        "Contoh: 'mendukung demi kebaikan bersama' → {\"label\":\"positif\",\"skor\":0.7}\n"
-        "Contoh: 'ada sisi positif dan negatif' → {\"label\":\"netral\",\"skor\":0.0}\n"
-        "Contoh: 'tidak ada bukti kuat bahwa kebijakan ini efektif, bahkan sebaliknya' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        # BUG-09 FIX: Tambahkan instruksi untuk bahasa gaul agar tidak auto-netral
+        "BUG-09 FIX — BAHASA GAUL BUKAN SINYAL NETRAL:\n"
+        "  • Bahasa informal/gaul seperti 'gue rasa ini salah', 'ini nggak masuk akal bro', "
+        "'setuju banget', 'nggak percaya klaim itu' → TETAP baca sebagai sentimen KUAT, bukan netral hanya karena informal.\n"
+        "  • Kalimat berisi POSISI JELAS (mendukung atau menolak) meski singkat atau informal "
+        "HARUS diberi skor > 0.3 atau < -0.3, bukan 0.\n"
+        "  • Contoh: 'Gue rasa ini nggak bener' → skor NEGATIF (-0.6+), bukan netral (0.0).\n"
+        # BUG-15 FIX: Pertanyaan retoris kritis dan kalimat "gagal"
+        "BUG-15 FIX — PERTANYAAN RETORIS KRITIS = NEGATIF:\n"
+        "  • Pertanyaan yang meragukan kinerja pemerintah/kebijakan seperti:\n"
+        "    'Apa yang dilakukan pemerintah selama ini?', 'Mengapa ini belum berubah?',\n"
+        "    'Apakah pemerintah sudah melakukan cukup?' → NEGATIF (-0.4 sampai -0.6)\n"
+        "  • Frasa yang mengandung kegagalan eksplisit seperti:\n"
+        "    'gagal mencapai target', 'tidak terwujud', 'jauh dari harapan',\n"
+        "    'masih banyak yang belum', 'belum dapat menikmati' → NEGATIF meski ada kalimat netral lain.\n"
+        "  • Kalimat campuran: 'pemerintah telah mengambil langkah, NAMUN masih banyak yang belum...' → NEGATIF\n"
+        "    (kata 'namun/tetapi/tapi' diikuti fakta kegagalan = kesimpulan NEGATIF)\n"
+        "  • Contoh: 'Apa yang dilakukan pemerintah selama ini?' → {\"label\":\"negatif\",\"skor\":-0.5}\n"
+        "  • Contoh: 'Kebijakan telah gagal mencapai target, masih banyak siswa belum dapat menikmati' → {\"label\":\"negatif\",\"skor\":-0.65}\n"
+        "  • Contoh: 'Tidak terwujud, jauh dari harapan' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        "Contoh lain:\n"
+        "  'memberatkan rakyat' → {\"label\":\"negatif\",\"skor\":-0.8}\n"
+        "  'mendukung demi kebaikan bersama' → {\"label\":\"positif\",\"skor\":0.7}\n"
+        "  'ada sisi positif dan negatif' → {\"label\":\"netral\",\"skor\":0.0}\n"
+        "  'tidak ada bukti kuat bahwa kebijakan ini efektif, bahkan sebaliknya' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        "  'gue rasa ini nggak bener' → {\"label\":\"negatif\",\"skor\":-0.65}\n"
+        # BUG-17 FIX: "tidak setuju" di kalimat manapun → negatif
+        "BUG-17 FIX — 'SETUJU'/'TIDAK SETUJU' ADALAH PENENTU UTAMA:\n"
+        "  • Jika teks mengandung 'kami tidak setuju', 'saya tidak setuju', 'kami menolak',\n"
+        "    'saya menolak', 'kami tidak sependapat' di kalimat MANAPUN → label NEGATIF.\n"
+        "    Terlepas dari isi kalimat lain. Kalimat penolakan adalah kesimpulan akhir.\n"
+        "  • Contoh: 'Dokumen menunjukkan data A. Namun kami tidak setuju dengan kesimpulan itu.' → {\"label\":\"negatif\",\"skor\":-0.5}\n"
+        "  • Contoh: 'Ada beberapa poin bagus, tapi kami menolak argumen utamanya.' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        # BUG-18 FIX: pertanyaan efektivitas dari Oposisi bukan dukungan
+        "BUG-18 FIX — PERTANYAAN EFISIENSI/EFEKTIVITAS DARI OPOSISI BUKAN DUKUNGAN:\n"
+        "  • Kalimat seperti 'apakah alokasi anggaran efektif?', 'apakah kebijakan ini efisien?'\n"
+        "    dari agen oposisi/kritis → NEGATIF atau NETRAL (skeptis), BUKAN positif.\n"
+        "  • Pertanyaan kritis adalah KERAGUAN terselubung, bukan pujian.\n"
+        "  • Contoh: 'pertanyaan yang lebih relevan adalah apakah alokasi anggaran tersebut efektif dan efisien'\n"
+        "    dari Oposisi → {\"label\":\"negatif\",\"skor\":-0.3}\n"
+        "  • Contoh: 'efektivitas kebijakan ini masih perlu dipertanyakan' → {\"label\":\"negatif\",\"skor\":-0.4}\n"
         'Balas HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
     user = f'Isu: "{topik[:60]}"\nPendapat: "{teks[:200]}"'
@@ -160,6 +197,14 @@ def _score_llm(teks: str, topik: str = "") -> dict:
 # ---------------------------------------------------------------------------
 
 _FORBIDDEN_OPENS = [
+    # BUG-12 FIX: Varian "Data menunjukkan bahwa" yang sering muncul — DILARANG semuanya
+    r"^Data menunjukkan bahwa\b",
+    r"^Data menunjukkan\b",
+    r"^Berdasarkan data\b",
+    r"^Dari data\b",
+    r"^Studi menunjukkan bahwa\b",
+    r"^Penelitian menunjukkan\b",
+    r"^Fakta menunjukkan bahwa\b",
     # Opini eksplisit
     r"^Gue rasa\b",
     r"^Gue pikir\b",
@@ -182,6 +227,15 @@ _FORBIDDEN_OPENS = [
     r"^Itu tidak\b",
     r"^Klaim bahwa .+tidak (tepat|akurat|benar)",
     r"^Itu tidak (tepat|akurat|benar)",
+    # BUG-21 FIX: Pola "NamaAgen: ..." — agen mengutip verbatim agen lain
+    r"^[A-Z][a-zA-Z/]+(?:\s+[A-Z][a-zA-Z/]+)*\s*:",  # "NamaAgen:" atau "Nama Agen:"
+    r"^Pengusaha\b",
+    r"^Pekerja\b",
+    r"^Pemerintah\b",
+    r"^Mahasiswa\b",
+    r"^Akademisi\b",
+    r"^Jurnalis\b",
+    r"^Masyarakat\b",
 ]
 
 _FALLBACK_FORBIDDEN = (
@@ -191,8 +245,8 @@ _FALLBACK_FORBIDDEN = (
 
 def filter_forbidden_opens(jawaban: str) -> str:
     """
-    Stabilization PR — perkuat BUG #26:
-    Hapus kalimat pertama jika menggunakan frasa terlarang.
+    BUG-13 FIX — Stabilization PR:
+    Hapus kalimat jika menggunakan frasa terlarang, baik di awal output maupun di tengah-tengah.
     Jika setelah dihapus hasilnya kosong, gunakan fallback pendek.
     Dipanggil dua kali di simulation.py (sebelum & sesudah _batasi_kalimat).
     Pure Python — tidak menambah LLM call.
@@ -200,6 +254,8 @@ def filter_forbidden_opens(jawaban: str) -> str:
     if not jawaban:
         return jawaban
     teks = jawaban.strip()
+    
+    # ─── CEGAH 1: Frasa terlarang di awal output ───
     for pattern in _FORBIDDEN_OPENS:
         if re.match(pattern, teks, re.IGNORECASE):
             kalimat = re.split(r'(?<=[.!?])\s+', teks)
@@ -208,26 +264,48 @@ def filter_forbidden_opens(jawaban: str) -> str:
                 return " ".join(kalimat[1:]).strip()
             # Satu kalimat terlarang → ganti fallback
             return _FALLBACK_FORBIDDEN
-    return jawaban
+    
+    # ─── BUG-13 CEGAH 2: Frasa terlarang di TENGAH output (di kalimat non-pertama) ───
+    kalimat_list = re.split(r'(?<=[.!?])\s+', teks)
+    kalimat_list = [k for k in kalimat_list if k.strip()]
+    hasil = []
+    
+    for i, kalimat in enumerate(kalimat_list):
+        kena = False
+        # Cek apakah kalimat ini dimulai dengan frasa terlarang
+        for pattern in _FORBIDDEN_OPENS:
+            if re.match(pattern, kalimat.strip(), re.IGNORECASE):
+                kena = True
+                break
+        
+        # Jika kalimat tidak terlarang, masukkan ke hasil
+        if not kena:
+            hasil.append(kalimat)
+    
+    if not hasil:
+        return _FALLBACK_FORBIDDEN
+    
+    return " ".join(hasil)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def score_sentiment(teks: str, topik: str = "") -> dict:
+def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = None) -> dict:
     """
     Nilai sentimen pendapat terhadap topik.
 
-    DEFAULT: mode LLM (akurat, ~50 token/call tambahan).
-    Set SENTIMENT_MODE=inline di .env untuk hemat token di free tier.
+    Args:
+        sentiment_mode: "inline" atau "llm". Jika None, pakai SENTIMENT_MODE dari env.
 
     Label:
       positif = mendukung / pro terhadap topik
       negatif = menolak / khawatir / kritis terhadap topik
       netral  = skeptis terhadap klaim, berimbang, atau tidak berpihak
     """
-    if SENTIMENT_MODE == "inline":
+    mode = sentiment_mode or SENTIMENT_MODE
+    if mode == "inline":
         return _score_inline(teks, topik)
 
     return _score_llm(teks, topik)

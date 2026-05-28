@@ -1,4 +1,4 @@
-# VoxSwarm — Simulation Prediction Engine  
+# VoxSwarm — Simulasi Opini Publik Indonesia  
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.2.0-indigo?style=flat-square" />
@@ -8,7 +8,9 @@
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" />
 </p>
 
-> **Simulasi opini publik berbasis multi-agen AI** — prediksi dinamika sosial, polarisasi, dan konsensus sebelum isu berkembang.
+> **Scenario rehearsal engine untuk opini publik Indonesia** — eksplorasi dinamika sosial, risiko polarisasi, dan aktor penggerak sebelum isu berkembang.
+
+> ⚠️ **DISCLAIMER**: VoxSwarm adalah **alat eksplorasi skenario**, bukan mesin ramalan. Hasil simulasi bersifat eksploratif, bukan prediksi faktual. Jangan gunakan sebagai satu-satunya dasar pengambilan keputusan.
 
 ---
 
@@ -30,23 +32,32 @@
 
 ## Overview
 
-VoxSwarm adalah platform simulasi opini publik yang menggunakan arsitektur **multi-agent AI**. Sistem mensimulasikan diskusi antara berbagai profil sosial (Mahasiswa, Pengusaha, Pemerintah, Akademisi, dll.) yang dipandu LLM melalui Groq Cloud, lalu menganalisis dinamika sentimen, memprediksi skenario (Konsensus / Polarisasi / Status Quo), dan memvisualisasikan hasilnya secara interaktif.
+VoxSwarm adalah **scenario rehearsal engine** untuk opini publik Indonesia — membantu pengguna mengeksplorasi kemungkinan reaksi masyarakat terhadap isu, kebijakan, atau narasi publik.
 
-Sistem ini juga dilengkapi **ML Prediction Layer** berbasis Random Forest yang belajar dari riwayat simulasi, serta **Feedback Loop** untuk mengumpulkan ground truth dari operator guna meningkatkan akurasi prediksi dari waktu ke waktu.
+Sistem mensimulasikan diskusi antara berbagai profil sosial Indonesia (Mahasiswa, Pengusaha, Pemerintah, Akademisi, dll.) yang dipandu LLM melalui Groq Cloud, lalu menganalisis dinamika sentimen, mengidentifikasi aktor kunci dan swing voter, serta menampilkan skenario kemungkinan (Konsensus / Polarisasi / Status Quo).
+
+VoxSwarm menjawab pertanyaan seperti:
+- Jika isu ini dilempar ke publik Indonesia, kelompok mana yang kemungkinan mendukung atau menolak?
+- Apakah isu ini cenderung memicu polarisasi, konsensus, atau status quo?
+- Argumen apa yang paling memicu konflik?
+- Aktor mana yang paling memengaruhi arah diskusi?
+- Bagaimana hasil berubah jika ada intervensi atau informasi baru?
+
+Sistem ini juga dilengkapi **ML Prediction Layer** berbasis Random Forest yang belajar dari riwayat simulasi, serta **Feedback Loop** untuk mengumpulkan ground truth dari operator guna meningkatkan kualitas prediksi dari waktu ke waktu.
 
 ---
 
 ## Fitur Utama
 
 - **Simulasi Multi-Agen Multi-Ronde** — hingga 7 agen dengan profil kepribadian unik, termasuk counter-agent untuk mencegah echo chamber
-- **Mode Sosial Media** — simulasi dinamika Twitter/X: post, reply, like, quote
-- **God's Eye Intervention** — injeksikan variabel eksternal di tengah simulasi
+- **God's Eye Intervention** — injeksikan variabel eksternal di tengah simulasi untuk uji skenario "apa yang terjadi jika..."
 - **Agen Custom** — tambahkan hingga 5 agen dengan peran yang didefinisikan sendiri dari frontend
 - **Data Real** — konteks dari RSS feed berita Indonesia (Kompas, Detik, BBC, Tempo, Antara, CNN) + Reddit
 - **GraphRAG** — ekstraksi entitas dan relasi antar aktor secara otomatis
 - **ML Prediction Layer** — prediksi skenario dengan Random Forest yang dilatih dari histori simulasi
 - **Feedback Loop** — kumpulkan ground truth dari operator untuk auto re-training model
 - **Ekspor Laporan** — unduh hasil dalam format PDF, CSV, dan Word (.docx)
+- **Dua Mode Kinerja** — Free (cepat, 4 agen, 2 ronde) dan Normal (lengkap, 7 agen, 5 ronde)
 - **Rate Limiting** — proteksi bawaan per IP, retry otomatis dengan exponential backoff
 
 ---

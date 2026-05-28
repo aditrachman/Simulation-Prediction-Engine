@@ -2,8 +2,6 @@
 import { eksporPDF } from "../utils/eksporpdf";
 import { eksporCSV } from "../utils/eksporlainnya";
 import { eksporWord } from "../utils/eksporlainnya";
-import TimelineSosmed from "../utils/timelinesosmed";
-
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
@@ -45,6 +43,13 @@ const Kartu = ({ children, className = "" }) => (
 const JudulSeksi = ({ children }) => (
   <p className="mb-4 text-xs font-bold tracking-widest text-indigo-400 uppercase">{children}</p>
 );
+
+function unwrapApiData(payload, fallbackMessage = "Response API tidak berisi data hasil.") {
+  if (!payload || typeof payload !== "object" || !payload.data) {
+    throw new Error(payload?.detail || payload?.message || fallbackMessage);
+  }
+  return payload.data;
+}
 
 // ─── Komponen: Memori Agen ────────────────────────────────────────────
 // Menampilkan akordion riwayat pendapat agen di setiap ronde
@@ -372,94 +377,8 @@ const GrafKnowledge = ({ grafData }) => {
   );
 };
 
-// ─── Komponen: Panel Intervensi Sosmed (Breaking News live injection) ──
-const PanelIntervensiSosmed = ({ topik, kategori, jumlahTick, agenCustom, onHasilBaru, memuat, setMemuat, apiBase }) => {
-  const [intervensi, setIntervensi] = useState("");
-  const [tampil,     setTampil]     = useState(false);
-  const [pesanError, setPesanError] = useState("");
-
-  const kirimIntervensi = async () => {
-    if (!intervensi.trim()) return;
-    setPesanError("");
-    setMemuat(true);
-    try {
-      const body = {
-        topik:       topik.trim(),
-        kategori,
-        jumlah_tick: jumlahTick,
-        intervensi:  intervensi.trim(),
-        agen_custom: agenCustom.length ? agenCustom : undefined,
-      };
-      const res = await fetch(`${apiBase}/start-social`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Permintaan gagal.");
-      }
-      const data = await res.json();
-      onHasilBaru(data.data);
-      setIntervensi("");
-      setTampil(false);
-    } catch (err) {
-      setPesanError(err.message || "Server tidak dapat dihubungi.");
-    }
-    setMemuat(false);
-  };
-
-  return (
-    <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5 print:hidden">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-base">⚡</span>
-          <span className="text-sm font-bold text-amber-300">Breaking News — Injeksi Intervensi</span>
-          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">LIVE</span>
-        </div>
-        <button
-          onClick={() => { setTampil(v => !v); setPesanError(""); }}
-          className="text-xs text-amber-500 hover:text-amber-300 transition underline underline-offset-2"
-        >
-          {tampil ? "Tutup ▲" : "Buka ▼"}
-        </button>
-      </div>
-      <p className="text-[11px] text-amber-700 mb-3">
-        Suntikkan berita baru ke dalam analisis sosmed. Semua peserta akan bereaksi terhadap berita baru ini.
-      </p>
-      {tampil && (
-        <div className="space-y-3">
-          <textarea
-            rows={2}
-            className="w-full rounded-xl border border-amber-500/30 bg-[#0E1220] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-500 transition resize-none"
-            value={intervensi}
-            onChange={e => setIntervensi(e.target.value)}
-            placeholder='Contoh: "Pemerintah blokir semua media sosial mulai besok"'
-          />
-          {pesanError && <p className="text-xs text-red-400">❌ {pesanError}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={kirimIntervensi}
-              disabled={memuat || !intervensi.trim()}
-              className="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-black transition hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {memuat ? "⏳ Memproses..." : "🚀 Suntik & Analisis Ulang"}
-            </button>
-            <button
-              onClick={() => { setIntervensi(""); setPesanError(""); }}
-              className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-400 hover:text-white transition"
-            >
-              Reset
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // ─── Komponen: Panel Intervensi Post-Simulasi ─────────────────────────
-const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru, memuat, setMemuat, apiBase }) => {
+const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru, memuat, setMemuat, apiBase, tier }) => {
   const [intervensi,  setIntervensi]  = useState("");
   const [tampil,      setTampil]      = useState(false);
   const [pesanError,  setPesanError]  = useState("");
@@ -475,6 +394,7 @@ const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru
         jumlah_ronde:  jumlahRonde,
         intervensi:    intervensi.trim(),
         agen_custom:   agenCustom.length ? agenCustom : undefined,
+        tier,
       };
       const res = await fetch(`${apiBase}/start-simulation`, {
         method: "POST",
@@ -486,7 +406,7 @@ const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru
         throw new Error(err.detail || "Permintaan gagal.");
       }
       const data = await res.json();
-      onHasilBaru(data.data);
+      onHasilBaru(unwrapApiData(data, "Response start-simulation tidak berisi data."));
       setIntervensi("");
       setTampil(false);
     } catch (err) {
@@ -809,6 +729,27 @@ const PrediksiSourceBadge = ({ source, note }) => {
 
 
 // ─── Komponen: Panel Feedback Ground Truth ────────────────────────────
+const QualityBadge = ({ quality, runtimeMode }) => {
+  if (!quality) return null;
+  const tier = quality.tier ?? "medium";
+  const style = {
+    high: "bg-emerald-900/40 border-emerald-500/40 text-emerald-300",
+    medium: "bg-amber-900/40 border-amber-500/40 text-amber-300",
+    low: "bg-red-900/40 border-red-500/40 text-red-300",
+  }[tier] ?? "bg-slate-800 border-white/10 text-slate-400";
+  const pct = Math.round((quality.score ?? 0) * 100);
+  const mode = runtimeMode?.free_tier_like ? "Mode hemat" : "Mode penuh";
+  const limitations = (quality.limitations ?? []).join("\n");
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold cursor-help ${style}`}
+      title={`${mode} · skor kualitas ${pct}%${limitations ? `\n${limitations}` : ""}`}
+    >
+      {mode} · {quality.label ?? "Kualitas simulasi"} {pct}%
+    </span>
+  );
+};
+
 const PanelFeedback = ({ topikHash, apiBase, feedbackLabel, setFeedbackLabel, feedbackConf, setFeedbackConf, feedbackCatatan, setFeedbackCatatan, feedbackLoading, setFeedbackLoading, feedbackResult, setFeedbackResult }) => {
   if (!topikHash) return null;
 
@@ -1252,6 +1193,403 @@ const PanelMLMetrics = ({ apiBase }) => {
     </Kartu>
   );
 };
+// ─── Komponen: Panel Perbandingan Skenario ────────────────────────────
+const PanelPerbandingan = ({ riwayatSim, hasil }) => {
+  const [buka, setBuka] = useState(false);
+
+  if (riwayatSim.length < 1) return null;
+
+  const baseline = riwayatSim[0];
+  const latest   = riwayatSim[riwayatSim.length - 1];
+
+  const getPrediksiEntries = (data) => Object.entries(data?.prediksi ?? {});
+
+  const getAgenList = (data) => {
+    const agen = data?.sentimen_agregat ?? {};
+    return Object.entries(agen).map(([nama, skorArr]) => {
+      const skorAkhir = skorArr?.at(-1) ?? 0;
+      let labelAkhir = "netral";
+      if (skorAkhir > 0.2) labelAkhir = "positif";
+      else if (skorAkhir < -0.2) labelAkhir = "negatif";
+      return { nama, skorAkhir, labelAkhir };
+    });
+  };
+
+  const baselineAgen = getAgenList(baseline);
+  const latestAgen   = getAgenList(latest);
+
+  // Diff prediksi
+  const allKeys = [...new Set([...Object.keys(baseline?.prediksi ?? {}), ...Object.keys(latest?.prediksi ?? {})])];
+  const diffPrediksi = allKeys.map(k => ({
+    key: k,
+    baseline: baseline?.prediksi?.[k] ?? 0,
+    latest: latest?.prediksi?.[k] ?? 0,
+    diff: (latest?.prediksi?.[k] ?? 0) - (baseline?.prediksi?.[k] ?? 0),
+  }));
+
+  // Agen yang berubah stance signifikan
+  const agenMap = {};
+  baselineAgen.forEach(a => { agenMap[a.nama] = { baseline: a }; });
+  latestAgen.forEach(a => {
+    if (agenMap[a.nama]) agenMap[a.nama].latest = a;
+    else agenMap[a.nama] = { latest: a };
+  });
+  const changedAgents = Object.values(agenMap).filter(({ baseline: b, latest: l }) => {
+    if (!b || !l) return false;
+    return b.labelAkhir !== l.labelAkhir;
+  });
+
+  const ARROW = { positif: "↑", negatif: "↓", netral: "→" };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-white">🔁 Bandingkan Skenario</span>
+          <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
+            {riwayatSim.length + 1} skenario
+          </span>
+        </div>
+        <button
+          onClick={() => setBuka(v => !v)}
+          className="text-xs text-indigo-400 hover:text-indigo-300 transition underline underline-offset-2"
+        >
+          {buka ? "Tutup ▲" : "Bandingkan Skenario ▼"}
+        </button>
+      </div>
+
+      {buka && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4">
+          {/* Baseline */}
+          <div className="rounded-xl border border-white/10 bg-[#0E1220] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-300">Awal</span>
+              <span className="text-sm font-bold text-slate-200 truncate">{baseline?.intervensi || "(Awal)"}</span>
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Prediksi</p>
+            <div className="space-y-1.5 mb-4">
+              {getPrediksiEntries(baseline).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 w-24 shrink-0">{k}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${v}%`, backgroundColor: WARNA_SKENARIO[k] ?? "#6366f1" }} />
+                  </div>
+                  <span className="text-[10px] font-bold w-8 text-right" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Peserta</p>
+            <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+              {baselineAgen.map(a => (
+                <div key={a.nama} className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-300 flex-1 truncate">{a.nama}</span>
+                  <span className="text-slate-500 shrink-0">{a.skorAkhir > 0 ? `+${a.skorAkhir.toFixed(2)}` : a.skorAkhir.toFixed(2)}</span>
+                  <span className="shrink-0" style={{ color: WARNA_SENTIMEN[a.labelAkhir] }}>{ARROW[a.labelAkhir]}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3">
+              <PrediksiSourceBadge source={baseline?.prediksi_source} note={baseline?.ml_info?.note} />
+            </div>
+          </div>
+
+          {/* Diff column */}
+          <div className="flex flex-col gap-4 lg:w-44 shrink-0">
+            <div className="rounded-xl border border-white/5 bg-white/3 p-3">
+              <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider text-center">Δ Prediksi</p>
+              <div className="space-y-2">
+                {diffPrediksi.map(({ key, diff }) => {
+                  const color = diff > 0 ? "#22c55e" : diff < 0 ? "#ef4444" : "#6366f1";
+                  const prefix = diff > 0 ? "+" : "";
+                  return (
+                    <div key={key} className="text-center">
+                      <p className="text-[10px] text-slate-500">{key}</p>
+                      <p className="text-sm font-black" style={{ color }}>{prefix}{diff}%</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {changedAgents.length > 0 && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3">
+                <p className="text-[10px] font-bold text-amber-400 mb-2 uppercase tracking-wider text-center">Perubahan Sikap</p>
+                <div className="space-y-1">
+                  {changedAgents.map(({ baseline: b, latest: l }) => {
+                    const nama = b?.nama ?? l?.nama;
+                    return (
+                      <p key={nama} className="text-[10px] text-slate-300 text-center">
+                        {nama}: {b ? `${b.labelAkhir} → ${l?.labelAkhir}` : `(baru) ${l?.labelAkhir}`}
+                      </p>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Latest */}
+          <div className="rounded-xl border border-amber-500/20 bg-[#0E1220] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">Intervensi</span>
+              <span className="text-sm font-bold text-slate-200 truncate">{latest?.intervensi || "(Intervensi)"}</span>
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Prediksi</p>
+            <div className="space-y-1.5 mb-4">
+              {getPrediksiEntries(latest).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 w-24 shrink-0">{k}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${v}%`, backgroundColor: WARNA_SKENARIO[k] ?? "#6366f1" }} />
+                  </div>
+                  <span className="text-[10px] font-bold w-8 text-right" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Peserta</p>
+            <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+              {latestAgen.map(a => (
+                <div key={a.nama} className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-300 flex-1 truncate">{a.nama}</span>
+                  <span className="text-slate-500 shrink-0">{a.skorAkhir > 0 ? `+${a.skorAkhir.toFixed(2)}` : a.skorAkhir.toFixed(2)}</span>
+                  <span className="shrink-0" style={{ color: WARNA_SENTIMEN[a.labelAkhir] }}>{ARROW[a.labelAkhir]}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3">
+              <PrediksiSourceBadge source={latest?.prediksi_source} note={latest?.ml_info?.note} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Komponen: Panel Crowd Agent (Swarm-lite Phase 8) ─────────────────
+const PanelCrowd = ({ crowdData }) => {
+  const [buka, setBuka] = useState(false);
+
+  if (!crowdData) return null;
+
+  const dist = crowdData.distribution ?? {};
+  const total = crowdData.total ?? 0;
+
+  const CLUSTER_STYLE = {
+    mendukung: { card: "border-emerald-500/20 bg-emerald-500/5", badge: "bg-emerald-500/20 border-emerald-500/30", text: "text-emerald-400", glow: "shadow-emerald-500/10", icon: "👍" },
+    netral:    { card: "border-slate-500/20 bg-slate-500/5",    badge: "bg-slate-500/20 border-slate-500/30",    text: "text-slate-400", glow: "shadow-slate-500/10", icon: "➖" },
+    menolak:   { card: "border-red-500/20 bg-red-500/5",      badge: "bg-red-500/20 border-red-500/30",      text: "text-red-400", glow: "shadow-red-500/10", icon: "👎" },
+  };
+
+  const BAR_COLOR = {
+    mendukung: "bg-gradient-to-r from-emerald-500 to-emerald-400",
+    netral:    "bg-gradient-to-r from-slate-500 to-slate-400",
+    menolak:   "bg-gradient-to-r from-red-500 to-red-400",
+  };
+
+  const CS = CLUSTER_STYLE;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-5 shadow-lg">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20">
+            <svg className="h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white">Respons Masyarakat</h3>
+            <p className="text-[10px] text-slate-500">Simulasi opini publik — {total} responden</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setBuka(v => !v)}
+          className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold text-violet-300 transition hover:bg-white/10 hover:border-violet-500/30"
+        >
+          {buka ? "Ringkas" : "Detail"}
+          <svg className={`h-3 w-3 transition ${buka ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+      </div>
+
+      {/* ── Distribution bar ── */}
+      <div className="group relative mb-3">
+        <div className="flex h-5 w-full overflow-hidden rounded-full bg-white/5 shadow-inner">
+          {["mendukung", "netral", "menolak"].map(label => {
+            const pct = dist[label] ?? 0;
+            if (pct <= 0) return null;
+            return (
+              <div
+                key={label}
+                className={`h-full ${BAR_COLOR[label]} transition-all duration-500 first:rounded-l-full last:rounded-r-full`}
+                style={{ width: `${pct}%` }}
+                title={`${label}: ${pct}%`}
+              />
+            );
+          })}
+        </div>
+        {/* label di atas bar */}
+        <div className="mt-2 flex justify-between px-0.5">
+          {["mendukung", "netral", "menolak"].map(label => {
+            const pct = dist[label] ?? 0;
+            const s = CS[label];
+            return (
+              <div key={label} className="flex items-center gap-1">
+                <span className="text-[11px]">{s.icon}</span>
+                <span className={`text-[11px] font-bold ${s.text}`}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Sentiment breakdown chips ── */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {["mendukung", "netral", "menolak"].map(label => {
+          const pct = dist[label] ?? 0;
+          const s = CS[label];
+          return (
+            <div key={label} className={`flex items-center gap-1.5 rounded-full border ${s.badge} px-3 py-1`}>
+              <span className="text-[10px]">{s.icon}</span>
+              <span className={`text-[10px] font-semibold ${s.text}`}>
+                {label.charAt(0).toUpperCase() + label.slice(1)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {buka && (
+        <div className="space-y-6 border-t border-white/5 pt-5">
+          {/* ── Klaster Cards ── */}
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">🏘️ Klaster Opini</span>
+              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {(crowdData.clusters ?? []).map((c, i) => {
+                const s = CS[c.label] ?? CS.netral;
+                return (
+                  <div
+                    key={i}
+                    className={`group relative overflow-hidden rounded-2xl border ${s.card} p-4 transition hover:shadow-lg ${s.glow}`}
+                  >
+                    {/* bg glow */}
+                    <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-0 blur-2xl transition group-hover:opacity-20 ${s.badge.replace("border", "bg")}`} />
+                    <div className="relative z-10">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${s.badge} ${s.text}`}>
+                          {s.icon} {c.label}
+                        </span>
+                        <span className="text-xs font-bold text-slate-400">{c.size} org</span>
+                      </div>
+                      {/* Stance meter */}
+                      <div className="mb-3">
+                        <div className="mb-1 flex items-center justify-between text-[10px]">
+                          <span className="text-slate-600">Stance rata-rata</span>
+                          <span className={`font-bold ${s.text}`}>
+                            {c.mean_stance > 0 ? "+" : ""}{c.mean_stance?.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${s.badge.split(" ")[0]}`}
+                            style={{ width: `${Math.abs(c.mean_stance ?? 0) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      {/* Top groups */}
+                      <div>
+                        <p className="mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Komposisi</p>
+                        {(c.top_groups ?? []).slice(0, 3).map((g, j) => {
+                          const maxCount = Math.max(...(c.top_groups ?? []).map(t => t.count), 1);
+                          const barPct = (g.count / maxCount) * 100;
+                          return (
+                            <div key={j} className="mb-1 flex items-center gap-2">
+                              <span className="w-16 truncate text-[10px] text-slate-400">{g.group}</span>
+                              <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${s.badge.split(" ")[0]}`}
+                                  style={{ width: `${barPct}%` }}
+                                />
+                              </div>
+                              <span className="w-5 text-right text-[9px] text-slate-600">{g.count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Propagation ── */}
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">🔄 Aliran Propagasi</span>
+              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+            </div>
+            <div className="space-y-2">
+              {(crowdData.propagation_graph ?? []).map((edge, i) => {
+                const pct = Math.round((edge.weight ?? 0) * 100);
+                const stanceColor = edge.mean_stance > 0.1 ? "text-emerald-400" : edge.mean_stance < -0.1 ? "text-red-400" : "text-slate-500";
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 transition hover:bg-white/[0.05] hover:border-white/10"
+                  >
+                    {/* Source agent */}
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-[10px] font-bold text-violet-300">
+                        {edge.from?.charAt(0) ?? "?"}
+                      </div>
+                      <span className="truncate text-xs font-medium text-slate-200">{edge.from}</span>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="h-px w-4 bg-gradient-to-r from-slate-600 to-slate-500" />
+                      <svg className="h-3 w-3 -ml-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                      </svg>
+                    </div>
+
+                    {/* Target group */}
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate text-xs text-slate-400">{edge.to}</span>
+                    </div>
+
+                    {/* Influence bar */}
+                    <div className="flex w-28 shrink-0 items-center gap-2">
+                      <div className="h-1.5 flex-1 rounded-full bg-white/5 overflow-hidden">
+                        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-8 text-right text-[10px] font-semibold text-slate-500">{pct}%</span>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex shrink-0 items-center gap-3 text-[10px]">
+                      <span className="text-slate-600">{edge.crowd_size} org</span>
+                      <span className={`font-semibold ${stanceColor}`}>
+                        {edge.mean_stance > 0 ? "+" : ""}{edge.mean_stance?.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function VoxSwarmDashboard() {
   const [terpasang,    setTerpasang]    = useState(false);
   const [topik,        setTopik]        = useState("");
@@ -1264,11 +1602,8 @@ export default function VoxSwarmDashboard() {
   const [bukaEkspor,   setBukaEkspor]   = useState(false);
   const [riwayatSim,   setRiwayatSim]   = useState([]);     // ← riwayat tiap run intervensi
   const [kategoriList, setKategoriList] = useState(["Umum","Ekonomi","Politik","Sosial","Hukum","Teknologi"]);
-  // ── State mode sosmed ──
-  const [modeSosmed,     setModeSosmed]     = useState(false);
-  const [hasilSosmed,    setHasilSosmed]    = useState(null);
-  const [jumlahTick,     setJumlahTick]     = useState(5);
-  const [intervensiSos,  setIntervensiSos]  = useState("");
+  const [tier, setTier] = useState("free");
+  const [nCrowd, setNCrowd] = useState(0);
   // ── State topik_hash & prediksi source ──
   const [topikHash,      setTopikHash]      = useState(null);
   const [prediksiSource, setPrediksiSource] = useState(null);   // "ml" | "rule_based"
@@ -1294,37 +1629,6 @@ export default function VoxSwarmDashboard() {
       .catch(() => {});
   }, []);
 
-  // ── Mulai simulasi sosmed ────────────────────────────────────────
-  const mulaiSosmed = async () => {
-    if (!topik.trim()) { inputRef.current?.focus(); return; }
-    setMemuat(true);
-    setHasilSosmed(null);
-    try {
-      const body = {
-        topik: topik.trim(),
-        kategori,
-        jumlah_tick: jumlahTick,
-        intervensi: intervensiSos.trim() || undefined,
-        agen_custom: agenCustom.length ? agenCustom : undefined,
-      };
-      const res = await fetch(`${apiBase}/start-social`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Permintaan gagal.");
-      }
-      const data = await res.json();
-      setHasilSosmed(data.data);
-      setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
-    } catch (err) {
-      alert("❌ " + (err.message || "Server tidak dapat dihubungi."));
-    }
-    setMemuat(false);
-  };
-
   // ── Mulai analisis baru (dari form) ─────────────────────────────
   const mulaiAnalisis = async () => {
     if (!topik.trim()) { inputRef.current?.focus(); return; }
@@ -1346,6 +1650,8 @@ export default function VoxSwarmDashboard() {
         kategori,
         jumlah_ronde: jumlahRonde,
         agen_custom:  agenCustom.length ? agenCustom : undefined,
+        tier,
+        n_crowd: nCrowd,
       };
       const res = await fetch(`${apiBase}/start-simulation`, {
         method: "POST",
@@ -1357,11 +1663,12 @@ export default function VoxSwarmDashboard() {
         throw new Error(err.detail || "Permintaan gagal.");
       }
       const data = await res.json();
-      setHasil(data.data);
+      const hasilData = unwrapApiData(data, "Response start-simulation tidak berisi data.");
+      setHasil(hasilData);
       // Simpan topik_hash & prediksi source dari response
-      setTopikHash(data.data?.topik_hash ?? null);
-      setPrediksiSource(data.data?.prediksi_source ?? null);
-      setPrediksiNote(data.data?.ml_info?.note ?? null);
+      setTopikHash(hasilData?.topik_hash ?? null);
+      setPrediksiSource(hasilData?.prediksi_source ?? null);
+      setPrediksiNote(hasilData?.ml_info?.note ?? null);
       setFeedbackResult(null);   // reset feedback panel
       // Fetch ML data untuk ekspor PDF (parallel, tidak block UI)
       Promise.all([
@@ -1418,19 +1725,22 @@ export default function VoxSwarmDashboard() {
     ? narasiRaw.slice(0, narasiRaw.lastIndexOf(".") + 1)
     : narasiRaw;
 
-  const dataBar = (rondeIni?.agen ?? []).map(a => ({
-    nama:  a.nama,
-    skor:  Math.round((a.sentimen?.skor + 1) * 50),
+  // FIX infinite loop Recharts: useMemo agar referensi array stabil
+  const dataBar = useMemo(() => (rondeIni?.agen ?? []).map(a => ({
+    nama:      a.nama,
+    namaLabel: a.nama.length > 10 ? a.nama.slice(0, 9) + "..." : a.nama,
+    skor:  Math.round(((a.sentimen?.skor ?? 0) + 1) * 50),
     warna: WARNA_SENTIMEN[a.sentimen?.label] ?? "#6366f1",
     label: a.sentimen?.label ?? "netral",
-  }));
+  })), [rondeIni]);
 
   const warnaAgen = Object.keys(sentimenAgr).reduce((acc, nama, i) => {
     acc[nama] = WARNA_AGEN_LIST[i % WARNA_AGEN_LIST.length];
     return acc;
   }, {});
 
-  const dataTren = (() => {
+  // FIX: useMemo agar LineChart tidak re-render infinite loop
+  const dataTren = useMemo(() => {
     const agen = Object.keys(sentimenAgr);
     if (!agen.length) return [];
     return Array.from({ length: sentimenAgr[agen[0]]?.length ?? 0 }, (_, i) => {
@@ -1438,7 +1748,7 @@ export default function VoxSwarmDashboard() {
       agen.forEach(n => { obj[n] = +(sentimenAgr[n]?.[i] ?? 0).toFixed(2); });
       return obj;
     });
-  })();
+  }, [sentimenAgr]);
 
   const jmlNegatif = dataBar.filter(a => a.skor < 40).length;
   const jmlPositif = dataBar.filter(a => a.skor >= 60).length;
@@ -1468,48 +1778,28 @@ export default function VoxSwarmDashboard() {
         {/* ══ FORM INPUT ══ */}
         <section className="mb-4 rounded-2xl border border-white/10 bg-[#0C0F1D] p-5 print:hidden">
 
-          {/* ── Mode Toggle ── */}
-          <div className="mb-4 flex gap-2">
-            <button
-              onClick={() => { setModeSosmed(false); setHasilSosmed(null); }}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${!modeSosmed ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40" : "border border-white/10 text-slate-500 hover:text-white hover:border-indigo-500"}`}
-            >
-              🧠 Mode Debat
-              <span className={`rounded-full px-2 py-0.5 text-[10px] ${!modeSosmed ? "bg-white/20 text-white" : "bg-white/5 text-slate-600"}`}>Multi-Ronde</span>
-            </button>
-            <button
-              onClick={() => { setModeSosmed(true); setHasil(null); }}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${modeSosmed ? "bg-violet-600 text-white shadow-lg shadow-violet-900/40" : "border border-white/10 text-slate-500 hover:text-white hover:border-violet-500"}`}
-            >
-              📱 Mode Sosmed
-              <span className={`rounded-full px-2 py-0.5 text-[10px] ${modeSosmed ? "bg-white/20 text-white" : "bg-white/5 text-slate-600"}`}>Twitter-style</span>
-            </button>
-          </div>
-
           <p className="mb-1 text-base font-bold text-white">
-            {modeSosmed ? "Analisis isu di media sosial" : "Isu apa yang ingin kamu analisis hari ini?"}
+            Isu apa yang ingin kamu analisis hari ini?
           </p>
           <p className="mb-4 text-xs text-slate-500">
-            {modeSosmed
-              ? "Para peserta akan berdebat di media sosial — posting, like, balas, dan kutip. Pemerintah akan ikut merespons bila viral."
-              : "Masukkan topik, pilih kategori dan jumlah babak diskusi, lalu klik Analisis."}
+            Masukkan topik, pilih kategori dan jumlah babak diskusi, lalu klik Analisis.
           </p>
 
           <div className="mb-3 flex gap-2">
             <input
               ref={inputRef}
-              className={`flex-1 rounded-xl border bg-[#0E1220] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none transition ${modeSosmed ? "border-violet-500/30 focus:border-violet-500" : "border-white/10 focus:border-indigo-500"}`}
+              className="flex-1 rounded-xl border border-white/10 bg-[#0E1220] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-indigo-500"
               value={topik}
-              onChange={e => setTopik(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && (modeSosmed ? mulaiSosmed() : mulaiAnalisis())}
+              onChange={e => { const v = e.target.value; setTopik(v.length > 300 ? v.slice(0, 300) : v); }}
+              onKeyDown={e => e.key === "Enter" && mulaiAnalisis()}
               placeholder="Contoh: Kenaikan harga BBM, RUU Ketenagakerjaan baru, dll..."
             />
             <button
-              onClick={modeSosmed ? mulaiSosmed : mulaiAnalisis}
+              onClick={mulaiAnalisis}
               disabled={memuat}
-              className={`rounded-xl px-7 py-3 text-sm font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed ${modeSosmed ? "bg-violet-600 hover:bg-violet-500" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              className="rounded-xl bg-indigo-600 px-7 py-3 text-sm font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {memuat ? "⏳ Memproses..." : modeSosmed ? "📱 Analisis →" : "Analisis →"}
+              {memuat ? "⏳ Memproses..." : "Analisis →"}
             </button>
           </div>
 
@@ -1525,58 +1815,50 @@ export default function VoxSwarmDashboard() {
               </select>
             </div>
 
-            {!modeSosmed ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Jumlah putaran:</span>
-                <div className="flex gap-1">
-                  {[1,2,3,4,5].map(n => (
-                    <button key={n} onClick={() => setJumlahRonde(n)}
-                      className={`h-7 w-7 rounded-lg text-xs font-bold transition ${jumlahRonde === n ? "bg-indigo-600 text-white" : "border border-white/10 text-slate-500 hover:border-indigo-500 hover:text-white"}`}
-                    >{n}</button>
-                  ))}
-                </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Jumlah putaran:</span>
+              <div className="flex gap-1">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => setJumlahRonde(n)}
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition ${jumlahRonde === n ? "bg-indigo-600 text-white" : "border border-white/10 text-slate-500 hover:border-indigo-500 hover:text-white"}`}
+                  >{n}</button>
+                ))}
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Jumlah momen:</span>
-                <div className="flex gap-1">
-                  {[2,3,4,5,6,7,8].map(n => (
-                    <button key={n} onClick={() => setJumlahTick(n)}
-                      className={`h-7 w-7 rounded-lg text-xs font-bold transition ${jumlahTick === n ? "bg-violet-600 text-white" : "border border-white/10 text-slate-500 hover:border-violet-500 hover:text-white"}`}
-                    >{n}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Intervensi sosmed */}
-          {modeSosmed && (
-            <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-950/10 p-3">
-              <p className="text-xs font-bold text-amber-400 mb-1.5">⚡ Breaking News (Opsional)</p>
-              <input
-                className="w-full rounded-lg border border-amber-500/20 bg-[#0E1220] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-500 transition"
-                value={intervensiSos}
-                onChange={e => setIntervensiSos(e.target.value)}
-                placeholder='Contoh: "Pemerintah umumkan kenaikan UMR 30%"'
-              />
-              <p className="text-[10px] text-amber-700 mt-1">Dimasukkan di tengah analisis sebagai berita baru yang mempengaruhi semua peserta.</p>
             </div>
-          )}
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Mode:</span>
+              <button onClick={() => setTier("free")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "free" ? "bg-emerald-600 text-white" : "border border-white/10 text-slate-500 hover:border-emerald-500 hover:text-white"}`}
+              >Free</button>
+              <button onClick={() => setTier("normal")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "normal" ? "bg-amber-600 text-white" : "border border-white/10 text-slate-500 hover:border-amber-500 hover:text-white"}`}
+              >Normal</button>
+            </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Crowd:</span>
+              <input type="range" min="0" max="200" step="50" value={nCrowd}
+                onChange={e => setNCrowd(Number(e.target.value))}
+                className="w-20 accent-indigo-500"
+              />
+              <span className="min-w-[3rem] text-xs font-bold text-indigo-400">
+                {nCrowd > 0 ? nCrowd : "nonaktif"}
+              </span>
+            </div>
 
           {/* ── Tambah Agen Custom ── */}
           <PanelAgenCustom agenCustom={agenCustom} setAgenCustom={setAgenCustom} />
         </section>
 
         {/* ══ KOSONG ══ */}
-        {!hasil && !hasilSosmed && !memuat && (
+        {!hasil && !memuat && (
           <div className="rounded-2xl border border-dashed border-white/10 p-16 text-center">
-            <div className="mb-3 text-5xl">{modeSosmed ? "📱" : "🧠"}</div>
+            <div className="mb-3 text-5xl">🧠</div>
             <h2 className="mb-2 text-xl font-bold">Belum ada analisis</h2>
             <p className="text-sm text-slate-500">
-              {modeSosmed
-                ? <>Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk mulai analisis sosmed.</>
-                : <>Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk memulai.</>}
+              Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk memulai.
             </p>
           </div>
         )}
@@ -1586,57 +1868,12 @@ export default function VoxSwarmDashboard() {
           <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-16 text-center">
             <div className="mx-auto mb-6 flex w-fit gap-2">
               {[0,1,2,3].map(i => (
-                <div key={i} className={`h-2.5 w-2.5 rounded-full ${modeSosmed ? "bg-violet-500" : "bg-indigo-500"}`}
+                <div key={i} className="h-2.5 w-2.5 rounded-full bg-indigo-500"
                   style={{ animation: `lompat 1s ease-in-out ${i*0.15}s infinite` }} />
               ))}
             </div>
-            {modeSosmed ? (
-              <>
-                <p className="mb-1 font-semibold text-slate-300">Sedang mensimulasikan {jumlahTick} momen di sosmed...</p>
-                <p className="text-xs text-slate-600">Agen sedang posting, like, reply, dan quote satu sama lain. Mohon tunggu 20–60 detik.</p>
-              </>
-            ) : (
-              <>
-                <p className="mb-1 font-semibold text-slate-300">Sedang mensimulasikan {jumlahRonde} putaran diskusi...</p>
-                <p className="text-xs text-slate-600">Menggunakan dual-model: respons agen (cepat) + analisis mendalam. Mohon tunggu 15–45 detik.</p>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ══ HASIL SOSMED ══ */}
-        {hasilSosmed && !memuat && (
-          <div ref={hasilRef} className="space-y-5 duration-500 animate-in fade-in">
-            {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="rounded-full bg-violet-500/20 border border-violet-500/40 px-3 py-1.5 text-xs font-bold text-violet-300">📱 Mode Sosmed</span>
-                <span className="text-xs text-slate-500">
-                  Topik: <span className="font-medium text-slate-300">"{topik}"</span>
-                  {hasilSosmed.intervensi && <span className="text-amber-400"> · ⚡ {hasilSosmed.intervensi.slice(0,40)}</span>}
-                  {" · "}{hasilSosmed.tick_detail?.length ?? 0} momen · {hasilSosmed.profil_agen?.length ?? 0} akun
-                </span>
-              </div>
-              <PanelIntervensiSosmed
-                topik={topik}
-                kategori={kategori}
-                jumlahTick={jumlahTick}
-                agenCustom={agenCustom}
-                onHasilBaru={(hasilBaru) => setHasilSosmed(hasilBaru)}
-                memuat={memuat}
-                setMemuat={setMemuat}
-                apiBase={apiBase}
-              />
-
-              <button
-                onClick={() => { setHasilSosmed(null); setTopik(""); setAgenCustom([]); setTimeout(() => inputRef.current?.focus(), 100); }}
-                className="text-xs text-slate-600 underline underline-offset-4 hover:text-slate-400 transition"
-              >
-                Analisis baru
-              </button>
-            </div>
-
-            <TimelineSosmed hasilSosmed={hasilSosmed} topik={topik} />
+            <p className="mb-1 font-semibold text-slate-300">Sedang mensimulasikan {jumlahRonde} putaran diskusi...</p>
+            <p className="text-xs text-slate-600">Menggunakan dual-model: respons agen (cepat) + analisis mendalam. Mohon tunggu 15–45 detik.</p>
           </div>
         )}
 
@@ -1669,6 +1906,7 @@ export default function VoxSwarmDashboard() {
                   {INFO_STATUS[status].label}
                 </span>
                 <PrediksiSourceBadge source={prediksiSource} note={prediksiNote} />
+                <QualityBadge quality={hasil.simulation_quality} runtimeMode={hasil.runtime_mode} />
                 <span className="text-xs text-slate-500">
                   Topik: <span className="font-medium text-slate-300">"{topik}"</span>
                   {hasil.intervensi && <span className="text-amber-400"> · 🔀 {hasil.intervensi.slice(0, 40)}...</span>}
@@ -1709,6 +1947,7 @@ export default function VoxSwarmDashboard() {
               memuat={memuat}
               setMemuat={setMemuat}
               apiBase={apiBase}
+              tier={tier}
             />
 
             {/* ── Ringkasan ── */}
@@ -1756,7 +1995,7 @@ export default function VoxSwarmDashboard() {
                 <div style={{ height: 220 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dataBar} margin={{ bottom: 0 }}>
-                      <XAxis dataKey="nama" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="namaLabel" interval={0} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0,100]} hide />
                       <Tooltip
                         cursor={{ fill: "rgba(99,102,241,0.07)" }}
@@ -1921,6 +2160,12 @@ export default function VoxSwarmDashboard() {
 
             {/* ── ML Model Performance ── */}
             <PanelMLMetrics apiBase={apiBase} />
+
+            {/* ── Perbandingan Skenario ── */}
+            <PanelPerbandingan riwayatSim={riwayatSim} hasil={hasil} />
+
+            {/* ── Crowd Agent ── */}
+            <PanelCrowd crowdData={hasil.crowd_data} />
 
             {/* ── Mulai ulang ── */}
             <div className="pb-6 text-center print:hidden">

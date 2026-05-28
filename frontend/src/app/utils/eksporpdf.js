@@ -292,6 +292,35 @@ function buildMLSection(mlData) {
 }
 
 // ── Builder: CSS string untuk dokumen HTML ────────────────────────────────────
+function buildQualitySection(hasil) {
+  const q = hasil?.simulation_quality;
+  if (!q) return "";
+  const pct = Math.round((q.score ?? 0) * 100);
+  const color = q.tier === "high" ? "#16a34a" : q.tier === "medium" ? "#d97706" : "#dc2626";
+  const mode = hasil?.runtime_mode?.free_tier_like ? "Mode hemat" : "Mode penuh";
+  const limitations = (q.limitations ?? []).map(item => `<li>${item}</li>`).join("");
+  return `
+    <div class="section no-break">
+      <div class="section-title">Kualitas Simulasi</div>
+      <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#f8fafc">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <p style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">${mode}</p>
+            <p style="font-size:14px;font-weight:800;color:#1e293b;margin:0">${q.label ?? "Kualitas simulasi"}</p>
+          </div>
+          <span style="font-size:20px;font-weight:900;color:${color}">${pct}%</span>
+        </div>
+        <p style="font-size:11px;color:#475569;line-height:1.6;margin-bottom:8px">${q.interpretation ?? "Hasil ini bersifat eksploratif."}</p>
+        <p style="font-size:10px;color:#64748b;margin-bottom:4px">
+          Estimasi LLM calls: <strong>${q.estimated_llm_calls ?? hasil?.runtime_mode?.estimated_llm_calls ?? "-"}</strong>
+          &nbsp;·&nbsp; Sumber real: <strong>${q.real_context_sources ?? "-"}</strong>
+          &nbsp;·&nbsp; Relevansi konteks: <strong>${q.avg_context_relevance ?? "-"}</strong>
+        </p>
+        ${limitations ? `<ul style="font-size:10px;color:#78350f;line-height:1.6;margin:8px 0 0 16px">${limitations}</ul>` : ""}
+      </div>
+    </div>`;
+}
+
 function buildCSS() {
   return `
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -362,6 +391,8 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
   <div class="section-title">Prediksi Skenario</div>
   ${prediksiBar || "<p style='color:#94a3b8'>Tidak ada data prediksi.</p>"}
 </div>
+
+${buildQualitySection(hasil)}
 
 <div class="section no-break">
   <div class="section-title">Prediksi Aktor Kunci &amp; Swing Voter</div>

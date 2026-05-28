@@ -25,6 +25,9 @@ from .llm import (
     AGENT_CALL_DELAY,
     ROUND_DELAY,
     SENTIMENT_MODE,
+    FREE_TIER_MODE,
+    DISABLE_GRAPH_LLM,
+    DISABLE_FINAL_ANALYSIS_LLM,
     call_llm,
     call_llm_json,
 )
@@ -57,6 +60,7 @@ __all__ = [
     "MAX_TOKENS_SUMMARY", "MAX_TOKENS_SENTIMENT",
     "RETRY_MAX", "RETRY_BASE_DELAY", "AGENT_CALL_DELAY", "ROUND_DELAY",
     "SENTIMENT_MODE",
+    "FREE_TIER_MODE", "DISABLE_GRAPH_LLM", "DISABLE_FINAL_ANALYSIS_LLM",
     "call_llm", "call_llm_json",
     # memory
     "update_agent_memory", "summarize_memory",

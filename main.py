@@ -17,9 +17,11 @@ from backend.agents import get_agents, get_all_categories
 from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
 from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
 from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
-from backend.social_engine import run_social_simulation
-from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model, build_feature_row_from_social
+from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model
 from backend.feedback import submit_feedback, submit_feedback_by_hash, get_feedback_stats, delete_feedback_by_hash, FeedbackValidationError
+from backend.core.comparison import generate_comparison_report
+
+# MAX_AGENTS_PER_SIM / MAX_ROUNDS_PER_SIM dihapus — digantikan oleh field `tier`
 
 app = FastAPI(
     title="VoxSwarm API",
@@ -191,6 +193,37 @@ class SimRequest(BaseModel):
         max_length=5,
         description="Daftar agen tambahan yang didefinisikan pengguna (maks 5 agen custom).",
     )
+    tier: str = Field(
+        default="free",
+        pattern="^(free|normal)$",
+        description="'free' = hemat token (max 4 agen, max 2 ronde) | 'normal' = full",
+    )
+    n_crowd: int = Field(
+        default=0,
+        ge=0,
+        le=200,
+        description="Jumlah crowd agents (0 = nonaktif). 50-200 untuk simulasi opini publik skala besar.",
+    )
+
+
+class ScenarioModel(BaseModel):
+    """Satu skenario dalam perbandingan."""
+    topik: str = Field(..., min_length=3, max_length=MAX_TOPIC_LENGTH)
+    kategori: str = Field(default="Umum", max_length=50)
+    jumlah_ronde: int = Field(default=3, ge=1, le=5)
+    intervensi: Optional[str] = Field(default=None, max_length=200)
+    agen_custom: Optional[list[AgenCustomModel]] = Field(default=None, max_length=5)
+    tier: str = Field(default="free", pattern="^(free|normal)$")
+    label: str = Field(default="Skenario", max_length=50, description="Label untuk skenario ini (misal: 'Baseline', 'Dengan Intervensi')")
+    n_crowd: int = Field(default=0, ge=0, le=200)
+
+
+class CompareRequest(BaseModel):
+    """Request untuk membandingkan beberapa skenario."""
+    scenarios: list[ScenarioModel] = Field(
+        ..., min_length=2, max_length=5,
+        description="Daftar skenario yang akan dibandingkan (2–5 skenario).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -283,15 +316,72 @@ def start_sim(payload: SimRequest, request: Request):
             detail=f"Kategori '{payload.kategori}' tidak dikenali. Gunakan: {get_all_categories()}",
         )
 
+
+    def _apply_context_quality(hasil: dict, konteks_real: dict) -> None:
+        """Tambahkan kualitas konteks real ke metadata simulasi."""
+        quality = dict(hasil.get("simulation_quality") or {})
+        limitations = list(quality.get("limitations") or [])
+        score = float(quality.get("score", 1.0))
+
+        total_sumber = int(konteks_real.get("total", 0) or 0)
+        avg_relevansi = 0.0
+        sources = (konteks_real.get("berita") or []) + (konteks_real.get("reddit") or [])
+        if sources:
+            avg_relevansi = sum(float(s.get("relevansi", 0) or 0) for s in sources) / len(sources)
+
+        if total_sumber == 0:
+            score -= 0.15
+            limitations.append("Tidak ada sumber real-time yang cocok; konteks berita/sosmed kosong.")
+        elif avg_relevansi < 1.5:
+            score -= 0.08
+            limitations.append("Sumber real-time ditemukan, tapi relevansi rata-ratanya rendah.")
+
+        score = max(0.0, min(1.0, round(score, 2)))
+        if score >= 0.8:
+            tier = "high"
+            label = "Eksplorasi kuat"
+        elif score >= 0.6:
+            tier = "medium"
+            label = "Eksplorasi menengah"
+        else:
+            tier = "low"
+            label = "Draft cepat"
+
+        quality.update({
+            "score": score,
+            "tier": tier,
+            "label": label,
+            "real_context_sources": total_sumber,
+            "avg_context_relevance": round(avg_relevansi, 2),
+            "limitations": limitations,
+        })
+        hasil["simulation_quality"] = quality
+    # ── Terapkan limit berdasarkan tier ──
+    if payload.tier == "normal":
+        jumlah_ronde_efektif = payload.jumlah_ronde
+        tier_mode = "normal"
+    else:
+        daftar_agen = daftar_agen[:4]
+        jumlah_ronde_efektif = min(payload.jumlah_ronde, 2)
+        tier_mode = "free"
+
     konteks_real = ambil_konteks_real(topik_bersih)
 
     hasil = run_simulation(
         topik=topik_bersih,
         agents=daftar_agen,
-        jumlah_ronde=payload.jumlah_ronde,
+        jumlah_ronde=jumlah_ronde_efektif,
         intervensi=intervensi_bersih,
         briefing_real=konteks_real.get("briefing", ""),
+        tier=tier_mode,
+        n_crowd=payload.n_crowd,
     )
+    _apply_context_quality(hasil, konteks_real)
+    hasil["runtime_limits"] = {
+        "tier": tier_mode,
+        "effective_agents": len(daftar_agen),
+        "effective_rounds": jumlah_ronde_efektif,
+    }
 
     # ── ML Layer: append history + prediksi (fallback otomatis ke rule-based) ──
     ml_result = load_or_predict(hasil, konteks_real)
@@ -304,7 +394,15 @@ def start_sim(payload: SimRequest, request: Request):
         "source":        ml_result["source"],
         "n_samples":     ml_result["n_samples"],
         "note":          ml_result.get("note", ""),
+        "ml_experimental": ml_result.get("ml_experimental", False),
     }
+    # Phase 6: prediction_confidence dari ML pipeline
+    ml_conf = ml_result.get("prediction_confidence")
+    if ml_conf:
+        hasil["prediction_confidence"] = ml_conf
+    ml_reasoning = ml_result.get("prediction_reasoning")
+    if ml_reasoning:
+        hasil["prediction_reasoning"] = ml_reasoning
     # ── Expose topik_hash agar frontend bisa kirim langsung ke POST /feedback ─
     # tanpa harus mengirim ulang plain-text topik (menghindari mismatch hash)
     hasil["topik_hash"] = ml_result.get("topik_hash", "")
@@ -322,119 +420,98 @@ def start_sim(payload: SimRequest, request: Request):
     }
 
 
-# ---------------------------------------------------------------------------
-# Model: Simulasi Sosmed
-# ---------------------------------------------------------------------------
-
-class SosmedRequest(BaseModel):
-    topik: str = Field(
-        ...,
-        min_length=3,
-        max_length=MAX_TOPIC_LENGTH,
-        description="Topik / isu yang akan disimulasikan di sosmed",
-    )
-    kategori: str = Field(
-        default="Umum",
-        max_length=50,
-        description="Kategori simulasi untuk pemilihan agen",
-    )
-    jumlah_tick: int = Field(
-        default=5,
-        ge=2,
-        le=10,
-        description="Jumlah 'momen' sosmed — seperti ronde tapi lebih cair (2–10)",
-    )
-    intervensi: Optional[str] = Field(
-        default=None,
-        max_length=200,
-        description="Breaking news / skenario yang diinjeksikan di tengah simulasi sosmed",
-    )
-    agen_custom: Optional[list[AgenCustomModel]] = Field(
-        default=None,
-        max_length=5,
-        description="Agen tambahan yang didefinisikan pengguna (maks 5)",
-    )
-
-
-@app.post("/start-social", tags=["Simulation"])
-def start_social(payload: SosmedRequest, request: Request):
+@app.post("/compare-scenarios", tags=["Simulation"])
+def compare_scenarios(payload: CompareRequest, request: Request):
     """
-    Jalankan simulasi SOSIAL MEDIA multi-agen.
+    Bandingkan 2–5 skenario simulasi.
 
-    Setiap agen punya akun sendiri dan bisa:
-    - POST — buat konten baru
-    - LIKE — like post orang lain
-    - REPLY — balas langsung
-    - QUOTE — quote tweet dengan komentar
-    - FOLLOW — follow agen lain
-    - DIAM — skip giliran
+    Setiap skenario bisa punya topik, intervensi, dan label berbeda.
+    Response berisi hasil tiap skenario + laporan perbandingan.
 
-    Data real dari RSS berita + Reddit dipakai sebagai konteks.
-    Agen otoritas (pemerintah) otomatis merespons konten viral.
+    **Contoh request:**
+    ```json
+    {
+      "scenarios": [
+        {
+          "topik": "Kenaikan harga BBM",
+          "kategori": "Ekonomi",
+          "jumlah_ronde": 3,
+          "label": "Tanpa Intervensi"
+        },
+        {
+          "topik": "Kenaikan harga BBM",
+          "kategori": "Ekonomi",
+          "jumlah_ronde": 3,
+          "intervensi": "Pemerintah umumkan subsidi Rp 50 triliun",
+          "label": "Dengan Subsidi"
+        }
+      ]
+    }
+    ```
     """
     _enforce_rate_limit(request)
+    n = len(payload.scenarios)
 
-    topik_bersih = payload.topik.strip()
-    if not topik_bersih:
-        raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
-    _validate_text(topik_bersih, "Topik")
+    results: list[dict] = []
+    for i, sc in enumerate(payload.scenarios):
+        topik_bersih = sc.topik.strip()
+        _validate_text(topik_bersih, f"Topik skenario {i+1}")
+        intervensi_bersih = sc.intervensi.strip() if sc.intervensi else None
 
-    intervensi_bersih = None
-    if payload.intervensi:
-        intervensi_bersih = payload.intervensi.strip() or None
-        if intervensi_bersih:
-            _validate_text(intervensi_bersih, "Intervensi")
+        daftar_agen = get_agents(sc.kategori)
+        if not daftar_agen:
+            raise HTTPException(400, f"Kategori '{sc.kategori}' tidak dikenal.")
 
-    agen_custom_dict = None
-    if payload.agen_custom:
-        agen_custom_dict = []
-        for ac in payload.agen_custom:
-            nama_ac = ac.nama.strip()
-            role_ac = ac.role.strip()
-            _validate_text(nama_ac, "Nama agen custom")
-            _validate_text(role_ac, "Role agen custom")
-            agen_custom_dict.append({
-                "nama": nama_ac, "role": role_ac,
-                "pengaruh": ac.pengaruh, "kepribadian": ac.kepribadian,
-            })
+        if sc.tier == "normal":
+            jml_ronde = sc.jumlah_ronde
+            tier_mode = "normal"
+        else:
+            daftar_agen = daftar_agen[:4]
+            jml_ronde = min(sc.jumlah_ronde, 2)
+            tier_mode = "free"
 
-    daftar_agen = get_agents(payload.kategori, agen_custom=agen_custom_dict)
-    if not daftar_agen:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Kategori '{payload.kategori}' tidak dikenali.",
+        konteks_real = ambil_konteks_real(topik_bersih)
+        hasil = run_simulation(
+            topik=topik_bersih,
+            agents=daftar_agen,
+            jumlah_ronde=jml_ronde,
+            intervensi=intervensi_bersih,
+            briefing_real=konteks_real.get("briefing", ""),
+            tier=tier_mode,
+            n_crowd=sc.n_crowd,
         )
+        ml_result = load_or_predict(hasil, konteks_real)
+        if ml_result["source"] == "ml":
+            hasil["prediksi"] = ml_result["prediksi"]
+        hasil["prediksi_source"] = ml_result["source"]
 
-    konteks_real = ambil_konteks_real(topik_bersih)
+        results.append({
+            "label": sc.label or f"Skenario {i+1}",
+            "topik": topik_bersih,
+            "intervensi": intervensi_bersih,
+            "hasil": hasil,
+        })
 
-    hasil = run_social_simulation(
-        topik=topik_bersih,
-        agents=daftar_agen,
-        konteks_real=konteks_real,
-        jumlah_tick=payload.jumlah_tick,
-        intervensi=intervensi_bersih,
-        call_llm_fn=call_llm,
-        call_llm_json_fn=call_llm_json,
-        score_sentiment_fn=score_sentiment,
-        model_agent=MODEL_AGENT,
-        model_analysis=MODEL_ANALYSIS,
-    )
-
-    # ── ML Layer: convert sosmed output → feature row → history + prediksi ──
-    social_feat = build_feature_row_from_social(hasil, konteks_real)
-    ml_result   = load_or_predict(social_feat, konteks_real, prebuilt=True)
-    hasil["prediksi_source"] = ml_result["source"]
-    hasil["ml_info"] = {
-        "source":    ml_result["source"],
-        "n_samples": ml_result["n_samples"],
-        "note":      ml_result.get("note", ""),
-    }
-    hasil["topik_hash"] = ml_result.get("topik_hash", "")
-    # ─────────────────────────────────────────────────────────────────────────
+    # Generate comparison reports (bandingkan skenario 1 dengan sisanya)
+    comparisons: list[dict] = []
+    if len(results) >= 2:
+        baseline = results[0]
+        for other in results[1:]:
+            comp = generate_comparison_report(
+                hasil_a=baseline["hasil"],
+                hasil_b=other["hasil"],
+                label_a=baseline["label"],
+                label_b=other["label"],
+            )
+            comparisons.append(comp)
 
     return {
         "status": "success",
-        "data":   hasil,
+        "data": {
+            "scenarios": results,
+            "comparisons": comparisons,
+            "n_scenarios": n,
+        },
     }
 
 
@@ -500,7 +577,6 @@ def cache_status(request: Request):
     Info cache konteks real: jumlah entri, valid vs expired, TTL, path file.
     Termasuk info cache LLM: jumlah entri aktif dan nilai TTL.
     """
-    _enforce_rate_limit(request)
     with _llm_cache_lock:
         llm_entries = len(_llm_cache)
     return {
@@ -557,7 +633,6 @@ def ml_status(request: Request):
     berapa sampel lagi yang dibutuhkan, dan berapa label dari feedback.
     Termasuk path HISTORY_FILE untuk debugging lokasi file.
     """
-    _enforce_rate_limit(request)
     from backend.ml_pipeline import DATA_DIR, HISTORY_FILE, MODEL_FILE
     status = get_ml_status()
     status["debug_paths"] = {
@@ -675,7 +750,6 @@ def ml_debug(request: Request):
     distribusi label, fitur paling berpengaruh, tanda-tanda overfitting,
     dan peringatan imbalance data. Berguna setelah generate_dummy_data.py dijalankan.
     """
-    _enforce_rate_limit(request)
     from backend.ml_pipeline import (
         build_training_dataset, FEATURE_COLS,
         MODEL_FILE, _model_lock,
@@ -739,7 +813,6 @@ def feedback_stats_endpoint(request: Request):
     - **latest_timestamp**: waktu feedback terakhir masuk
     - **ready_to_retrain**: apakah sudah cukup feedback untuk trigger re-train
     """
-    _enforce_rate_limit(request)
     stats = get_feedback_stats()
     return {
         "status":   "success",
@@ -787,7 +860,6 @@ def feedback_export(request: Request):
 
     Tidak mengekspos data sensitif — hanya topik_hash + label + confidence + timestamp.
     """
-    _enforce_rate_limit(request)
     from backend.feedback import _load_all_feedback, _feedback_lock, FEEDBACK_FILE
     with _feedback_lock:
         rows = _load_all_feedback()
@@ -813,7 +885,6 @@ def ml_dataset_stats(request: Request):
     - **drift_summary**: perbandingan prediksi rata-rata 10 simulasi pertama vs 10 terakhir
       (deteksi apakah ada pergeseran pola yang signifikan)
     """
-    _enforce_rate_limit(request)
     from backend.ml_pipeline import (
         build_training_dataset, _load_history, FEATURE_COLS,
         MODEL_FILE, ENCODER_FILE, _model_lock,
@@ -898,7 +969,6 @@ def manual_train(request: Request):
     Berguna jika auto-train tidak terpicu atau ingin memaksa re-train.
     Gunakan POST /ml-train untuk force re-train tanpa pengecekan threshold.
     """
-    _enforce_rate_limit(request)
     from backend.ml_pipeline import force_train_if_ready
     result = force_train_if_ready()
     return {
@@ -924,7 +994,6 @@ def ml_metrics(request: Request):
     - **eval_method**: metode evaluasi yang digunakan
     - **n_feedback_labels**: jumlah sampel dengan label manual dari operator
     """
-    _enforce_rate_limit(request)
     metrics = get_ml_metrics()
     return {
         "status":  "success" if metrics.get("ok") else "error",

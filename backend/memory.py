@@ -4,25 +4,39 @@
 # Memori tiap agen disimpan di agent["memori"] sebagai list dict
 # {"ronde": int, "pendapat": str}. Ringkasan di-cache di agent["_ringkasan_cache"]
 # dan hanya di-invalidasi saat update_agent_memory() dipanggil.
+#
+# Phase 5: Integrasi dengan MemoryStore terstruktur (argument + relationship tracking).
+# MemoryStore dipakai di samping dict memori lama untuk backward compatibility.
 
 from .llm import call_llm, MODEL_AGENT, MAX_TOKENS_SUMMARY
+from .core.memory_store import AgentMemoryStore
 
 
 # ---------------------------------------------------------------------------
-# Memory Update
+# Memory Update — Phase 5: tambah structured memory
 # ---------------------------------------------------------------------------
+
+def _get_or_create_store(agent: dict) -> AgentMemoryStore:
+    """Dapatkan atau buat AgentMemoryStore untuk agen ini."""
+    if "_memory_store" not in agent:
+        agent["_memory_store"] = AgentMemoryStore(agent.get("nama", "Unknown"))
+    return agent["_memory_store"]
+
 
 def update_agent_memory(
     agent: dict,
     ronde: int,
     pendapat: str,
     sentimen: dict | None = None,
+    all_opinions: list[dict] | None = None,
 ) -> None:
     """
     Simpan pendapat agen ke memori dan invalidasi cache ringkasan.
     Stabilization PR: juga simpan label & skor sentimen jika tersedia,
     agar change-justification di simulation.py bisa membaca skor ronde lalu.
     Backward compatible — pemanggil lama tanpa sentimen tetap tidak error.
+
+    Phase 5: juga update structured memory (argument + relationship tracking).
     """
     entry: dict = {"ronde": ronde, "pendapat": pendapat}
     if sentimen:
@@ -30,6 +44,15 @@ def update_agent_memory(
         entry["skor"]  = sentimen.get("skor")
     agent["memori"].append(entry)
     agent.pop("_ringkasan_cache", None)
+
+    # Phase 5: Update structured memory
+    store = _get_or_create_store(agent)
+    store.add_round(
+        ronde=ronde,
+        pendapat=pendapat,
+        sentimen=sentimen or {},
+        all_opinions=all_opinions,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +113,8 @@ def build_memory_context(agent: dict) -> str:
 
     BUG-03 fix: menyertakan label stance (MENDUKUNG/NETRAL/MENOLAK) dan skor
     di setiap entri memori agar agen tidak bisa flip posisi secara diam-diam.
+
+    Phase 5: Integrasi dengan structured memory (tanpa LLM summarize).
     """
     if not agent["memori"]:
         return ""
@@ -111,10 +136,13 @@ def build_memory_context(agent: dict) -> str:
     label_terakhir = _stance_label_from_skor(skor_terakhir)
     skor_str = f" (skor {skor_terakhir:.2f})" if skor_terakhir is not None else ""
 
-    if len(agent["memori"]) >= 3:
-        ringkasan = summarize_memory(agent)
+    # Phase 5: Gunakan structured memory untuk konteks (tanpa LLM)
+    store = _get_or_create_store(agent)
+    structured_ctx = store.build_context(agent["memori"])
+
+    if len(agent["memori"]) >= 2:
         base_context = (
-            f"POSISIMU SEJAUH INI: {ringkasan} "
+            f"{structured_ctx} "
             f"Ronde terakhir — Posisi: {label_terakhir}{skor_str} "
             f"— Argumen: \"{terakhir['pendapat'][:80]}\" "
         )
@@ -132,8 +160,7 @@ def build_memory_context(agent: dict) -> str:
                 f"WAJIB jelaskan di responsmu: data atau argumen baru apa yang mengubah posisimu. "
                 f"Contoh: 'Ronde lalu saya {label_sblm.lower()}, tapi sekarang saya lihat bukti Y — jadi saya revisi.'"
             )
-        else:
-            return base_context + f"— posisi: {label_terakhir}. Pertahankan kecuali ada alasan kuat."
+        return base_context + f"— posisi: {label_terakhir}. Pertahankan kecuali ada alasan kuat."
 
     # Hanya 1 entri memori
     return (

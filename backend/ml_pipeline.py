@@ -120,6 +120,10 @@ def build_feature_row(sim_output: dict, real_context: dict) -> dict:
     n_agents       = len(sentimen_agregat)
     n_rounds       = sim_output.get("jumlah_ronde", len(ronde_detail))
     has_intervensi = int(bool(sim_output.get("intervensi")))
+    runtime_mode = sim_output.get("runtime_mode", {}) or {}
+    simulation_quality = sim_output.get("simulation_quality", {}) or {}
+    is_free_tier = int(bool(runtime_mode.get("free_tier_like")))
+    quality_score = float(simulation_quality.get("score", 1.0) or 1.0)
 
     # ── Aktor kunci ──────────────────────────────────────────────────────
     aktor_kunci   = aktor.get("aktor_kunci", [])
@@ -180,6 +184,8 @@ def build_feature_row(sim_output: dict, real_context: dict) -> dict:
         "n_agents":       n_agents,
         "n_rounds":       n_rounds,
         "has_intervensi": has_intervensi,
+        "is_free_tier":    is_free_tier,
+        "quality_score":   round(quality_score, 4),
         "max_influence":  round(max_influence, 4),
         "n_swing":        n_swing,
         # data real
@@ -307,6 +313,7 @@ FEATURE_COLS = [
     "mean_vol",  "max_vol",  "mean_delta",
     "pct_pos",   "pct_neg",  "pct_net",
     "n_agents",  "n_rounds", "has_intervensi",
+    "is_free_tier", "quality_score",
     "max_influence", "n_swing",
     "n_berita",  "n_reddit", "avg_relevansi", "avg_reddit_ups",
 ]
@@ -459,146 +466,35 @@ def predict_outcome(feature_row: dict) -> Optional[dict]:
 # Entry Point — dipanggil dari main.py / simulation.py
 # ---------------------------------------------------------------------------
 
-def build_feature_row_from_social(social_output: dict, real_context: dict) -> dict:
+def _ml_prediksi_confianza(n_samples: int, n_feedback: int) -> dict:
+    """Hitung confidence untuk prediksi ML berdasarkan data."""
+    score = 0.3  # baseline (ML is experimental)
+    if n_samples >= 20:
+        score += 0.3
+    elif n_samples >= 10:
+        score += 0.15
+    elif n_samples >= 5:
+        score += 0.05
+    if n_feedback >= 5:
+        score += 0.2
+    elif n_feedback >= 3:
+        score += 0.1
+    elif n_feedback >= 1:
+        score += 0.05
+    score = max(0.0, min(1.0, round(score, 2)))
+    label = "tinggi" if score >= 0.7 else "sedang" if score >= 0.4 else "rendah"
+    return {"score": score, "label": label, "alasan": ["ML experimental — confidence based on sample size."]}
+
+
+def load_or_predict(sim_output: dict, real_context: dict) -> dict:
     """
-    Adapter: ubah output run_social_simulation() menjadi feature row yang kompatibel
-    dengan format build_feature_row() sehingga data sosmed bisa masuk ke ML pipeline.
+    Entry point utama. Dipanggil setelah run_simulation().
 
-    Mapping sosmed → fitur ML:
-    - sentimen dihitung dari semua post (skor dari field post["sentimen"]["skor"])
-    - n_agents  = jumlah akun unik yang membuat post
-    - n_rounds  = jumlah tick
-    - volatilitas = perubahan rata-rata sentimen antar tick
-    - has_intervensi = apakah ada intervensi breaking news
-    - data real (n_berita, n_reddit, avg_relevansi, avg_reddit_ups) sama seperti simulasi biasa
-
-    Label (weak): distribusi sentimen → Konsensus / Polarisasi / Status Quo
-    (sama dengan rule-based _parse_prediksi, tapi berbasis sosmed signal)
-
-    Tidak memanggil LLM sama sekali — pure Python.
-    """
-    import hashlib
-    import statistics
-
-    semua_post = social_output.get("semua_post", [])
-    tick_detail = social_output.get("tick_detail", [])
-    intervensi = social_output.get("intervensi")
-    topik_raw = (social_output.get("topik") or "").strip().lower()
-    topik_hash = hashlib.sha256(topik_raw.encode("utf-8")).hexdigest()[:16] if topik_raw else ""
-
-    # ── Kumpulkan skor sentimen dari semua post (kecuali SYSTEM) ─────────────
-    all_scores = [
-        p["sentimen"]["skor"]
-        for p in semua_post
-        if p.get("akun_id") != "SYSTEM" and isinstance(p.get("sentimen"), dict)
-    ]
-
-    mean_sent = statistics.mean(all_scores)  if all_scores else 0.0
-    std_sent  = statistics.stdev(all_scores) if len(all_scores) > 1 else 0.0
-    min_sent  = min(all_scores)              if all_scores else 0.0
-    max_sent  = max(all_scores)              if all_scores else 0.0
-
-    # ── Volatilitas per tick ──────────────────────────────────────────────────
-    tick_means = []
-    for tick in tick_detail:
-        tick_scores = [
-            p["sentimen"]["skor"]
-            for p in tick.get("posts_baru", [])
-            if isinstance(p.get("sentimen"), dict)
-        ]
-        if tick_scores:
-            tick_means.append(statistics.mean(tick_scores))
-
-    vol_list = [abs(tick_means[i] - tick_means[i-1]) for i in range(1, len(tick_means))]
-    mean_vol  = statistics.mean(vol_list) if vol_list else 0.0
-    max_vol   = max(vol_list)             if vol_list else 0.0
-    mean_delta = (tick_means[-1] - tick_means[0]) if len(tick_means) >= 2 else 0.0
-
-    # ── Proporsi sentimen label di tick terakhir ──────────────────────────────
-    n_pos = n_neg = n_net = 0
-    if tick_detail:
-        for p in tick_detail[-1].get("posts_baru", []):
-            lbl = p.get("sentimen", {}).get("label", "netral") if isinstance(p.get("sentimen"), dict) else "netral"
-            if lbl == "positif":    n_pos += 1
-            elif lbl == "negatif":  n_neg += 1
-            else:                   n_net += 1
-    total_last = n_pos + n_neg + n_net or 1
-    pct_pos = n_pos / total_last
-    pct_neg = n_neg / total_last
-    pct_net = n_net / total_last
-
-    # ── Fitur struktural ──────────────────────────────────────────────────────
-    profil_agen   = social_output.get("profil_agen", [])
-    n_agents      = len(profil_agen)
-    n_rounds      = len(tick_detail)
-    has_intervensi = int(bool(intervensi))
-
-    # Influence: pakai engagement ratio sebagai proxy pengaruh tertinggi
-    max_eng       = max((p.get("total_likes_dapat", 0) + p.get("total_reply_dapat", 0) * 2 for p in profil_agen), default=1)
-    max_influence = min(1.0, max_eng / max(1, n_rounds * n_agents))
-    n_swing       = sum(1 for p in profil_agen if not p.get("is_authority") and not p.get("is_counter"))
-
-    # ── Fitur dari data real ──────────────────────────────────────────────────
-    berita        = real_context.get("berita", [])
-    reddit        = real_context.get("reddit", [])
-    n_berita      = len(berita)
-    n_reddit      = len(reddit)
-    avg_relevansi = statistics.mean([a.get("relevansi", 0) for a in berita + reddit]) if (berita or reddit) else 0.0
-    avg_reddit_ups = statistics.mean([r.get("upvotes", 0) for r in reddit]) if reddit else 0.0
-
-    # ── Weak label: mirip pola _parse_prediksi ────────────────────────────────
-    statistik = social_output.get("statistik", {})
-    viral_count = statistik.get("viral_count", 0)
-    total_post  = statistik.get("total_post", 1) or 1
-    if pct_pos >= 0.6:
-        label = "Konsensus"
-    elif pct_neg >= 0.5 or (viral_count / total_post) > 0.3:
-        label = "Polarisasi"
-    else:
-        label = "Status Quo"
-
-    return {
-        "mean_sent":      round(mean_sent, 4),
-        "std_sent":       round(std_sent, 4),
-        "min_sent":       round(min_sent, 4),
-        "max_sent":       round(max_sent, 4),
-        "mean_vol":       round(mean_vol, 4),
-        "max_vol":        round(max_vol, 4),
-        "mean_delta":     round(mean_delta, 4),
-        "pct_pos":        round(pct_pos, 4),
-        "pct_neg":        round(pct_neg, 4),
-        "pct_net":        round(pct_net, 4),
-        "n_agents":       n_agents,
-        "n_rounds":       n_rounds,
-        "has_intervensi": has_intervensi,
-        "max_influence":  round(max_influence, 4),
-        "n_swing":        n_swing,
-        "n_berita":       n_berita,
-        "n_reddit":       n_reddit,
-        "avg_relevansi":  round(avg_relevansi, 4),
-        "avg_reddit_ups": round(avg_reddit_ups, 2),
-        "label":          label,
-        "topik_hash":     topik_hash,
-        "_source":        "sosmed",  # metadata audit — tidak masuk FEATURE_COLS
-    }
-
-
-def load_or_predict(sim_output: dict, real_context: dict, prebuilt: bool = False) -> dict:
-    """
-    Entry point utama. Dipanggil setelah run_simulation() atau run_social_simulation().
-
-    Args:
-        sim_output:  Output run_simulation() — ATAU feature row pre-built dari
-                     build_feature_row_from_social() jika prebuilt=True.
-        real_context: Output ambil_konteks_real().
-        prebuilt:    Jika True, sim_output sudah berupa feature row (skip build).
-                     Dipakai oleh /start-social via build_feature_row_from_social().
-
-    1. Bangun feature row (skip jika prebuilt=True)
-    2. Append ke history (always — sosmed data masuk pipeline yang sama)
+    1. Bangun feature row dari output simulasi
+    2. Append ke history
     3. Auto-train jika model belum ada dan data sudah cukup
     4. Prediksi — jika model siap, return ML prediction;
-       jika belum, fallback ke rule-based / prediksi sosmed
+       jika belum, fallback ke rule-based
 
     Returns:
         {
@@ -608,7 +504,7 @@ def load_or_predict(sim_output: dict, real_context: dict, prebuilt: bool = False
             "topik_hash": str,
         }
     """
-    row = sim_output if prebuilt else build_feature_row(sim_output, real_context)
+    row = build_feature_row(sim_output, real_context)
 
     try:
         append_history(row)
@@ -635,23 +531,39 @@ def load_or_predict(sim_output: dict, real_context: dict, prebuilt: bool = False
     ml_pred = predict_outcome(row)
 
     if ml_pred:
+        dataset = build_training_dataset()
+        n_fb = sum(1 for r in dataset if r.get("label_source") == "feedback")
+        ml_conf = _ml_prediksi_confianza(n, n_fb)
         return {
-            "prediksi":   ml_pred,
-            "source":     "ml",
-            "n_samples":  n,
-            "topik_hash": row.get("topik_hash", ""),
+            "prediksi":          ml_pred,
+            "source":            "ml",
+            "n_samples":         n,
+            "topik_hash":        row.get("topik_hash", ""),
+            "ml_experimental":   True,
+            "note":              "ML prediction is experimental.",
+            "prediction_confidence": ml_conf,
         }
 
+    # Fallback: gunakan heuristic prediction dari modul baru
+    from .core.prediction import heuristic_predict
+    sim_pred = sim_output.get("prediksi") or {}
+    kval = float(sim_output.get("simulation_quality", {}).get("score", 1.0) or 1.0)
+    heuristic_result = heuristic_predict(
+        sentimen_agregat=sim_output.get("sentimen_agregat", {}),
+        n_agents=len(sim_output.get("sentimen_agregat", {})),
+        n_rounds=sim_output.get("jumlah_ronde", 3),
+        quality_score=kval,
+        events=sim_output.get("events"),
+    )
+
     return {
-        "prediksi":   (
-            sim_output.get("prediksi")
-            if not prebuilt
-            else {"Konsensus": 33, "Polarisasi": 34, "Status Quo": 33}
-        ) or {"Konsensus": 33, "Polarisasi": 34, "Status Quo": 33},
-        "source":     "rule_based",
-        "n_samples":  n,
-        "topik_hash": row.get("topik_hash", ""),
-        "note":       f"ML belum aktif ({n}/{MIN_SAMPLES} sampel terkumpul)",
+        "prediksi":              sim_pred or heuristic_result["prediksi"],
+        "source":                "rule_based",
+        "n_samples":             n,
+        "topik_hash":            row.get("topik_hash", ""),
+        "note":                  f"ML belum aktif ({n}/{MIN_SAMPLES} sampel terkumpul)",
+        "prediction_confidence": heuristic_result["confidence"],
+        "prediction_reasoning":  heuristic_result["reasoning"],
     }
 
 
