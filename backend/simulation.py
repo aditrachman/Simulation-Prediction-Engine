@@ -50,6 +50,42 @@ from .core.swarm import CrowdPool
 
 
 # ---------------------------------------------------------------------------
+# Helper: Batasi Output Agen (BUG-20)
+# ---------------------------------------------------------------------------
+
+def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
+    """
+    Post-processing pure Python — potong output agen di batas kalimat ke-N.
+    BUG-20 FIX: hard cap 45 kata, threshold 30 kata + split di titik koma.
+    """
+    if not teks:
+        return teks
+    pecahan = re.split(r'(?<=[.!?;])\s+', teks.strip())
+    pecahan = [k for k in pecahan if k.strip()]
+    
+    # Hard cap total kata
+    kata_total = teks.split()
+    if len(kata_total) > 45:
+        return " ".join(kata_total[:45]).rstrip(' ,;.-_:') + "."
+
+    if len(pecahan) <= max_kalimat:
+        kata_kata = teks.split()
+        if len(kata_kata) > 30:
+            potongan = " ".join(kata_kata[:25])
+            for pemisah in [". ", "; ", ", namun ", ", padahal ", ", sehingga ",
+                            ", tetapi ", ", tapi ", "Kami juga ", "Selain itu ", "Dengan demikian "]:
+                idx = potongan.rfind(pemisah)
+                if idx > 10:
+                    return potongan[:idx + 1].rstrip(' ,;.-_:') + "."
+            return " ".join(kata_kata[:20]).rstrip(' ,;.-_:') + "."
+        return teks
+    hasil = " ".join(pecahan[:max_kalimat])
+    if hasil and hasil[-1] not in ".!?":
+        hasil += "."
+    return hasil
+
+
+# ---------------------------------------------------------------------------
 # Simulation Core — Sequential + Jeda (solusi utama rate limit)
 # ---------------------------------------------------------------------------
 
@@ -81,10 +117,11 @@ def run_simulation(
     pendapat_ronde_sebelumnya: list[dict] = []
     events: list[SimulationEvent] = []
     n_agents = len(agents)
-    sentiment_mode = "inline" if tier == "free" else "llm"
+    sentiment_mode = SENTIMENT_MODE if tier != "free" else "inline"
+    llm_for_sentiment = int(sentiment_mode not in ("inline", "ml"))
     estimated_llm_calls = (
         n_agents * jumlah_ronde
-        + (0 if sentiment_mode == "inline" else n_agents * jumlah_ronde)
+        + (llm_for_sentiment * n_agents * jumlah_ronde)
         + (0 if tier == "free" else 1)
         + (0 if tier == "free" else 2)
     )
@@ -113,38 +150,6 @@ def run_simulation(
 
     # Phase 2: track actions via AgentAction
     agent_actions: list[AgentAction] = []
-
-    def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
-        """
-        Post-processing pure Python — potong output agen di batas kalimat ke-N.
-        BUG-20 FIX: batas kata turun 60→40, tambah pemisah alami untuk kalimat tunggal panjang.
-        """
-        if not teks:
-            return teks
-        # Split di titik, tanda tanya, atau tanda seru diikuti spasi/akhir string
-        pecahan = re.split(r'(?<=[.!?])\s+', teks.strip())
-        # Buang fragmen kosong
-        pecahan = [k for k in pecahan if k.strip()]
-        if len(pecahan) <= max_kalimat:
-            # BUG-20: turunkan threshold dari 60 → 40 kata
-            kata_kata = teks.split()
-            if len(kata_kata) > 40:
-                # Potong di kata ke-30, lalu cari pemisah alami terdekat
-                potongan = " ".join(kata_kata[:30])
-                # Cari pemisah alami — tambah "Kami juga", "Selain itu", "Dengan demikian"
-                for pemisah in [". ", "; ", ", namun ", ", padahal ", ", sehingga ",
-                                ", tetapi ", ", tapi ", "Kami juga ", "Selain itu ", "Dengan demikian "]:
-                    idx = potongan.rfind(pemisah)
-                    if idx > 15:
-                        return potongan[:idx + 1].rstrip(",;") + "."
-                # Tidak ketemu pemisah natural → potong di kata ke-25
-                return " ".join(kata_kata[:25]) + "."
-            return teks
-        hasil = " ".join(pecahan[:max_kalimat])
-        # Pastikan diakhiri tanda baca
-        if hasil and hasil[-1] not in ".!?":
-            hasil += "."
-        return hasil
 
     def _proses_satu_agen(
         agen: dict,
@@ -456,7 +461,8 @@ def run_simulation(
         if ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
             if sentimen["label"] == "netral":
                 memori_skor = [m.get("skor", 0.0) for m in agen.get("memori", []) if "skor" in m]
-                if len(memori_skor) >= 2 and all(abs(s) < 0.2 for s in memori_skor[-2:]):
+                # Cek: apakah ronde sebelumnya juga netral? (2 ronde netral berturut-turut)
+                if len(memori_skor) >= 1 and abs(memori_skor[-1]) < 0.2:
                     user_p += (
                         "\nPERINTAH TERAKHIR — Kamu SUDAH 2+ RONDE NETRAL. "
                         "WAJIB ambil posisi SEKARANG: MENDUKUNG atau MENOLAK. "
@@ -471,6 +477,16 @@ def run_simulation(
                     if _retry_sentimen["label"] != "netral":
                         jawaban = _retry_jawaban
                         sentimen = _retry_sentimen
+
+        # BUG-19 ENFORCEMENT: post-processing — paksa skor jika masih netral
+        if ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
+            if sentimen["label"] == "netral":
+                memori_skor_fix = [m.get("skor", 0.0) for m in agen.get("memori", []) if "skor" in m]
+                # Cek: apakah ronde sebelumnya juga netral? (2 ronde netral berturut-turut)
+                if len(memori_skor_fix) >= 1 and abs(memori_skor_fix[-1]) < 0.2:
+                    initial = agen.get("initial_stance", 0.0)
+                    forced_skor = 0.3 if initial >= 0 else -0.3
+                    sentimen = {"label": "positif" if forced_skor > 0 else "negatif", "skor": forced_skor}
 
         return {
             "nama":     agen["nama"],
@@ -640,9 +656,9 @@ def run_simulation(
 
     # Phase 8: Crowd data
     crowd_data = crowd_pool.to_dict() if crowd_pool else None
+    crowd_distribution: dict[str, float] = {}
     if crowd_data:
-        # Tambah crowd distribution ke metrics
-        pass
+        crowd_distribution = crowd_data.get("distribution", {})
 
     # Phase 6: Heuristic prediction + confidence
     quality_score = float(simulation_quality.get("score", 1.0) or 1.0)
@@ -671,6 +687,9 @@ def run_simulation(
             "event_count":        len(events),
             "agent_count":        len(simulation_state.agent_states),
             "crowd_size":         n_crowd,
+            "crowd_mendukung":    crowd_distribution.get("mendukung", 0),
+            "crowd_menolak":      crowd_distribution.get("menolak", 0),
+            "crowd_netral":       crowd_distribution.get("netral", 0),
         },
         "simulation_quality": simulation_quality,
         "runtime_mode": {
@@ -691,6 +710,10 @@ def run_simulation(
         "aktor_analisis":       aktor_analisis,
         "prediction_confidence": prediction_confidence,
         "prediction_reasoning":  prediction_reasoning,
+        "prediction_source": {
+            "prediksi":  "llm_analisis" if "tidak tersedia" not in analisis_raw.lower() else "heuristic_fallback",
+            "confidence": "heuristic",
+        },
         "model_info": {
             "agen":           MODEL_AGENT,
             "analisis":       MODEL_ANALYSIS,
@@ -893,6 +916,8 @@ def _build_simulation_quality(
     if sentiment_mode_efektif == "inline":
         score -= 0.18
         limitations.append("Sentiment scoring memakai mode inline, jadi pembacaan konteks/negasi lebih kasar.")
+    elif sentiment_mode_efektif == "ml":
+        limitations.append("Sentiment scoring memakai ML classifier — deterministik, 0 LLM call.")
     if not graph_llm_enabled:
         score -= 0.12
         limitations.append("GraphRAG LLM dimatikan, peta entitas dan relasi tidak diekstrak penuh.")

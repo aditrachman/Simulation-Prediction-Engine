@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
 from backend.agents import get_agents, get_all_categories
+from backend.agent_factory import get_contextual_agents
 from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
 from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
 from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
@@ -310,6 +311,11 @@ def start_sim(payload: SimRequest, request: Request):
             })
 
     daftar_agen = get_agents(payload.kategori, agen_custom=agen_custom_dict)
+    # Inject agen kontekstual berdasarkan keyword topik
+    agen_kontekstual = get_contextual_agents(topik_bersih)
+    for ak in agen_kontekstual:
+        if not any(a["nama"] == ak["nama"] for a in daftar_agen):
+            daftar_agen.append(ak)
     if not daftar_agen:
         raise HTTPException(
             status_code=400,
@@ -406,6 +412,9 @@ def start_sim(payload: SimRequest, request: Request):
     # ── Expose topik_hash agar frontend bisa kirim langsung ke POST /feedback ─
     # tanpa harus mengirim ulang plain-text topik (menghindari mismatch hash)
     hasil["topik_hash"] = ml_result.get("topik_hash", "")
+    # ── Prediction source label ──
+    hasil.setdefault("prediction_source", {})
+    hasil["prediction_source"]["ml_aktif"] = ml_result["source"] == "ml"
     # ──────────────────────────────────────────────────────────────────────────
 
     return {
@@ -459,6 +468,11 @@ def compare_scenarios(payload: CompareRequest, request: Request):
         intervensi_bersih = sc.intervensi.strip() if sc.intervensi else None
 
         daftar_agen = get_agents(sc.kategori)
+        # Inject agen kontekstual berdasarkan keyword topik
+        agen_kontekstual = get_contextual_agents(topik_bersih)
+        for ak in agen_kontekstual:
+            if not any(a["nama"] == ak["nama"] for a in daftar_agen):
+                daftar_agen.append(ak)
         if not daftar_agen:
             raise HTTPException(400, f"Kategori '{sc.kategori}' tidak dikenal.")
 
@@ -484,6 +498,10 @@ def compare_scenarios(payload: CompareRequest, request: Request):
         if ml_result["source"] == "ml":
             hasil["prediksi"] = ml_result["prediksi"]
         hasil["prediksi_source"] = ml_result["source"]
+
+        # Prediction source label untuk compare
+        hasil.setdefault("prediction_source", {})
+        hasil["prediction_source"]["ml_aktif"] = ml_result["source"] == "ml"
 
         results.append({
             "label": sc.label or f"Skenario {i+1}",

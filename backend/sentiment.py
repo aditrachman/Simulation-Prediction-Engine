@@ -1,10 +1,12 @@
 # backend/sentiment.py
-# Sentiment scoring — dua mode:
-#   "llm"    → LLM-based, akurat untuk kalimat kompleks (DEFAULT)
+# Sentiment scoring — tiga mode:
+#   "ml"     → TF-IDF + LogisticRegression classifier (DEFAULT)
+#   "llm"    → LLM-based, akurat untuk kalimat kompleks
 #   "inline" → kamus kata kunci, 0 token tambahan (fallback / free tier ketat)
 #
-# Set via .env: SENTIMENT_MODE=llm | inline
-# DEFAULT: llm — inline tidak mampu handle negasi kompleks & kalimat ambigu
+# Set via .env: SENTIMENT_MODE=ml | llm | inline
+# DEFAULT: llm — ML auto-train jika model belum ada.
+# Fallback chain: ML → LLM → inline
 #
 # Label: "positif" | "netral" | "negatif"
 #   positif = mendukung / setuju / pro terhadap isu/topik
@@ -14,6 +16,7 @@
 import re
 
 from .llm import call_llm_json, MODEL_AGENT, MAX_TOKENS_SENTIMENT, SENTIMENT_MODE
+from . import sentiment_ml
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +43,7 @@ _KATA_NEGATIF = {
     "mencekik", "memberatkan", "mempersulit",
     "larang", "dilarang", "hentikan", "stop", "hapus",
     "cabut", "batalkan", "cegah",
+    "curiga", "curigai", "mencurigai", "skeptis",
 }
 
 _KATA_POSITIF = {
@@ -48,6 +52,7 @@ _KATA_POSITIF = {
     "meningkatkan", "memperbaiki", "solusi",
     "bagus", "baik", "tepat", "cocok", "sesuai",
     "efisien", "efektif", "inovatif",
+    "rasional", "didukung", "percaya",
 }
 
 _NEGASI = {"tidak", "nggak", "gak", "bukan", "jangan", "tanpa", "belum"}
@@ -145,6 +150,14 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "    Terlepas dari isi kalimat lain. Kalimat penolakan adalah kesimpulan akhir.\n"
         "  • Contoh: 'Dokumen menunjukkan data A. Namun kami tidak setuju dengan kesimpulan itu.' → {\"label\":\"negatif\",\"skor\":-0.5}\n"
         "  • Contoh: 'Ada beberapa poin bagus, tapi kami menolak argumen utamanya.' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        "  • Jika ada 'kami tidak setuju', 'saya tidak setuju', 'kami menolak', 'saya menolak'\n"
+        "    di kalimat MANAPUN — termasuk kalimat terakhir — label HARUS NEGATIF.\n"
+        "    TIDAK ADA PENGECUALIAN. Kalimat penolakan = kesimpulan akhir, bukan hanya konteks.\n"
+        "  • Frasa 'tidak relevan', 'tidak akurat', 'tidak tepat', 'tidak benar',\n"
+        "    'tidak terlalu relevan', 'tidak sepenuhnya akurat', 'tidak sepenuhnya tepat'\n"
+        "    — yang menyatakan bahwa klaim/pendapat tentang topik TIDAK BENAR → NEGATIF.\n"
+        "  • Contoh: 'klaim tentang kebutuhan pertahanan tidak sepenuhnya akurat'\n"
+        "    → {\"label\":\"negatif\",\"skor\":-0.5}\n"
         # BUG-18 FIX: pertanyaan efektivitas dari Oposisi bukan dukungan
         "BUG-18 FIX — PERTANYAAN EFISIENSI/EFEKTIVITAS DARI OPOSISI BUKAN DUKUNGAN:\n"
         "  • Kalimat seperti 'apakah alokasi anggaran efektif?', 'apakah kebijakan ini efisien?'\n"
@@ -153,6 +166,10 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "  • Contoh: 'pertanyaan yang lebih relevan adalah apakah alokasi anggaran tersebut efektif dan efisien'\n"
         "    dari Oposisi → {\"label\":\"negatif\",\"skor\":-0.3}\n"
         "  • Contoh: 'efektivitas kebijakan ini masih perlu dipertanyakan' → {\"label\":\"negatif\",\"skor\":-0.4}\n"
+        "  • Pertanyaan yang mengandung kata 'apakah', 'seberapa', 'bagaimana', 'mengapa', 'kenapa'\n"
+        "    yang mempertanyakan efektivitas/efisiensi/keberhasilan/kebutuhan suatu kebijakan\n"
+        "    = NEGATIF atau NETRAL (skeptis), BUKAN positif — terlepas dari siapa yang bertanya.\n"
+        "  • Contoh: 'mengapa pemerintah harus membelanjakan dana untuk ini?' → NEGATIF.\n"
         'Balas HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
     user = f'Isu: "{topik[:60]}"\nPendapat: "{teks[:200]}"'
@@ -297,7 +314,11 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
     Nilai sentimen pendapat terhadap topik.
 
     Args:
-        sentiment_mode: "inline" atau "llm". Jika None, pakai SENTIMENT_MODE dari env.
+        sentiment_mode: "ml", "inline", atau "llm". Jika None, pakai SENTIMENT_MODE dari env.
+
+    Fallback chain:
+        ML → LLM → inline
+      (jika mode ML gagal, turun ke LLM; jika LLM gagal, turun ke inline)
 
     Label:
       positif = mendukung / pro terhadap topik
@@ -305,6 +326,27 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
       netral  = skeptis terhadap klaim, berimbang, atau tidak berpihak
     """
     mode = sentiment_mode or SENTIMENT_MODE
+
+    # ── Hybrid ML → LLM mode ──
+    # ML untuk teks simpel (confidence >= 0.6, <= 25 kata, tidak ada kontras)
+    # LLM untuk kalimat kompleks (rendah confidence, > 25 kata, atau ada kontras)
+    if mode == "ml":
+        if sentiment_ml.is_available():
+            result = sentiment_ml.predict(teks)
+            if result is not None:
+                kata_count = len(teks.split())
+                # Deteksi kontras: namun, tetapi, tapi, walaupun, meskipun, sayangnya, ironisnya
+                ada_kontras = any(k in teks.lower() for k in ("namun", "tetapi", " tapi ", "walaupun", "meskipun", "sayangnya", "ironisnya"))
+                is_simple = kata_count <= 25 and not ada_kontras
+                is_confident = result.get("confidence", 0) >= 0.6
+                if is_simple and is_confident:
+                    return {"label": result["label"], "skor": result["skor"]}
+                _why = "kontras" if ada_kontras else f"kata={kata_count}"
+                print(f"[sentiment] ML fallback LLM ({_why}, conf={result.get('confidence'):.2f})")
+        else:
+            print(f"[sentiment] ML model belum siap -> fallback LLM")
+        return _score_llm(teks, topik)
+
     if mode == "inline":
         return _score_inline(teks, topik)
 

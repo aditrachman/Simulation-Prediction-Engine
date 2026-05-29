@@ -1608,6 +1608,7 @@ export default function VoxSwarmDashboard() {
   const [topikHash,      setTopikHash]      = useState(null);
   const [prediksiSource, setPrediksiSource] = useState(null);   // "ml" | "rule_based"
   const [prediksiNote,   setPrediksiNote]   = useState(null);
+  const [predictionSourceDetail, setPredictionSourceDetail] = useState(null); // dari field prediction_source
   // ── State feedback ground truth ──
   const [feedbackLabel,      setFeedbackLabel]      = useState("Konsensus");
   const [feedbackConf,       setFeedbackConf]       = useState(1.0);
@@ -1640,6 +1641,7 @@ export default function VoxSwarmDashboard() {
     setTopikHash(null);
     setPrediksiSource(null);
     setPrediksiNote(null);
+    setPredictionSourceDetail(null);
     setFeedbackResult(null);
     setFeedbackLabel("Konsensus");   // reset pilihan label feedback
     setFeedbackConf(1.0);            // reset confidence ke default
@@ -1669,6 +1671,7 @@ export default function VoxSwarmDashboard() {
       setTopikHash(hasilData?.topik_hash ?? null);
       setPrediksiSource(hasilData?.prediksi_source ?? null);
       setPrediksiNote(hasilData?.ml_info?.note ?? null);
+      setPredictionSourceDetail(hasilData?.prediction_source ?? null);
       setFeedbackResult(null);   // reset feedback panel
       // Fetch ML data untuk ekspor PDF (parallel, tidak block UI)
       Promise.all([
@@ -1966,6 +1969,26 @@ export default function VoxSwarmDashboard() {
                       <span className="w-8 shrink-0 text-right text-xs font-bold" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
                     </div>
                   ))}
+                  {/* Disclamer sumber prediksi */}
+                  {predictionSourceDetail && (
+                    <div className="mt-2 rounded-lg border border-white/5 bg-white/3 px-3 py-2">
+                      <p className="text-[10px] text-slate-600 leading-relaxed">
+                        Sumber prediksi: <span className="text-slate-400 font-medium">
+                          {predictionSourceDetail.prediksi === "llm_analisis" ? "analisis LLM" : "aturan heuristic"}
+                        </span>
+                        {predictionSourceDetail.ml_aktif && (
+                          <span className="text-slate-400"> · ML <span className="text-emerald-400">aktif</span></span>
+                        )}
+                        {!predictionSourceDetail.ml_aktif && (
+                          <span className="text-slate-600"> · ML <span className="text-amber-500">nonaktif</span></span>
+                        )}
+                        · keyakinan: heuristic
+                      </p>
+                      <p className="text-[9px] text-slate-700 mt-0.5">
+                        Simulasi eksploratif — bukan prediksi faktual
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </Kartu>
@@ -1992,8 +2015,8 @@ export default function VoxSwarmDashboard() {
               <Kartu>
                 <JudulSeksi>📊 Peta Dukungan — Babak {rondeAktif + 1}</JudulSeksi>
                 <p className="mb-4 text-xs text-slate-500">Skor 0 = sangat menolak, 100 = sangat mendukung.</p>
-                <div style={{ height: 220 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                <div style={{ height: 220, width: '100%' }}>
+                  <ResponsiveContainer width="100%" height={220} minWidth={0}>
                     <BarChart data={dataBar} margin={{ bottom: 0 }}>
                       <XAxis dataKey="namaLabel" interval={0} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0,100]} hide />
@@ -2029,8 +2052,8 @@ export default function VoxSwarmDashboard() {
                     <span className="text-slate-700">Netral (0)</span>
                     <span>Mendukung →</span>
                   </div>
-                  <div style={{ height: 210 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div style={{ height: 210, width: '100%' }}>
+                    <ResponsiveContainer width="100%" height={210} minWidth={0}>
                       <LineChart data={dataTren} margin={{ left: 8, right: 8, top: 4, bottom: 4 }}>
                         {/* Garis bantu tengah (netral = 0) */}
                         <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />

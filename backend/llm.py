@@ -54,7 +54,7 @@ RETRY_MAX         = int(os.getenv("RETRY_MAX",         "4"))
 RETRY_BASE_DELAY  = float(os.getenv("RETRY_BASE_DELAY",  "5.0"))
 AGENT_CALL_DELAY  = float(os.getenv("AGENT_CALL_DELAY",  "3.0"))   # dinaikkan dari 2.0 → kompensasi token lebih besar
 ROUND_DELAY       = float(os.getenv("ROUND_DELAY",       "3.0"))
-SENTIMENT_MODE    = os.getenv("SENTIMENT_MODE", "llm")             # "llm" (default, akurat) atau "inline" (hemat token)
+SENTIMENT_MODE    = os.getenv("SENTIMENT_MODE", "llm")             # "ml" (deterministik), "llm" (akurat), atau "inline" (hemat token)
 CACHE_TTL         = int(os.getenv("CACHE_TTL",           "3600"))  # detik, default 1 jam; 0 = cache selamanya
 
 FREE_TIER_MODE = os.getenv("FREE_TIER_MODE", "false").lower() in {"1", "true", "yes", "on"}
