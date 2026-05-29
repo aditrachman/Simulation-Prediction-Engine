@@ -295,10 +295,11 @@ function buildMLSection(mlData) {
 function buildQualitySection(hasil) {
   const q = hasil?.simulation_quality;
   if (!q) return "";
-  const pct = Math.round((q.score ?? 0) * 100);
+  const pct = q.score_persen ?? Math.round((q.score ?? 0) * 100);
   const color = q.tier === "high" ? "#16a34a" : q.tier === "medium" ? "#d97706" : "#dc2626";
   const mode = hasil?.runtime_mode?.free_tier_like ? "Mode hemat" : "Mode penuh";
-  const limitations = (q.limitations ?? []).map(item => `<li>${item}</li>`).join("");
+  const kelebihan = (q.kelebihan ?? []).map(item => `<li style="color:#166534">${item}</li>`).join("");
+  const keterbatasan = (q.keterbatasan ?? []).map(item => `<li style="color:#78350f">${item}</li>`).join("");
   return `
     <div class="section no-break">
       <div class="section-title">Kualitas Simulasi</div>
@@ -306,19 +307,118 @@ function buildQualitySection(hasil) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div>
             <p style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">${mode}</p>
-            <p style="font-size:14px;font-weight:800;color:#1e293b;margin:0">${q.label ?? "Kualitas simulasi"}</p>
+            <p style="font-size:14px;font-weight:800;color:#1e293b;margin:0">${q.label ?? "Simulasi"}</p>
           </div>
           <span style="font-size:20px;font-weight:900;color:${color}">${pct}%</span>
         </div>
-        <p style="font-size:11px;color:#475569;line-height:1.6;margin-bottom:8px">${q.interpretation ?? "Hasil ini bersifat eksploratif."}</p>
-        <p style="font-size:10px;color:#64748b;margin-bottom:4px">
+        <p style="font-size:11px;color:#475569;line-height:1.6;margin-bottom:8px">${q.ringkasan ?? q.interpretation ?? "Hasil ini bersifat eksploratif."}</p>
+        <p style="font-size:10px;color:#64748b;margin-bottom:8px">
           Estimasi LLM calls: <strong>${q.estimated_llm_calls ?? hasil?.runtime_mode?.estimated_llm_calls ?? "-"}</strong>
           &nbsp;·&nbsp; Sumber real: <strong>${q.real_context_sources ?? "-"}</strong>
           &nbsp;·&nbsp; Relevansi konteks: <strong>${q.avg_context_relevance ?? "-"}</strong>
         </p>
-        ${limitations ? `<ul style="font-size:10px;color:#78350f;line-height:1.6;margin:8px 0 0 16px">${limitations}</ul>` : ""}
+        ${kelebihan ? `<p style="font-size:10px;font-weight:700;color:#166534;margin:6px 0 2px">Kelebihan</p><ul style="font-size:10px;line-height:1.6;margin:0 0 6px 16px">${kelebihan}</ul>` : ""}
+        ${keterbatasan ? `<p style="font-size:10px;font-weight:700;color:#78350f;margin:6px 0 2px">Keterbatasan</p><ul style="font-size:10px;line-height:1.6;margin:0 0 0 16px">${keterbatasan}</ul>` : ""}
       </div>
     </div>`;
+}
+
+// ── Builder: Explainability HTML ──────────────────────────────────────
+function buildExplainabilitySection(hasil) {
+  const metrics = hasil?.simulation_metrics ?? {};
+  const report = hasil?.explainability_report ?? {};
+  const events = hasil?.event_explanations ?? [];
+
+  let html = `
+    <div class="section no-break">
+      <div class="section-title">Explainability — Kenapa Hasilnya Begitu?</div>`;
+
+  // Metrics baris
+  if (metrics.polarization_score !== undefined) {
+    const pct = (v) => Math.round((v ?? 0) * 100);
+    html += `
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#f8fafc">
+          <p style="font-size:10px;color:#64748b;margin-bottom:2px">Polarisasi</p>
+          <p style="font-size:18px;font-weight:900;color:#dc2626">${pct(metrics.polarization_score)}%</p>
+          <div style="height:6px;background:#e2e8f0;border-radius:99px;margin-top:4px"><div style="height:100%;width:${pct(metrics.polarization_score)}%;background:#dc2626;border-radius:99px"></div></div>
+        </div>
+        <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#f8fafc">
+          <p style="font-size:10px;color:#64748b;margin-bottom:2px">Konsensus</p>
+          <p style="font-size:18px;font-weight:900;color:#16a34a">${pct(metrics.consensus_score)}%</p>
+          <div style="height:6px;background:#e2e8f0;border-radius:99px;margin-top:4px"><div style="height:100%;width:${pct(metrics.consensus_score)}%;background:#16a34a;border-radius:99px"></div></div>
+        </div>
+        ${metrics.event_count !== undefined ? `
+        <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#f8fafc">
+          <p style="font-size:10px;color:#64748b;margin-bottom:2px">Event</p>
+          <p style="font-size:18px;font-weight:900;color:#d97706">${metrics.event_count}x</p>
+        </div>` : ""}
+      </div>`;
+  }
+
+  // Ringkasan
+  if (report.ringkasan) {
+    html += `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+      <p style="font-size:10px;font-weight:700;color:#4338ca;margin-bottom:4px">Ringkasan</p>
+      <p style="font-size:11px;color:#374151;line-height:1.7">${report.ringkasan}</p>
+    </div>`;
+  }
+
+  // Penyebab
+  if (report.penyebab?.length > 0) {
+    html += `<p style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Penyebab</p><ul style="margin:0 0 10px 18px">`;
+    report.penyebab.forEach(p => { html += `<li style="font-size:11px;color:#374151;margin-bottom:3px">${p}</li>`; });
+    html += `</ul>`;
+  }
+
+  // Konflik
+  if (report.konflik) {
+    html += `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <p style="font-size:10px;font-weight:700;color:#92400e;margin-bottom:2px">Konflik & Polarisasi</p>
+      <p style="font-size:11px;color:#78350f;line-height:1.7">${report.konflik}</p>
+    </div>`;
+  }
+
+  // Event explanations
+  if (events.length > 0) {
+    html += `<p style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 6px">Dampak Event (${events.length})</p>`;
+    events.forEach(ev => {
+      const tipeColor = { intervensi: "#d97706", berita_baru: "#4338ca", pernyataan_pemerintah: "#16a34a", protes: "#dc2626", eksternal: "#7c3aed" }[ev.tipe] ?? "#4338ca";
+      html += `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="width:8px;height:8px;border-radius:99px;background:${tipeColor}"></span>
+          <span style="font-size:11px;font-weight:700;color:#1e293b">Ronde ${ev.ronde}: ${ev.deskripsi}</span>
+        </div>`;
+      if (ev.terdampak?.length > 0) {
+        html += `<p style="font-size:10px;color:#64748b;margin:4px 0 2px">Agen terdampak:</p>`;
+        ev.terdampak.forEach(t => {
+          const impactColor = t.arah === "mendukung" ? "#16a34a" : "#dc2626";
+          html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span style="font-size:10px;color:#374151;width:100px">${t.nama}</span>
+            <div style="flex:1;height:5px;background:#e2e8f0;border-radius:99px"><div style="height:100%;width:${Math.min(Math.abs(t.impact) * 100, 100)}%;background:${impactColor};border-radius:99px"></div></div>
+            <span style="font-size:10px;font-weight:700;color:${impactColor};width:40px;text-align:right">${t.impact > 0 ? "+" : ""}${t.impact}</span>
+          </div>`;
+        });
+      }
+      html += `</div>`;
+    });
+  }
+
+  // Keyakinan
+  if (report.keyakinan) {
+    html += `<div style="background:#f1f5f9;border-radius:8px;padding:10px 12px;margin-top:12px">
+      <p style="font-size:10px;font-weight:700;color:#475569;margin-bottom:2px">Keyakinan Sistem</p>
+      <p style="font-size:10px;color:#64748b">${report.keyakinan}</p>
+    </div>`;
+  }
+
+  // Disclaimer
+  if (report.disclaimer) {
+    html += `<p style="font-size:9px;color:#94a3b8;font-style:italic;margin-top:8px">${report.disclaimer}</p>`;
+  }
+
+  html += `</div>`;
+  return html;
 }
 
 function buildCSS() {
@@ -357,7 +457,7 @@ function buildCSS() {
 }
 
 // ── Builder: HTML dokumen lengkap ─────────────────────────────────────────────
-function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML, mlData }) {
+function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML, mlData, explainHTML }) {
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -393,6 +493,8 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
 </div>
 
 ${buildQualitySection(hasil)}
+
+${explainHTML || ""}
 
 <div class="section no-break">
   <div class="section-title">Prediksi Aktor Kunci &amp; Swing Voter</div>
@@ -460,6 +562,7 @@ export function eksporPDF(hasil, topik, analisis, aktorAnalisis, mlData = null) 
     aktorKunciHTML: buildAktorKunciHTML(aktorAnalisis?.aktor_kunci ?? []),
     swingVoterHTML: buildSwingVoterHTML(aktorAnalisis?.swing_voter ?? []),
     mlData,
+    explainHTML:    buildExplainabilitySection(hasil),
   });
 
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });

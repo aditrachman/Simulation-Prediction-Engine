@@ -498,6 +498,106 @@ def predict(text: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Explainability — word-level contribution
+# ---------------------------------------------------------------------------
+
+def explain(text: str, top_n: int = 5) -> Optional[dict]:
+    """
+    Analisis kontribusi kata per kata terhadap prediksi sentimen.
+
+    Returns:
+        {
+            "text": str,
+            "label": "positif"|"netral"|"negatif",
+            "confidence": float,
+            "contributions": [
+                {"kata": str, "kontribusi": float, "arah": "positif"|"netral"|"negatif"},
+                ...
+            ],
+            "top_positive": [{"kata": str, "kontribusi": float}, ...],
+            "top_negative": [{"kata": str, "kontribusi": float}, ...],
+        }
+        atau None jika model belum tersedia.
+    """
+    pipeline = _load_model()
+    if pipeline is None:
+        return None
+
+    cleaned = _preprocess(text)
+    if not cleaned:
+        return None
+
+    try:
+        vectorizer = pipeline.named_steps["tfidf"]
+        clf = pipeline.named_steps["clf"]
+        classes = list(clf.classes_)
+        # Pastikan urutan class konsisten: positif, netral, negatif
+        label_idx = {lbl: i for i, lbl in enumerate(classes)}
+
+        # Vectorize
+        vec = vectorizer.transform([cleaned])
+        feature_names = vectorizer.get_feature_names_out()
+
+        # Coefficients per class
+        coefs = clf.coef_  # shape (n_classes, n_features)
+
+        # Prediksi
+        probs = pipeline.predict_proba([cleaned])[0]
+        pred_idx = probs.argmax()
+        label = str(classes[pred_idx])
+        confidence = float(probs[pred_idx])
+
+        # Tokens yang muncul di teks
+        tokens = cleaned.split()
+        contributions = []
+        for token in tokens:
+            # Cari feature index untuk token ini
+            matches = [i for i, name in enumerate(feature_names) if name == token]
+            if not matches:
+                continue
+            fi = matches[0]
+            # Ambil koefisien untuk class yang diprediksi
+            coef_val = float(coefs[pred_idx, fi])
+            # TF-IDF value
+            tfidf_val = float(vec[0, fi])
+            kontribusi = round(coef_val * tfidf_val, 4)
+
+            # Tentukan arah kontribusi
+            if label == "positif":
+                arah = "positif" if kontribusi > 0 else ("negatif" if kontribusi < 0 else "netral")
+            elif label == "negatif":
+                arah = "negatif" if kontribusi > 0 else ("positif" if kontribusi < 0 else "netral")
+            else:
+                arah = "netral"
+
+            contributions.append({
+                "kata": token,
+                "kontribusi": abs(round(kontribusi, 4)),
+                "arah": arah,
+            })
+
+        # Sort by absolute contribution
+        contributions.sort(key=lambda x: x["kontribusi"], reverse=True)
+
+        # Top positive/negative contributors
+        top_pos = [c for c in contributions if c["arah"] == "positif"][:top_n]
+        top_neg = [c for c in contributions if c["arah"] == "negatif"][:top_n]
+
+        return {
+            "text": text,
+            "label": label,
+            "confidence": round(confidence, 3),
+            "contributions": contributions[:top_n * 2],
+            "top_positive": top_pos,
+            "top_negative": top_neg,
+        }
+
+    except Exception as exc:
+        print(f"[sentiment_ml] Explain error: {exc}")
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
 

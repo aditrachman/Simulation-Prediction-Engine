@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .metrics import compute_polarization, compute_volatility, compute_conflict_score
+from .metrics import compute_polarization, compute_consensus, compute_volatility, compute_conflict_score
 
 
 def _label_skor(skor: float) -> str:
@@ -13,12 +13,6 @@ def _label_skor(skor: float) -> str:
     if skor < -0.2:
         return "menolak"
     return "netral"
-
-
-def _skenario_tertinggi(prediksi: dict) -> str:
-    if not prediksi:
-        return "tidak dapat ditentukan"
-    return max(prediksi, key=prediksi.get)
 
 
 def _analisis_penyebab(sentimen_agregat: dict, aktor_analisis: dict) -> list[str]:
@@ -117,14 +111,13 @@ def generate_report(hasil: dict) -> dict:
 
     # Metrics
     polarization = compute_polarization(sentimen_agregat)
+    consensus = compute_consensus(sentimen_agregat)
     conflict = compute_conflict_score(sentimen_agregat)
     volatility = compute_volatility(sentimen_agregat)
 
-    # Ringkasan
-    skenario = _skenario_tertinggi(prediksi)
+    # Ringkasan — pakai metrik aktual, bukan nama skenario dari prediksi
     ringkasan = (
-        f"Simulasi ini menghasilkan skenario '{skenario}' "
-        f"(polarisasi {polarization:.0%}, konflik {conflict:.0%}). "
+        f"Polarisasi {polarization:.0%}, konsensus {consensus:.0%}, konflik {conflict:.0%}. "
     )
 
     if polarization > 0.5:
@@ -162,10 +155,25 @@ def generate_report(hasil: dict) -> dict:
     event_list = _analisis_event(events)
 
     # Keyakinan
-    keyakinan = (
-        f"Keyakinan sistem: {confidence:.0%}. "
-        f"{reasoning[:200] if reasoning else 'Prediksi berdasarkan distribusi sentimen akhir agen.'}"
-    )
+    if not isinstance(confidence, (int, float)):
+        confidence = 0.0
+    if not isinstance(reasoning, str):
+        reasoning = ""
+
+    # Tambah hitungan aktual posisi agen untuk konteks
+    skor_akhir = {}
+    for nama, tren in sentimen_agregat.items():
+        if tren:
+            skor_akhir[nama] = tren[-1]
+    n_pos = sum(1 for s in skor_akhir.values() if s > 0.2)
+    n_neg = sum(1 for s in skor_akhir.values() if s < -0.2)
+    n_net = len(skor_akhir) - n_pos - n_neg
+    posisi_info = f"({n_pos} mendukung, {n_neg} menolak, {n_net} netral dari {len(skor_akhir)} agen)"
+
+    if reasoning:
+        keyakinan = f"Keyakinan sistem: {confidence:.0%}. {reasoning[:200]} {posisi_info}."
+    else:
+        keyakinan = f"Keyakinan sistem: {confidence:.0%}. {posisi_info}."
 
     return {
         "ringkasan": ringkasan,

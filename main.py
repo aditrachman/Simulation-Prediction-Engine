@@ -16,6 +16,7 @@ from typing import Literal, Optional
 from backend.agents import get_agents, get_all_categories
 from backend.agent_factory import get_contextual_agents
 from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
+from backend import sentiment_ml
 from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
 from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
 from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model
@@ -227,6 +228,21 @@ class CompareRequest(BaseModel):
     )
 
 
+class ExplainRequest(BaseModel):
+    teks: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="Teks pendapat yang ingin dijelaskan sentimennya.",
+        examples=["Data menunjukkan kebijakan ini efektif dan berdampak positif"],
+    )
+    topik: str = Field(
+        default="",
+        max_length=100,
+        description="Topik isu (opsional, untuk konteks LLM).",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -426,6 +442,61 @@ def start_sim(payload: SimRequest, request: Request):
             "reddit":       konteks_real.get("reddit", [])[:5],
             "timestamp":    konteks_real.get("timestamp", ""),
         },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Explainability Endpoint
+# ---------------------------------------------------------------------------
+
+@app.post("/explain", tags=["Simulation"])
+def explain_sentiment(payload: ExplainRequest):
+    """
+    Jelaskan sentimen dari satu teks pendapat.
+
+    Menggunakan ML (sentiment_ml.explain) untuk menampilkan kontribusi
+    tiap kata terhadap prediksi. Jika ML tidak tersedia, fallback ke
+    LLM + heuristic.
+
+    Returns:
+        {
+            "teks": str,
+            "sentimen": {"label": str, "skor": float},
+            "ml_explain": dict | None,
+            "source": "ml" | "llm" | "inline",
+        }
+    """
+    # Coba ML explain dulu
+    if sentiment_ml.is_available():
+        ml_exp = sentiment_ml.explain(payload.teks)
+        if ml_exp is not None:
+            label = ml_exp["label"]
+            conf = ml_exp["confidence"]
+            if label == "positif":
+                skor = round(conf * 0.8 + 0.2, 2)
+            elif label == "negatif":
+                skor = round(-(conf * 0.8 + 0.2), 2)
+            else:
+                skor = 0.0
+            return {
+                "teks": payload.teks,
+                "sentimen": {"label": label, "skor": max(-1.0, min(1.0, skor))},
+                "ml_explain": {
+                    "confidence": ml_exp["confidence"],
+                    "contributions": ml_exp["contributions"],
+                    "top_positive": ml_exp["top_positive"],
+                    "top_negative": ml_exp["top_negative"],
+                },
+                "source": "ml",
+            }
+
+    # Fallback ke LLM
+    sentimen = score_sentiment(payload.teks, payload.topik)
+    return {
+        "teks": payload.teks,
+        "sentimen": sentimen,
+        "ml_explain": None,
+        "source": "llm",
     }
 
 

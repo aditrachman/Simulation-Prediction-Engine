@@ -736,16 +736,19 @@ const QualityBadge = ({ quality, runtimeMode }) => {
     high: "bg-emerald-900/40 border-emerald-500/40 text-emerald-300",
     medium: "bg-amber-900/40 border-amber-500/40 text-amber-300",
     low: "bg-red-900/40 border-red-500/40 text-red-300",
+    minimal: "bg-slate-800 border-white/10 text-slate-400",
   }[tier] ?? "bg-slate-800 border-white/10 text-slate-400";
-  const pct = Math.round((quality.score ?? 0) * 100);
+  const pct = quality.score_persen ?? Math.round((quality.score ?? 0) * 100);
   const mode = runtimeMode?.free_tier_like ? "Mode hemat" : "Mode penuh";
-  const limitations = (quality.limitations ?? []).join("\n");
+  const kelebihan = (quality.kelebihan ?? []).map(s => `+ ${s}`).join("\n");
+  const keterbatasan = (quality.keterbatasan ?? []).map(s => `- ${s}`).join("\n");
+  const detail = [kelebihan, keterbatasan].filter(Boolean).join("\n");
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold cursor-help ${style}`}
-      title={`${mode} · skor kualitas ${pct}%${limitations ? `\n${limitations}` : ""}`}
+      title={`${mode} · skor ${pct}%${detail ? `\n\n${detail}` : ""}`}
     >
-      {mode} · {quality.label ?? "Kualitas simulasi"} {pct}%
+      {mode} · {quality.label ?? "Simulasi"} {pct}%
     </span>
   );
 };
@@ -1366,6 +1369,187 @@ const PanelPerbandingan = ({ riwayatSim, hasil }) => {
 };
 
 // ─── Komponen: Panel Crowd Agent (Swarm-lite Phase 8) ─────────────────
+// ─── Komponen: Explainability Report ──────────────────────────────────
+const PanelExplainability = ({ hasil }) => {
+  const [buka, setBuka] = useState({});
+
+  // Event explanations
+  const eventExplanations = hasil?.event_explanations ?? [];
+
+  // Explainability report
+  const report = hasil?.explainability_report ?? {};
+
+  // Simulation metrics
+  const metrics = hasil?.simulation_metrics ?? {};
+
+  if (!eventExplanations.length && !report.ringkasan) return null;
+
+  const metricItems = [
+    { label: "Polarisasi", value: metrics.polarization_score, warna: "#ef4444", format: "pct" },
+    { label: "Konsensus", value: metrics.consensus_score, warna: "#22c55e", format: "pct" },
+    { label: "Konflik", value: hasil?.explainability_report?.konflik ? null : null, warna: "#f59e0b", format: "pct" },
+  ].filter(m => m.value !== null && m.value !== undefined);
+
+  return (
+    <Kartu>
+      <JudulSeksi>🔍 Explainability — Kenapa Hasilnya Begitu?</JudulSeksi>
+
+      {/* ── Metric ringkasan ── */}
+      {metricItems.length > 0 && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {[
+            { label: "Polarisasi", value: metrics.polarization_score, warna: "#ef4444", tooltip: "Seberapa terpecah pendapat agen (0=konsensus, 1=terbelah)" },
+            { label: "Konsensus", value: metrics.consensus_score, warna: "#22c55e", tooltip: "Tingkat kesepakatan antar agen (0=terpolarisasi, 1=konsensus)" },
+            ...(metrics.event_count !== undefined ? [{ label: "Event", value: metrics.event_count, warna: "#f59e0b", tooltip: "Jumlah intervensi/event dalam simulasi", suffix: "x" }] : []),
+          ].map((m, i) => (
+            <div key={i} className="group relative rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
+              <p className="text-lg font-bold" style={{ color: m.warna }}>
+                {m.suffix ? `${m.value}${m.suffix}` : `${Math.round(m.value * 100)}%`}
+              </p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full transition-all" style={{ width: `${m.value * 100}%`, backgroundColor: m.warna }} />
+              </div>
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2 py-1 text-[10px] text-slate-300 opacity-0 shadow-lg transition group-hover:opacity-100">
+                {m.tooltip}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Ringkasan ── */}
+      {report.ringkasan && (
+        <div className="mb-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+          <p className="text-xs text-indigo-300 font-semibold mb-1">Ringkasan</p>
+          <p className="text-sm leading-6 text-slate-300">{report.ringkasan}</p>
+        </div>
+      )}
+
+      {/* ── Penyebab ── */}
+      {report.penyebab?.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-slate-500 font-semibold mb-2">Penyebab</p>
+          <ul className="space-y-1.5">
+            {report.penyebab.map((p, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
+                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
+                {p}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ── Konflik ── */}
+      {report.konflik && (
+        <div className="mb-4">
+          <p className="text-xs text-slate-500 font-semibold mb-2">Konflik & Polarisasi</p>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+            <p className="text-xs text-amber-300 leading-6">{report.konflik}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Aktor ── */}
+      {report.aktor?.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-slate-500 font-semibold mb-2">Analisis Aktor</p>
+          <ul className="space-y-1.5">
+            {report.aktor.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
+                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                {a}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ── Event Explanations ── */}
+      {eventExplanations.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-slate-500 font-semibold mb-2">
+            Dampak Event ({eventExplanations.length})
+          </p>
+          <div className="space-y-2">
+            {eventExplanations.map((ev, i) => {
+              const tipeWarna = {
+                intervensi: "#f59e0b",
+                berita_baru: "#6366f1",
+                pernyataan_pemerintah: "#22c55e",
+                protes: "#ef4444",
+                eksternal: "#8b5cf6",
+              }[ev.tipe] ?? "#6366f1";
+              const isOpen = buka[i] ?? false;
+              return (
+                <div key={i} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                  <button
+                    onClick={() => setBuka(p => ({ ...p, [i]: !isOpen }))}
+                    className="flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-white/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tipeWarna }} />
+                      <span className="text-xs font-medium text-slate-300">
+                        Ronde {ev.ronde}: {ev.deskripsi?.slice(0, 50)}{ev.deskripsi?.length > 50 ? "..." : ""}
+                      </span>
+                    </div>
+                    <span className="text-slate-600 text-xs">{isOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-white/10 px-3 py-3">
+                      <p className="text-xs text-slate-400 mb-2">{ev.deskripsi}</p>
+                      {ev.terdampak?.length > 0 && (
+                        <>
+                          <p className="text-[10px] text-slate-500 font-semibold mb-1">Agen terdampak:</p>
+                          <div className="space-y-1">
+                            {ev.terdampak.map((t, j) => (
+                              <div key={j} className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5">
+                                <span className="text-xs text-slate-300">{t.nama}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${Math.min(Math.abs(t.impact) * 100, 100)}%`,
+                                        backgroundColor: t.arah === "mendukung" ? "#22c55e" : "#ef4444",
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold" style={{ color: t.arah === "mendukung" ? "#22c55e" : "#ef4444" }}>
+                                    {t.impact > 0 ? "+" : ""}{t.impact}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Keyakinan ── */}
+      {report.keyakinan && (
+        <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="text-[10px] text-slate-500 font-semibold mb-1">Keyakinan Sistem</p>
+          <p className="text-xs text-slate-400 leading-6">{report.keyakinan}</p>
+        </div>
+      )}
+
+      {/* ── Disclaimer ── */}
+      {report.disclaimer && (
+        <p className="text-[10px] text-slate-600 italic">{report.disclaimer}</p>
+      )}
+    </Kartu>
+  );
+};
+
 const PanelCrowd = ({ crowdData }) => {
   const [buka, setBuka] = useState(false);
 
@@ -2164,6 +2348,9 @@ export default function VoxSwarmDashboard() {
 
             {/* ── Graf Pengetahuan Interaktif (GraphRAG) ── */}
             <GrafKnowledge grafData={grafData} />
+
+            {/* ── Explainability Report ── */}
+            <PanelExplainability hasil={hasil} />
 
             {/* ── Feedback Ground Truth ── */}
             <PanelFeedback

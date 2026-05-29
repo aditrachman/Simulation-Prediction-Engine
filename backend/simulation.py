@@ -33,6 +33,7 @@ from .core.models import (
     SimulationEvent, simulation_result_to_state,
     AgentProfile, AgentAction, agent_dict_to_profile, agent_profile_to_dict,
 )
+from .core.reporting import generate_report
 from .core.event_system import (
     compute_event_impact,
     build_event_narrative,
@@ -672,7 +673,7 @@ def run_simulation(
     prediction_confidence = heuristic_result["confidence"]
     prediction_reasoning = heuristic_result["reasoning"]
 
-    return {
+    hasil_dict = {
         "ronde_detail":      ronde_detail,
         "graf_data":         graf_data,
         "analisis":          analisis_raw,
@@ -720,6 +721,10 @@ def run_simulation(
             "sentiment_mode": SENTIMENT_MODE,
         },
     }
+
+    hasil_dict["explainability_report"] = generate_report(hasil_dict)
+
+    return hasil_dict
 
 
 # ---------------------------------------------------------------------------
@@ -905,51 +910,109 @@ def _build_simulation_quality(
     estimated_llm_calls: int,
     tier: str = "free",
 ) -> dict:
-    """Nilai kualitas metodologis simulasi tanpa memanggil LLM."""
-    score = 1.0
+    """
+    Nilai kualitas metodologis simulasi tanpa memanggil LLM.
+
+    Skor awal 100%, dikurangi jika ada keterbatasan (GraphRAG mati, analisis
+    rule-based, dll.), ditambah jika ada keunggulan (ML sentiment, agen cukup).
+    Hasil akhir adalah persentase yang mencerminkan seberapa "kaya" simulasi ini.
+    """
+    score       = 1.0
     limitations = []
+    kelebihan   = []
 
     sentiment_mode_efektif = "inline" if tier == "free" else SENTIMENT_MODE
-    graph_llm_enabled = tier != "free" and not DISABLE_GRAPH_LLM
-    analysis_llm_enabled = tier != "free" and not DISABLE_FINAL_ANALYSIS_LLM
+    graph_llm_enabled      = tier != "free" and not DISABLE_GRAPH_LLM
+    analysis_llm_enabled   = tier != "free" and not DISABLE_FINAL_ANALYSIS_LLM
 
+    # ── Kelebihan ──
+    if sentiment_mode_efektif == "ml":
+        kelebihan.append(
+            "Sentimen pakai ML classifier — 0 LLM call, gratis, deterministik, "
+            "tidak kena rate limit."
+        )
+        score += 0.05  # bonus karena lebih efisien & stabil dari LLM
+    elif sentiment_mode_efektif == "llm":
+        kelebihan.append("Sentimen pakai LLM — paling akurat untuk kalimat kompleks.")
+
+    if n_agents >= 7:
+        kelebihan.append(f"{n_agents} agen — keragaman perspektif cukup luas.")
+    elif n_agents >= 5:
+        kelebihan.append(f"{n_agents} agen — variasi sudut pandang cukup.")
+
+    if jumlah_ronde >= 5:
+        kelebihan.append(f"{jumlah_ronde} ronde — dinamika opini bisa diamati dalam durasi panjang.")
+    elif jumlah_ronde >= 3:
+        kelebihan.append(f"{jumlah_ronde} ronde — cukup untuk melihat perubahan opini.")
+
+    # ── Keterbatasan ──
     if sentiment_mode_efektif == "inline":
         score -= 0.18
-        limitations.append("Sentiment scoring memakai mode inline, jadi pembacaan konteks/negasi lebih kasar.")
-    elif sentiment_mode_efektif == "ml":
-        limitations.append("Sentiment scoring memakai ML classifier — deterministik, 0 LLM call.")
+        limitations.append(
+            "Sentimen pakai mode inline (kata kunci) — kurang akurat untuk "
+            "kalimat kompleks, negasi ganda, atau ironi."
+        )
+
     if not graph_llm_enabled:
         score -= 0.12
-        limitations.append("GraphRAG LLM dimatikan, peta entitas dan relasi tidak diekstrak penuh.")
+        limitations.append(
+            "GraphRAG dinonaktifkan — peta entitas dan hubungan antar aktor "
+            "tidak diekstrak. Fitur ini opsional, tidak memengaruhi jalannya simulasi."
+        )
+
     if not analysis_llm_enabled:
         score -= 0.16
-        limitations.append("Analisis akhir memakai fallback rule-based, bukan narasi analis LLM.")
+        limitations.append(
+            "Analisis akhir pakai aturan otomatis (rule-based), bukan narasi "
+            "LLM. Ringkasan lebih pendek tapi tetap informatif."
+        )
+
     if n_agents < 5:
         score -= 0.12
-        limitations.append(f"Jumlah agen hanya {n_agents}; keragaman perspektif terbatas.")
+        limitations.append(
+            f"Hanya {n_agents} agen — variasi sudut pandang terbatas, "
+            f"hasil mungkin kurang mewakili dinamika opini publik."
+        )
+
     if jumlah_ronde < 3:
         score -= 0.12
-        limitations.append(f"Jumlah ronde hanya {jumlah_ronde}; dinamika perubahan opini masih pendek.")
+        limitations.append(
+            f"Hanya {jumlah_ronde} ronde — perubahan opini sulit diamati "
+            f"dalam durasi pendek."
+        )
 
+    # ── Hasil akhir ──
     score = max(0.0, min(1.0, round(score, 2)))
-    if score >= 0.8:
-        tier = "high"
-        label = "Eksplorasi kuat"
-    elif score >= 0.6:
-        tier = "medium"
-        label = "Eksplorasi menengah"
+
+    if score >= 0.80:
+        tier_label  = "high"
+        label       = "Simulasi Kaya"
+        ringkasan   = "Simulasi berjalan dengan konfigurasi yang baik."
+    elif score >= 0.60:
+        tier_label  = "medium"
+        label       = "Simulasi Standar"
+        ringkasan   = "Simulasi berjalan cukup, ada beberapa fitur yang tidak aktif."
+    elif score >= 0.40:
+        tier_label  = "low"
+        label       = "Simulasi Ringan"
+        ringkasan   = "Simulasi berjalan dalam mode hemat. Hasil layak dibaca sebagai eksplorasi awal."
     else:
-        tier = "low"
-        label = "Draft cepat"
+        tier_label  = "minimal"
+        label       = "Simulasi Cepat"
+        ringkasan   = "Simulasi minimalis — cocok untuk uji coba cepat."
 
     return {
-        "score": score,
-        "tier": tier,
-        "label": label,
+        "score":             score,
+        "score_persen":      round(score * 100),
+        "tier":              tier_label,
+        "label":             label,
+        "ringkasan":         ringkasan,
         "estimated_llm_calls": estimated_llm_calls,
-        "limitations": limitations,
-        "interpretation": (
-            "Hasil ini layak dibaca sebagai simulasi eksploratif, bukan prediksi faktual."
+        "kelebihan":         kelebihan,
+        "keterbatasan":      limitations,
+        "interpretation":    (
+            "Hasil ini layak dibaca sebagai simulasi eksploratif — "
+            "untuk melihat kemungkinan dinamika opini, bukan prediksi faktual."
         ),
     }
 
