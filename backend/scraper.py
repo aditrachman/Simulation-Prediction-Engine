@@ -9,6 +9,7 @@ import re
 import time
 import json
 import hashlib
+import math
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,13 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import xml.etree.ElementTree as ET
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    _SKLEARN_OK = True
+except ImportError:
+    _SKLEARN_OK = False
 
 # ---------------------------------------------------------------------------
 # Konfigurasi sumber RSS — semua gratis, tidak butuh API key
@@ -32,7 +40,7 @@ RSS_SOURCES = [
     {"nama": "Tirto",         "url": "https://tirto.id/rss",                                 "bahasa": "id"},
 ]
 
-# Reddit — pakai JSON API publik (tidak butuh OAuth untuk read-only)
+# Reddit — API JSON publik (gratis, tanpa OAuth)
 REDDIT_SUBREDDITS = [
     "indonesia",
     "IndonesiaNews",
@@ -264,12 +272,94 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
     return articles
 
 
+# ---------------------------------------------------------------------------
+# TF-IDF Relevance Scoring (0 LLM call, lebih akurat dari keyword counting)
+# ---------------------------------------------------------------------------
+
+_RE_CLEAN = re.compile(r"[^a-zA-Z0-9\s]")
+
+
+def _bersih_teks(teks: str) -> str:
+    """Lowercase, hapus non-alfanumerik, normalize whitespace."""
+    return _RE_CLEAN.sub(" ", teks.lower().strip())
+
+
+def _hitung_relevansi_tfidf(topik: str, items: list[dict], maks: int = 15) -> list[dict]:
+    """
+    Hitung relevansi items (berita/Reddit) terhadap topik
+    menggunakan TF-IDF + cosine similarity.
+
+    Fallback ke keyword counting sederhana jika sklearn tidak tersedia.
+    """
+    if not items:
+        return []
+
+    if not _SKLEARN_OK:
+        return _hitung_relevansi_keyword(topik, items, maks)
+
+    # Build corpus: topic first, then each item's text
+    topic_clean = _bersih_teks(topik)
+    texts = [topic_clean]
+
+    for item in items:
+        teks = _bersih_teks(item.get("judul", "") + " " + item.get("ringkasan", item.get("selftext", "")))
+        texts.append(teks)
+
+    if len(texts) < 2:
+        for item in items:
+            item["relevansi"] = 0.0
+        return items[:maks]
+
+    try:
+        vectorizer = TfidfVectorizer(
+            max_features=1000,
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+        )
+        matrix = vectorizer.fit_transform(texts)
+        topic_vec = matrix[0:1]
+        article_vecs = matrix[1:]
+
+        sims = cosine_similarity(topic_vec, article_vecs)[0]
+
+        for i, item in enumerate(items):
+            item["relevansi"] = round(float(sims[i]), 4)
+
+        items.sort(key=lambda x: -x.get("relevansi", 0))
+        return [it for it in items if it.get("relevansi", 0) > 0][:maks]
+
+    except Exception as exc:
+        print(f"[scraper] TF-IDF relevance error: {exc}, fallback keyword")
+        return _hitung_relevansi_keyword(topik, items, maks)
+
+
+def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> list[dict]:
+    """Fallback: keyword counting sederhana."""
+    kata_kunci = [k.lower() for k in topik.split() if len(k) > 3]
+    for item in items:
+        teks = (item.get("judul", "") + " " + item.get("ringkasan", item.get("selftext", ""))).lower()
+        item["relevansi"] = sum(1 for k in kata_kunci if k in teks)
+
+    items.sort(key=lambda x: -x.get("relevansi", 0))
+    seen = set()
+    hasil = []
+    for it in items:
+        idd = it.get("id", "")
+        if idd not in seen:
+            seen.add(idd)
+            hasil.append(it)
+    return hasil[:maks]
+
+
+# ---------------------------------------------------------------------------
+# Fetch News (RSS)
+# ---------------------------------------------------------------------------
+
 def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
     """
     Ambil berita terkini dari semua RSS source.
-    Filter yang relevan dengan topik (keyword matching sederhana).
+    Filter relevan dengan TF-IDF (fallback keyword counting).
     """
-    kata_kunci = [k.lower() for k in topik.split() if len(k) > 3]
     semua = []
 
     for src in RSS_SOURCES:
@@ -277,27 +367,17 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
         if not xml:
             continue
         articles = _parse_rss(xml, src["nama"])
+        semua.extend(articles)
 
-        relevan = []
-        for art in articles:
-            teks = (art["judul"] + " " + art["ringkasan"]).lower()
-            skor = sum(1 for k in kata_kunci if k in teks)
-            if skor > 0:
-                art["relevansi"] = skor
-                relevan.append(art)
-
-        relevan.sort(key=lambda x: -x.get("relevansi", 0))
-        semua.extend(relevan[:maks_per_sumber])
-
-    semua.sort(key=lambda x: -x.get("relevansi", 0))
-    seen  = set()
-    hasil = []
+    # Dedup by ID
+    seen = set()
+    unik = []
     for art in semua:
         if art["id"] not in seen:
             seen.add(art["id"])
-            hasil.append(art)
+            unik.append(art)
 
-    return hasil[:15]
+    return _hitung_relevansi_tfidf(topik, unik, maks=15)
 
 
 # ---------------------------------------------------------------------------
@@ -306,38 +386,10 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
 
 def fetch_reddit(topik: str, maks: int = 10) -> list[dict]:
     """
-    Ambil post Reddit relevan menggunakan JSON API publik.
+    DINONAKTIFKAN — Reddit tidak representatif untuk opini publik Indonesia.
+    Fungsinya dipertahankan agar kode yang merefer tetap jalan.
     """
-    kata_kunci = urllib.parse.quote(topik)
-    hasil = []
-    seen  = set()
-
-    url_search = f"https://www.reddit.com/search.json?q={kata_kunci}&sort=hot&limit=10&restrict_sr=false"
-    data = _fetch(url_search)
-    if data:
-        hasil.extend(_parse_reddit_json(data, "Reddit Search"))
-
-    for sub in REDDIT_SUBREDDITS:
-        url_sub = f"https://www.reddit.com/r/{sub}/search.json?q={kata_kunci}&sort=hot&limit=5&restrict_sr=true"
-        data = _fetch(url_sub)
-        if data:
-            hasil.extend(_parse_reddit_json(data, f"r/{sub}"))
-        time.sleep(0.3)
-
-    kata_list = [k.lower() for k in topik.split() if len(k) > 3]
-    dedup = []
-    for post in hasil:
-        if post["id"] in seen:
-            continue
-        seen.add(post["id"])
-        teks = (post["judul"] + " " + post.get("ringkasan", "")).lower()
-        skor = sum(1 for k in kata_list if k in teks)
-        post["relevansi"] = skor
-        if skor > 0 or not kata_list:
-            dedup.append(post)
-
-    dedup.sort(key=lambda x: (-x.get("relevansi", 0), -x.get("upvotes", 0)))
-    return dedup[:maks]
+    return []
 
 
 def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
@@ -381,19 +433,21 @@ def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
 
 def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
     """
-    Ambil data real dari berita + Reddit, gabungkan jadi briefing
+    Ambil data real dari berita RSS, gabungkan jadi briefing
     yang siap dipakai sebagai konteks agen sebelum simulasi dimulai.
+
+    Reddit dinonaktifkan — tidak representatif dan API tidak stabil.
 
     Cache:
       - Hit  → return langsung dari disk, 0 HTTP request
-      - Miss → fetch RSS + Reddit, simpan ke cache, return
+      - Miss → fetch RSS, simpan ke cache, return
       - TTL  → default 30 menit (CONTEXT_CACHE_TTL_MINUTES di .env)
       - force_refresh=True → skip cache, fetch ulang
 
     Returns:
         {
             "berita":    [...],
-            "reddit":    [...],
+            "reddit":    [],
             "briefing":  str,
             "total":     int,
             "timestamp": str,
@@ -408,14 +462,9 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
             return cached
     # ─────────────────────────────────────────────────────────────────────
 
-    from concurrent.futures import ThreadPoolExecutor
-
-    # Fetch paralel — berita & Reddit bersamaan
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        fut_berita = ex.submit(fetch_berita, topik)
-        fut_reddit = ex.submit(fetch_reddit, topik)
-        berita = fut_berita.result()
-        reddit = fut_reddit.result()
+    # Fetch berita dari RSS — 0 biaya, 0 API key
+    berita = fetch_berita(topik)
+    reddit = []
 
     # Bangun teks briefing ringkas
     baris = []
@@ -425,13 +474,6 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
         for i, art in enumerate(berita[:5], 1):
             ring = f" — {art['ringkasan'][:120]}..." if art["ringkasan"] else ""
             baris.append(f"  {i}. [{art['sumber']}] {art['judul']}{ring}")
-
-    if reddit:
-        baris.append("\n💬 DISKUSI PUBLIK (Reddit):")
-        for i, post in enumerate(reddit[:5], 1):
-            ring = f" — {post['ringkasan'][:100]}..." if post.get("ringkasan") else ""
-            meta = f" (👍 {post.get('upvotes', 0)}, 💬 {post.get('komentar', 0)})"
-            baris.append(f"  {i}. [{post['sumber']}] {post['judul']}{ring}{meta}")
 
     briefing = (
         f"=== DATA REAL TERKAIT TOPIK: {topik} ===\n"

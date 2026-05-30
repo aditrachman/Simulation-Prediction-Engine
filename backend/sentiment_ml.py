@@ -27,7 +27,7 @@ try:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import Pipeline
-    from sklearn.metrics import classification_report
+    from sklearn.metrics import classification_report, confusion_matrix, precision_recall_fscore_support
 
     _SKLEARN_AVAILABLE = True
 except ImportError:
@@ -415,7 +415,7 @@ def train(force: bool = False) -> dict:
             max_iter=1000,
             class_weight="balanced",
             random_state=42,
-            multi_class="multinomial",
+            # multi_class dihapus — deprecated sejak 1.5, default multinomial di 1.7+
         )),
     ])
 
@@ -620,6 +620,115 @@ def get_status() -> dict:
         "model_file": str(MODEL_FILE),
         "policy_samples": 1500,
     }
+
+
+# ---------------------------------------------------------------------------
+# Metrics — confusion matrix & per-class evaluation
+# ---------------------------------------------------------------------------
+
+_CLASS_ORDER = ["positif", "netral", "negatif"]
+
+def get_metrics() -> dict:
+    """
+    Evaluasi performa model sentimen (TF-IDF + LogisticRegression).
+
+    Compute confusion matrix 3x3, precision/recall/F1 per kelas
+    pada dataset training (SmSA + policy synthetic).
+
+    Returns dict (sama format dengan ml_pipeline.get_ml_metrics untuk
+    konsistensi frontend):
+        {
+            "ok": bool,
+            "message": str,
+            "n_samples": int,
+            "classes": ["positif", "netral", "negatif"],
+            "accuracy": float,
+            "accuracy_pct": int,
+            "confusion_matrix": [[int]],
+            "per_class": {kelas: {"precision": float, "recall": float, "f1": float, "support": int}},
+            "macro_avg": {"precision": float, "recall": float, "f1": float},
+            "weighted_avg": {"precision": float, "recall": float, "f1": float},
+            "training_accuracy": float,
+            "note": str,
+        }
+    """
+    if not _SKLEARN_AVAILABLE:
+        return {"ok": False, "message": "scikit-learn tidak terinstall."}
+
+    pipeline = _load_model()
+    if pipeline is None:
+        return {"ok": False, "message": "Model belum dilatih."}
+
+    try:
+        # Load dataset (sama seperti training)
+        raw = _load_dataset()
+        if not raw:
+            return {"ok": False, "message": "Dataset kosong.", "n_samples": 0}
+
+        texts = [_preprocess(t) for _, t in raw]
+        labels_true = [l for l, _ in raw]
+
+        # Predict
+        labels_pred = pipeline.predict(texts)
+
+        n = len(raw)
+        acc = pipeline.score(texts, labels_true)
+
+        # Confusion matrix — urut sesuai _CLASS_ORDER
+        cm = confusion_matrix(labels_true, labels_pred, labels=_CLASS_ORDER).tolist()
+
+        # Per-class metrics
+        precision_arr, recall_arr, f1_arr, support_arr = precision_recall_fscore_support(
+            labels_true, labels_pred,
+            labels=_CLASS_ORDER,
+            zero_division=0,
+        )
+
+        per_class = {}
+        for i, kelas in enumerate(_CLASS_ORDER):
+            per_class[kelas] = {
+                "precision": round(float(precision_arr[i]), 4),
+                "recall":    round(float(recall_arr[i]),    4),
+                "f1":        round(float(f1_arr[i]),        4),
+                "support":   int(support_arr[i]),
+            }
+
+        # Macro & weighted averages
+        macro_p, macro_r, macro_f, _ = precision_recall_fscore_support(
+            labels_true, labels_pred, average="macro", zero_division=0
+        )
+        weight_p, weight_r, weight_f, _ = precision_recall_fscore_support(
+            labels_true, labels_pred, average="weighted", zero_division=0
+        )
+
+        return {
+            "ok":               True,
+            "message":          "Evaluasi model sentimen berhasil.",
+            "n_samples":        n,
+            "classes":          _CLASS_ORDER,
+            "accuracy":         round(float(acc), 4),
+            "accuracy_pct":     round(float(acc) * 100),
+            "confusion_matrix": cm,
+            "per_class":        per_class,
+            "macro_avg": {
+                "precision": round(float(macro_p), 4),
+                "recall":    round(float(macro_r), 4),
+                "f1":        round(float(macro_f), 4),
+            },
+            "weighted_avg": {
+                "precision": round(float(weight_p), 4),
+                "recall":    round(float(weight_r), 4),
+                "f1":        round(float(weight_f), 4),
+            },
+            "training_accuracy": round(float(acc), 4),
+            "note": (
+                "Evaluasi pada dataset training yang sama (bukan hold-out). "
+                "Angka ini optimistis — akurasi di dunia nyata mungkin lebih rendah."
+            ),
+        }
+
+    except Exception as exc:
+        return {"ok": False, "message": f"Evaluasi gagal: {exc}"}
 
 
 # ---------------------------------------------------------------------------

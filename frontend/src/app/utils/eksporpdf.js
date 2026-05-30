@@ -69,6 +69,53 @@ function buildPrediksiBar(prediksi) {
     </div>`).join("");
 }
 
+// ── BUG #1 FIX: Builder tabel perbandingan Heuristic vs ML Experimental ──────
+function buildPrediksiComparison(prediksiComparison) {
+  if (!prediksiComparison) return "";
+  const { heuristic, ml_experimental } = prediksiComparison;
+  if (!heuristic || !ml_experimental) return "";
+
+  const skenarios = ["Konsensus", "Polarisasi", "Status Quo"];
+  const rows = skenarios.map(sk => {
+    const h = heuristic.prediksi?.[sk] ?? "-";
+    const m = ml_experimental.prediksi?.[sk] ?? "-";
+    return `<tr>
+      <td style="font-size:11px;color:#374151;padding:6px 8px;font-weight:600">${sk}</td>
+      <td style="font-size:11px;text-align:center;color:#4338ca;font-weight:700;padding:6px 8px">${h}%</td>
+      <td style="font-size:11px;text-align:center;color:#7c3aed;padding:6px 8px">${m !== "-" ? m + "%" : "—"}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc">
+      <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">
+        Perbandingan Metode Prediksi
+      </p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f1f5f9">
+            <th style="font-size:10px;color:#475569;text-align:left;padding:5px 8px">Skenario</th>
+            <th style="font-size:10px;color:#4338ca;text-align:center;padding:5px 8px">
+              Heuristic ✅ <span style="font-weight:400">(Utama)</span>
+            </th>
+            <th style="font-size:10px;color:#7c3aed;text-align:center;padding:5px 8px">
+              ML 🧪 <span style="font-weight:400">(Eksperimental)</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <span style="font-size:9px;color:#4338ca;background:#eef2ff;padding:2px 8px;border-radius:99px">
+          ✅ Heuristic: ${heuristic.confidence} confidence — prediksi utama
+        </span>
+        <span style="font-size:9px;color:#7c3aed;background:#f5f3ff;padding:2px 8px;border-radius:99px">
+          🧪 ML: ${ml_experimental.label} — ${ml_experimental.note}
+        </span>
+      </div>
+    </div>`;
+}
+
 // ── Builder: HTML tabel evolusi memori per agen ───────────────────────────────
 function buildTabelMemori(rondeList) {
   const memoriPerAgen = {};
@@ -404,11 +451,16 @@ function buildExplainabilitySection(hasil) {
     });
   }
 
-  // Keyakinan
+  // BUG #4 FIX: Keyakinan — tampilkan 1 nilai confidence yang jelas, bukan 2 nilai contradiktif
   if (report.keyakinan) {
     html += `<div style="background:#f1f5f9;border-radius:8px;padding:10px 12px;margin-top:12px">
-      <p style="font-size:10px;font-weight:700;color:#475569;margin-bottom:2px">Keyakinan Sistem</p>
+      <p style="font-size:10px;font-weight:700;color:#475569;margin-bottom:4px">Keyakinan Sistem</p>
       <p style="font-size:10px;color:#64748b">${report.keyakinan}</p>
+      <p style="font-size:9px;color:#94a3b8;margin-top:4px;font-style:italic">
+        Catatan: Keyakinan dihitung dari kualitas simulasi (jumlah agen, ronde, data real).
+        Model ML terpisah (lihat tabel prediksi) bersifat eksperimental — 
+        keduanya adalah metrik berbeda dan tidak dapat dibandingkan langsung.
+      </p>
     </div>`;
   }
 
@@ -457,7 +509,7 @@ function buildCSS() {
 }
 
 // ── Builder: HTML dokumen lengkap ─────────────────────────────────────────────
-function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML, mlData, explainHTML }) {
+function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBar, prediksiComparisonHTML, tabelRonde, tabelMemori, penggerak, rekomendasi, aktorKunciHTML, swingVoterHTML, mlData, explainHTML }) {
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -489,7 +541,11 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
 
 <div class="section no-break">
   <div class="section-title">Prediksi Skenario</div>
+  <p style="font-size:10px;color:#64748b;margin-bottom:8px">
+    ✅ <strong>Prediksi Utama</strong> — berbasis analisis heuristic sentimen agen
+  </p>
   ${prediksiBar || "<p style='color:#94a3b8'>Tidak ada data prediksi.</p>"}
+  ${prediksiComparisonHTML || ""}
 </div>
 
 ${buildQualitySection(hasil)}
@@ -553,8 +609,11 @@ export function eksporPDF(hasil, topik, analisis, aktorAnalisis, mlData = null) 
     tanggal,
     hasil,
     rondeList,
-    narasi:         buildNarasi(analisis),
-    prediksiBar:    buildPrediksiBar(hasil.prediksi ?? {}),
+    narasi:                 buildNarasi(analisis),
+    prediksiBar:            buildPrediksiBar(hasil.prediksi ?? {}),
+    prediksiComparisonHTML: buildPrediksiComparison(
+      hasil.explainability_report?.prediksi_comparison ?? null
+    ),
     tabelRonde:     buildTabelRonde(rondeList),
     tabelMemori:    buildTabelMemori(rondeList),
     penggerak:      aktorAnalisis?.aktor_penggerak ?? "-",

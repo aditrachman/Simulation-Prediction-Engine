@@ -708,7 +708,25 @@ const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
 
 
 // ─── Komponen: Badge Sumber Prediksi ─────────────────────────────────
-const PrediksiSourceBadge = ({ source, note }) => {
+const SOURCE_BADGES = {
+  ml_model: { icon: "🤖", label: "ML Model", cls: "bg-green-900/40 border-green-500/40 text-green-300" },
+  llm_analysis: { icon: "🧠", label: "LLM Analysis", cls: "bg-indigo-900/40 border-indigo-500/40 text-indigo-300" },
+  heuristic_fallback: { icon: "📐", label: "Heuristic", cls: "bg-amber-900/40 border-amber-500/40 text-amber-300" },
+};
+
+const PrediksiSourceBadge = ({ source, detail, note }) => {
+  // New format: { method, confidence }
+  if (detail?.method) {
+    const badge = SOURCE_BADGES[detail.method] ?? SOURCE_BADGES.heuristic_fallback;
+    const conf = detail.confidence != null ? Math.round(detail.confidence * 100) : null;
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${badge.cls}`}>
+        {badge.icon} {badge.label}
+        {conf !== null && <span className="text-[10px] opacity-70">({conf}%)</span>}
+      </span>
+    );
+  }
+  // Old format: string ("ml" | "rule_based")
   if (!source) return null;
   if (source === "ml") {
     return (
@@ -905,7 +923,18 @@ const PanelMLMetrics = ({ apiBase }) => {
   const [metrics,  setMetrics]  = useState(null);
   const [debug,    setDebug]    = useState(null);
   const [mlStatus, setMlStatus] = useState(null);
+  const [sentimentMetrics, setSentimentMetrics] = useState(null);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
   const [loading,  setLoading]  = useState(false);
+
+  const fetchSentimentMetrics = () => {
+    setSentimentLoading(true);
+    fetch(`${apiBase}/sentiment-ml-metrics`)
+      .then(r => r.json())
+      .then(d => setSentimentMetrics(d.metrics ?? null))
+      .catch(() => setSentimentMetrics(null))
+      .finally(() => setSentimentLoading(false));
+  };
 
   const fetchMetrics = () => {
     setLoading(true);
@@ -922,6 +951,8 @@ const PanelMLMetrics = ({ apiBase }) => {
       .catch(() => setMetrics(null))
       .finally(() => setLoading(false));
   };
+
+  useEffect(() => { fetchMetrics(); fetchSentimentMetrics(); }, []);
 
   useEffect(() => { fetchMetrics(); }, []);
 
@@ -1185,16 +1216,174 @@ const PanelMLMetrics = ({ apiBase }) => {
       )}
 
       {/* ── Timestamp model terakhir dilatih ── */}
-      {mlStatus?.model_trained_at && (
-        <p className="text-[10px] text-slate-600 mt-2">
-          Model terakhir dilatih:{" "}
-          <span className="text-slate-400">
-            {new Date(mlStatus.model_trained_at).toLocaleString("id-ID")}
-          </span>
-        </p>
-      )}
-    </Kartu>
-  );
+        {mlStatus?.model_trained_at && (
+          <p className="text-[10px] text-slate-600 mt-2">
+            Model terakhir dilatih:{" "}
+            <span className="text-slate-400">
+              {new Date(mlStatus.model_trained_at).toLocaleString("id-ID")}
+            </span>
+          </p>
+        )}
+
+        {/* ─── SENTIMEN METRICS ─── */}
+        <div className="mt-8 border-t border-white/10 pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <JudulSeksi>🔤 Akurasi Sentimen ML per Kata</JudulSeksi>
+            <button
+              onClick={fetchSentimentMetrics}
+              className="text-[10px] text-slate-600 hover:text-indigo-400 transition border border-white/10 rounded-lg px-2.5 py-1 font-bold"
+            >
+              ↻ Refresh
+            </button>
+          </div>
+          <p className="mb-4 text-xs text-slate-400 leading-relaxed">
+            Evaluasi model TF-IDF + LogisticRegression untuk klasifikasi sentimen
+            (positif/netral/negatif) pada dataset training.
+          </p>
+
+          {sentimentLoading && (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Memuat evaluasi model sentimen...
+            </div>
+          )}
+
+          {!sentimentLoading && sentimentMetrics?.ok && (
+            <>
+              {/* Accuracy bar */}
+              <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-black text-white">
+                    Akurasi Training: {sentimentMetrics.accuracy_pct}%
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    {sentimentMetrics.n_samples.toLocaleString()} sampel
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden mb-2">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${sentimentMetrics.accuracy_pct}%`,
+                      backgroundColor: sentimentMetrics.accuracy_pct >= 80 ? "#22c55e" : sentimentMetrics.accuracy_pct >= 60 ? "#f59e0b" : "#ef4444",
+                    }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 italic">{sentimentMetrics.note}</p>
+              </div>
+
+              {/* Confusion matrix */}
+              {sentimentMetrics.confusion_matrix?.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    Tebakan vs Kenyataan (Confusion Matrix)
+                  </p>
+                  <p className="text-[10px] text-slate-600 mb-3">
+                    Baris = label asli · Kolom = tebakan model · Hijau = benar · Merah = meleset
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="p-2 text-slate-600 font-normal text-right text-[10px]">
+                            Asli ↓ · Tebakan →
+                          </th>
+                          {sentimentMetrics.classes.map(c => (
+                            <th key={c} className="p-2 text-center text-slate-400 font-bold text-[10px] capitalize">
+                              {c}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sentimentMetrics.confusion_matrix.map((row, ri) => (
+                          <tr key={ri}>
+                            <td className="p-2 text-right font-bold text-slate-300 text-[10px] capitalize">
+                              {sentimentMetrics.classes[ri]}
+                            </td>
+                            {row.map((val, ci) => {
+                              const isDiag = ri === ci;
+                              return (
+                                <td
+                                  key={ci}
+                                  className={`p-2 text-center rounded ${
+                                    isDiag
+                                      ? "bg-green-900/40 text-green-300 font-black"
+                                      : val > 0
+                                        ? "bg-red-900/20 text-red-400"
+                                        : "text-slate-600"
+                                  }`}
+                                >
+                                  {val.toLocaleString()}
+                                  {isDiag && val > 0 && <span className="ml-1 text-[9px]">✓</span>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-class F1 */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+                  Keandalan per Label Sentimen
+                </p>
+                {sentimentMetrics.classes.map(c => {
+                  const m = sentimentMetrics.per_class?.[c];
+                  if (!m) return null;
+                  const f1Pct = Math.round(m.f1 * 100);
+                  const f1Color = f1Pct >= 70 ? "#22c55e" : f1Pct >= 50 ? "#f59e0b" : "#ef4444";
+                  return (
+                    <div key={c} className="mb-3 rounded-xl border border-white/5 bg-white/2 p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-300 capitalize">{c}</span>
+                        <span className="text-xs font-black" style={{ color: f1Color }}>
+                          F1 {f1Pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden mb-2">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${f1Pct}%`, backgroundColor: f1Color }}
+                        />
+                      </div>
+                      <div className="flex gap-4 text-[10px] text-slate-500">
+                        <span>Presisi: {Math.round(m.precision * 100)}%</span>
+                        <span>Recall: {Math.round(m.recall * 100)}%</span>
+                        <span>Data: {m.support} sampel</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Weighted average */}
+                {sentimentMetrics.weighted_avg && (
+                  <div className="mt-3 rounded-xl border border-white/5 bg-white/2 p-3 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500">Rata-rata tertimbang</span>
+                    <span className="text-xs font-bold text-slate-300">
+                      F1 {Math.round(sentimentMetrics.weighted_avg.f1 * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {!sentimentLoading && !sentimentMetrics?.ok && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="text-xs text-amber-300 font-bold mb-1">Model Sentimen Belum Siap</p>
+              <p className="text-[11px] text-slate-500">
+                {sentimentMetrics?.message || "TF-IDF + LogisticRegression belum dilatih."}
+              </p>
+            </div>
+          )}
+        </div>
+      </Kartu>
+    );
 };
 // ─── Komponen: Panel Perbandingan Skenario ────────────────────────────
 const PanelPerbandingan = ({ riwayatSim, hasil }) => {
@@ -1292,7 +1481,7 @@ const PanelPerbandingan = ({ riwayatSim, hasil }) => {
               ))}
             </div>
             <div className="mt-3">
-              <PrediksiSourceBadge source={baseline?.prediksi_source} note={baseline?.ml_info?.note} />
+              <PrediksiSourceBadge source={baseline?.prediksi_source} detail={baseline?.prediction_source} note={baseline?.ml_info?.note} />
             </div>
           </div>
 
@@ -1359,7 +1548,7 @@ const PanelPerbandingan = ({ riwayatSim, hasil }) => {
               ))}
             </div>
             <div className="mt-3">
-              <PrediksiSourceBadge source={latest?.prediksi_source} note={latest?.ml_info?.note} />
+              <PrediksiSourceBadge source={latest?.prediksi_source} detail={latest?.prediction_source} note={latest?.ml_info?.note} />
             </div>
           </div>
         </div>
@@ -1785,7 +1974,7 @@ export default function VoxSwarmDashboard() {
   const [rondeAktif,   setRondeAktif]   = useState(0);
   const [bukaEkspor,   setBukaEkspor]   = useState(false);
   const [riwayatSim,   setRiwayatSim]   = useState([]);     // ← riwayat tiap run intervensi
-  const [kategoriList, setKategoriList] = useState(["Umum","Ekonomi","Politik","Sosial","Hukum","Teknologi"]);
+  const [kategoriList, setKategoriList] = useState(["Auto","Umum","Ekonomi","Politik","Sosial","Hukum","Teknologi"]);
   const [tier, setTier] = useState("free");
   const [nCrowd, setNCrowd] = useState(0);
   // ── State topik_hash & prediksi source ──
@@ -2092,7 +2281,7 @@ export default function VoxSwarmDashboard() {
                 <span className={`rounded-full px-4 py-1.5 text-xs font-bold text-white ${INFO_STATUS[status].kelas}`}>
                   {INFO_STATUS[status].label}
                 </span>
-                <PrediksiSourceBadge source={prediksiSource} note={prediksiNote} />
+                <PrediksiSourceBadge source={prediksiSource} detail={hasil.prediction_source} note={prediksiNote} />
                 <QualityBadge quality={hasil.simulation_quality} runtimeMode={hasil.runtime_mode} />
                 <span className="text-xs text-slate-500">
                   Topik: <span className="font-medium text-slate-300">"{topik}"</span>
@@ -2153,20 +2342,28 @@ export default function VoxSwarmDashboard() {
                       <span className="w-8 shrink-0 text-right text-xs font-bold" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
                     </div>
                   ))}
-                  {/* Disclamer sumber prediksi */}
-                  {predictionSourceDetail && (
+                  {/* Sumber prediksi — gunakan prediction_source baru jika ada */}
+                  {hasil.prediction_source?.method ? (
+                    <div className="mt-2 rounded-lg border border-white/5 bg-white/3 px-3 py-2">
+                      <p className="text-[10px] text-slate-600 leading-relaxed">
+                        Sumber prediksi: <span className="text-slate-400 font-medium">
+                          {{ ml_model: "ML Model", llm_analysis: "analisis LLM", heuristic_fallback: "aturan heuristic" }[hasil.prediction_source.method] ?? hasil.prediction_source.method}
+                        </span>
+                        {hasil.prediction_source.confidence != null && (
+                          <span className="text-slate-400"> · confidence: {Math.round(hasil.prediction_source.confidence * 100)}%</span>
+                        )}
+                      </p>
+                      <p className="text-[9px] text-slate-700 mt-0.5">
+                        Simulasi eksploratif — bukan prediksi faktual
+                      </p>
+                    </div>
+                  ) : predictionSourceDetail && (
                     <div className="mt-2 rounded-lg border border-white/5 bg-white/3 px-3 py-2">
                       <p className="text-[10px] text-slate-600 leading-relaxed">
                         Sumber prediksi: <span className="text-slate-400 font-medium">
                           {predictionSourceDetail.prediksi === "llm_analisis" ? "analisis LLM" : "aturan heuristic"}
                         </span>
-                        {predictionSourceDetail.ml_aktif && (
-                          <span className="text-slate-400"> · ML <span className="text-emerald-400">aktif</span></span>
-                        )}
-                        {!predictionSourceDetail.ml_aktif && (
-                          <span className="text-slate-600"> · ML <span className="text-amber-500">nonaktif</span></span>
-                        )}
-                        · keyakinan: heuristic
+                        <span className="text-slate-600"> · keyakinan: heuristic</span>
                       </p>
                       <p className="text-[9px] text-slate-700 mt-0.5">
                         Simulasi eksploratif — bukan prediksi faktual

@@ -99,7 +99,43 @@ def _score_inline(teks: str, topik: str = "") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# LLM Scorer — DEFAULT
+# BUG #2 FIX: Implicit Negative Context Detection
+# Pola-pola ini sering tidak terdeteksi ML/inline scorer karena konteksnya tersirat.
+# Jika pola ini ditemukan, paksa gunakan LLM scorer (tidak pakai ML/inline).
+# ---------------------------------------------------------------------------
+
+_IMPLICIT_NEGATIVE_PATTERNS = [
+    # "lebih suka pekerjaan lain" dalam konteks pertanian/sektor tertentu = implisit negatif
+    r"lebih\s+(tertarik|suka|memilih|prefer).{0,30}pekerjaan\s+(lain|lainnya|selain|di\s+luar)",
+    # Pertanyaan retoris kritis — "mengapa tidak banyak yang tahu", "mengapa harus", dll
+    r"mengapa\s+(tidak|belum|harus|perlu).{0,50}\?",
+    r"kenapa\s+(tidak|belum|harus|perlu).{0,50}\?",
+    # "tidak melihat ada upaya serius" — kritik tersembunyi
+    r"tidak\s+melihat\s+ada\s+upaya\s+serius",
+    r"tidak\s+(ada|terlihat|tampak)\s+(upaya|usaha|langkah)\s+serius",
+    # "belum cukup", "tidak efektif jika", "tidak efektif"
+    r"(belum|tidak)\s+cukup\s+(serius|kuat|efektif|memadai|signifikan)",
+    r"tidak\s+efektif\s+(jika|kalau|bila|ketika|karena)",
+    # Pertanyaan implisit skeptis: "bisa menjadi contoh tapi mengapa tidak..."
+    r"bisa\s+(menjadi|jadi)\s+.{0,40}tapi\s+(mengapa|kenapa)\s+tidak",
+    r"bagus\s+(tapi|tetapi|namun)\s+(mengapa|kenapa)\s+(tidak|belum)",
+    # "tidak ada yang peduli", "tidak ada solusi", "tidak ada hasil"
+    r"tidak\s+ada\s+(yang\s+peduli|solusi|hasil|perubahan|perkembangan)",
+    # Implisit ketidakpuasan: "seharusnya", "mestinya" diikuti kritik
+    r"(seharusnya|mestinya|harusnya)\s+(lebih|sudah|bisa|dapat)\s+(baik|serius|efektif|berhasil)",
+]
+
+_IMPLICIT_NEGATIVE_COMPILED = [re.compile(p, re.IGNORECASE) for p in _IMPLICIT_NEGATIVE_PATTERNS]
+
+
+def _has_implicit_negative(teks: str) -> bool:
+    """Deteksi pola sentimen negatif tersirat yang sulit ditangkap ML/inline scorer."""
+    for pattern in _IMPLICIT_NEGATIVE_COMPILED:
+        if pattern.search(teks):
+            return True
+    return False
+
+
 # Mampu handle: negasi ganda, kalimat skeptis, frasa ambigu, konteks topik
 # ---------------------------------------------------------------------------
 
@@ -327,7 +363,14 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
     """
     mode = sentiment_mode or SENTIMENT_MODE
 
-    # ── Hybrid ML → LLM mode ──
+    # ── BUG #2 FIX: Implicit Negative Context Detection ──────────────────────
+    # Jika teks mengandung pola negatif tersirat (pertanyaan retoris kritis,
+    # preferensi implisit, dll.), bypass ML/inline dan paksa gunakan LLM.
+    if mode in ("ml", "inline") and _has_implicit_negative(teks):
+        print(f"[sentiment] Implicit negative pattern detected → force LLM")
+        return _score_llm(teks, topik)
+
+
     # ML untuk teks simpel (confidence >= 0.6, <= 25 kata, tidak ada kontras)
     # LLM untuk kalimat kompleks (rendah confidence, > 25 kata, atau ada kontras)
     if mode == "ml":

@@ -100,6 +100,7 @@ def heuristic_predict(
     n_rounds: int,
     quality_score: float,
     events: Optional[list] = None,
+    crowd_data: Optional[dict] = None,
 ) -> dict:
     """
     Prediksi skenario berbasis aturan (heuristic), tanpa ML.
@@ -123,6 +124,7 @@ def heuristic_predict(
             "confidence": {"score": 0.0, "label": "rendah", "alasan": ["Tidak ada data sentimen."]},
             "reasoning": "Tidak ada data sentimen — asumsi default.",
             "source": "heuristic",
+            "crowd_integrated": bool(crowd_data),
         }
 
     # Ambil skor akhir tiap agen
@@ -139,6 +141,7 @@ def heuristic_predict(
             "confidence": {"score": 0.0, "label": "rendah", "alasan": ["Tidak ada data sentimen agen."]},
             "reasoning": "Semua agen tidak memiliki data sentimen.",
             "source": "heuristic",
+            "crowd_integrated": bool(crowd_data),
         }
 
     total = len(final_scores)
@@ -150,13 +153,37 @@ def heuristic_predict(
     pct_neg = n_neg / total if total else 0
     pct_net = n_net / total if total else 0
 
+    reasoning_parts: list[str] = []
+
+    # ── Phase 3: Crowd integration (bobot 30%) ──
+    if crowd_data:
+        crowd_dist = crowd_data.get("distribution", {})
+        crowd_mendukung = crowd_dist.get("mendukung", 0) or 0
+        crowd_menolak = crowd_dist.get("menolak", 0) or 0
+        crowd_netral = crowd_dist.get("netral", 0) or 0
+        total_crowd = crowd_mendukung + crowd_menolak + crowd_netral
+        if total_crowd > 0:
+            crowd_pct_pos = crowd_mendukung / total_crowd
+            crowd_pct_neg = crowd_menolak / total_crowd
+            crowd_pct_net = crowd_netral / total_crowd
+            # Blend: 70% LLM agents, 30% crowd
+            pct_pos = round(pct_pos * 0.7 + crowd_pct_pos * 0.3, 4)
+            pct_neg = round(pct_neg * 0.7 + crowd_pct_neg * 0.3, 4)
+            pct_net = round(pct_net * 0.7 + crowd_pct_net * 0.3, 4)
+            # Recount for reasoning
+            blended_total = 100  # normalize to percentage scale
+            n_pos = int(pct_pos * blended_total)
+            n_neg = int(pct_neg * blended_total)
+            n_net = int(pct_net * blended_total)
+            total = blended_total
+            reasoning_parts.append(f"Data crowd diintegrasikan (30% bobot).")
+
     # Hitung variance sentimen
     all_scores = list(final_scores.values())
     variance = statistics.variance(all_scores) if len(all_scores) > 1 else 0.0
 
     # Heuristic rules
     prediksi: dict[str, int] = {}
-    reasoning_parts: list[str] = []
 
     if n_events := len(events or []):
         reasoning_parts.append(f"Terdapat {n_events} event selama simulasi.")
@@ -210,4 +237,5 @@ def heuristic_predict(
         "confidence": confidence,
         "reasoning": " ".join(reasoning_parts) if reasoning_parts else "Prediksi berbasis distribusi sentimen akhir.",
         "source": "heuristic",
+        "crowd_integrated": bool(crowd_data),
     }

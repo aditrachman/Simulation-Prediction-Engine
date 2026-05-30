@@ -13,6 +13,7 @@
 
 import re
 import time
+import statistics
 
 from .llm      import (
     call_llm, call_llm_json,
@@ -86,9 +87,56 @@ def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
     return hasil
 
 
+
 # ---------------------------------------------------------------------------
-# Simulation Core — Sequential + Jeda (solusi utama rate limit)
+# BUG #3 FIX: Change Justification Validator
+# Jika agen berubah posisi > 0.3 poin tapi output tidak ada marker perubahan,
+# log warning. Sesuai PRD: "Jika agen berubah posisi, WAJIB jelaskan alasannya."
 # ---------------------------------------------------------------------------
+
+_CHANGE_MARKER_PATTERNS = [
+    r"ronde\s+(lalu|sebelumnya).{0,50}(tapi|namun|tetapi|sekarang)",
+    r"(sebelumnya|awalnya).{0,50}(sekarang|kini|namun|berubah)",
+    r"awalnya.{0,50}(tetapi|tapi|kini|namun)",
+    r"(bukti|data|argumen|fakta)\s+(baru|terbaru)",
+    r"(saya|gue)\s+(revisi|ubah|ganti|perbarui)\s+(posisi|pendapat|pandangan)",
+    r"(informasi|laporan|temuan)\s+(baru|terbaru|ini)\s+(mengubah|membuatku|membuat\s+saya)",
+    r"(berdasarkan|melihat)\s+(respons|argumen|data).{0,30}(agen|tadi|sebelumnya)",
+]
+
+_CHANGE_MARKERS_COMPILED = [re.compile(p, re.IGNORECASE) for p in _CHANGE_MARKER_PATTERNS]
+
+
+def _validate_change_justification(
+    nama_agen: str,
+    ronde_ke: int,
+    jawaban: str,
+    skor_baru: float,
+    skor_lalu: float | None,
+) -> None:
+    """
+    BUG #3 FIX: Validasi bahwa agen yang berubah posisi signifikan (> 0.3)
+    memiliki change marker di output-nya. Log warning jika tidak.
+    Ini adalah soft enforcement — tidak regenerate, hanya log untuk monitoring.
+    """
+    if ronde_ke < 2 or skor_lalu is None:
+        return
+
+    delta = abs(skor_baru - skor_lalu)
+    if delta <= 0.3:
+        return  # perubahan kecil, tidak perlu justifikasi
+
+    has_marker = any(p.search(jawaban) for p in _CHANGE_MARKERS_COMPILED)
+
+    if not has_marker:
+        arah = f"{skor_lalu:+.2f} → {skor_baru:+.2f}"
+        print(
+            f"[CHANGE_JUSTIFICATION WARNING] {nama_agen} R{ronde_ke}: "
+            f"Posisi berubah drastis ({arah}, delta={delta:.2f}) "
+            f"tapi tidak ada change marker di output. "
+            f"Sesuai PRD: agen harus jelaskan alasan perubahan posisi."
+        )
+
 
 def run_simulation(
     topik: str,
@@ -457,7 +505,15 @@ def run_simulation(
         jawaban  = filter_forbidden_opens(jawaban)
         sentimen = score_sentiment(jawaban, topik=topik_ronde, sentiment_mode=sentiment_mode)
 
-        # BUG-19 ENFORCEMENT: post-processing untuk Akademisi
+        # BUG #3 FIX: Validasi change justification
+        _validate_change_justification(
+            nama_agen=agen["nama"],
+            ronde_ke=ronde_ke,
+            jawaban=jawaban,
+            skor_baru=sentimen["skor"],
+            skor_lalu=skor_ronde_lalu,
+        )
+
         # Prompt-level conviction_rule sering diabaikan LLM → retry dengan instruksi lebih keras
         if ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
             if sentimen["label"] == "netral":
@@ -879,29 +935,76 @@ def _analisis_dan_aktor(
 
 
 def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict) -> dict:
-    """Fallback pure-Python tanpa LLM jika call JSON gagal."""
-    sp = sorted(pengaruh_map.items(), key=lambda x: -x[1])
-    sv = sorted(volatilitas.items(),  key=lambda x: -x[1])
+    """
+    BUG #5 FIX: Fallback pure-Python tanpa LLM jika call JSON gagal.
+    Sebelumnya: aktor_kunci = hanya berdasarkan pengaruh tertinggi (tidak akurat).
+    Fix: Gunakan composite score = pengaruh × (0.7 + 0.3 × konsistensi).
+    Aktor kunci = influence TINGGI + konsistensi TINGGI (tidak sering flip).
+    Swing voter = volatilitas TINGGI (paling sering berubah pendapat).
+    """
+    # Hitung konsistensi per agen (1 - min(variance, 1))
+    def _konsistensi(nama: str) -> float:
+        scores = sentimen_agregat.get(nama, [])
+        if len(scores) < 2:
+            return 1.0  # hanya 1 data point → anggap konsisten
+        try:
+            var = statistics.variance(scores)
+            return round(1.0 - min(var, 1.0), 3)
+        except Exception:
+            return 1.0
+
+    # Composite score: pengaruh × (0.7 + 0.3 × konsistensi)
+    composite_scores = {
+        nama: pengaruh * (0.7 + 0.3 * _konsistensi(nama))
+        for nama, pengaruh in pengaruh_map.items()
+    }
+
+    # Aktor kunci = composite score tertinggi
+    sp_composite = sorted(composite_scores.items(), key=lambda x: -x[1])
+    # Swing voter = volatilitas tertinggi (dari agen yang bukan aktor kunci utama)
+    aktor_kunci_nama = sp_composite[0][0] if sp_composite else None
+    sv = sorted(
+        [(n, v) for n, v in volatilitas.items() if n != aktor_kunci_nama],
+        key=lambda x: -x[1]
+    )
+
     return {
         "aktor_kunci": [
-            {"nama": n, "alasan": "Pengaruh tertinggi",
-             "dampak_jika_berubah": "Dapat menggeser konsensus",
-             "pengaruh_skor": s,
-             "sikap_akhir":   sentimen_agregat.get(n, [0])[-1],
-             "sikap_label":   _label_sentimen(sentimen_agregat.get(n, [0])[-1])}
-            for n, s in sp[:3]
+            {
+                "nama": n,
+                "alasan": (
+                    f"Pengaruh {pengaruh_map.get(n, 0.5):.0%} × "
+                    f"Konsistensi {_konsistensi(n):.0%} = "
+                    f"Skor komposit {composite_scores.get(n, 0):.2f}"
+                ),
+                "dampak_jika_berubah": "Dapat menggeser konsensus",
+                "pengaruh_skor": pengaruh_map.get(n, 0.5),
+                "konsistensi_skor": _konsistensi(n),
+                "composite_score": composite_scores.get(n, 0),
+                "sikap_akhir":   sentimen_agregat.get(n, [0])[-1],
+                "sikap_label":   _label_sentimen(sentimen_agregat.get(n, [0])[-1]),
+            }
+            for n, _ in sp_composite[:3]
         ],
         "swing_voter": [
-            {"nama": n, "alasan_volatil": "Sering berubah pendapat",
-             "potensi_arah": "positif" if sentimen_agregat.get(n,[0])[-1] > 0 else "negatif",
-             "volatilitas": v,
-             "sikap_awal":  sentimen_agregat.get(n,[0])[0],
-             "sikap_akhir": sentimen_agregat.get(n,[0])[-1]}
+            {
+                "nama": n,
+                "alasan_volatil": f"Volatilitas {v:.2f} — paling sering berubah pendapat",
+                "potensi_arah": "positif" if sentimen_agregat.get(n, [0])[-1] > 0 else "negatif",
+                "volatilitas": v,
+                "sikap_awal":  sentimen_agregat.get(n, [0])[0],
+                "sikap_akhir": sentimen_agregat.get(n, [0])[-1],
+            }
             for n, v in sv[:3] if v > 0
         ],
-        "aktor_penggerak": sp[0][0] if sp else "-",
-        "rekomendasi": "Fokus pada aktor paling berpengaruh.",
+        "aktor_penggerak": sp_composite[0][0] if sp_composite else "-",
+        "rekomendasi": (
+            f"Fokus pada {sp_composite[0][0]} (pengaruh tinggi + konsisten). "
+            f"Waspadai {sv[0][0] if sv else '-'} sebagai swing voter."
+            if sp_composite else "Fokus pada aktor paling berpengaruh."
+        ),
     }
+
 
 
 def _build_simulation_quality(

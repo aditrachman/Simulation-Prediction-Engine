@@ -405,28 +405,35 @@ def start_sim(payload: SimRequest, request: Request):
         "effective_rounds": jumlah_ronde_efektif,
     }
 
-    # ── ML Layer: append history + prediksi (fallback otomatis ke rule-based) ──
+    # ── ML Layer: append history + prediksi ──────────────────────────────────
+    # BUG #1 FIX: Heuristic = PRIMARY source of truth.
+    # ML hanya disimpan sebagai "prediksi_ml_experimental" — TIDAK menimpa prediksi utama.
+    # Laporan hanya tampilkan 1 prediksi utama (heuristic/LLM), ML sebagai catatan tambahan.
     ml_result = load_or_predict(hasil, konteks_real)
 
-    if ml_result["source"] == "ml":
-        hasil["prediksi"] = ml_result["prediksi"]
+    # Simpan ML prediction sebagai experimental — JANGAN timpa prediksi heuristic utama
+    if ml_result["source"] == "ml" and ml_result.get("prediksi"):
+        hasil["prediksi_ml_experimental"] = ml_result["prediksi"]
+    else:
+        hasil["prediksi_ml_experimental"] = None
 
-    hasil["prediksi_source"] = ml_result["source"]
+    # prediksi utama tetap dari heuristic (sudah di-set oleh run_simulation)
+    hasil["prediksi_source"] = "heuristic"
     hasil["ml_info"] = {
-        "source":        ml_result["source"],
-        "n_samples":     ml_result["n_samples"],
-        "note":          ml_result.get("note", ""),
-        "ml_experimental": ml_result.get("ml_experimental", False),
+        "source":          ml_result["source"],
+        "n_samples":       ml_result["n_samples"],
+        "note":            ml_result.get("note", ""),
+        "ml_experimental": True,  # selalu experimental sampai data feedback cukup
     }
-    # Phase 6: prediction_confidence dari ML pipeline
-    ml_conf = ml_result.get("prediction_confidence")
-    if ml_conf:
-        hasil["prediction_confidence"] = ml_conf
-    ml_reasoning = ml_result.get("prediction_reasoning")
-    if ml_reasoning:
-        hasil["prediction_reasoning"] = ml_reasoning
+    # BUG #4 FIX: Unified confidence — 1 nilai saja, tidak contradiktif.
+    # Sebelumnya: ML confidence (80%) dan heuristic confidence (0%) keduanya tampil.
+    # Fix: prediction_confidence SELALU dari heuristic (sudah di-set di run_simulation).
+    # ML confidence disimpan terpisah di ml_info untuk debugging, tidak ditampilkan di laporan.
+    if ml_result.get("prediction_confidence"):
+        hasil["ml_info"]["ml_confidence_debug"] = ml_result["prediction_confidence"]
+    # JANGAN timpa hasil["prediction_confidence"] — tetap pakai heuristic confidence
+
     # ── Expose topik_hash agar frontend bisa kirim langsung ke POST /feedback ─
-    # tanpa harus mengirim ulang plain-text topik (menghindari mismatch hash)
     hasil["topik_hash"] = ml_result.get("topik_hash", "")
     # ── Prediction source label ──
     hasil.setdefault("prediction_source", {})

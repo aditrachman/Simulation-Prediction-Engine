@@ -175,6 +175,32 @@ def generate_report(hasil: dict) -> dict:
     else:
         keyakinan = f"Keyakinan sistem: {confidence:.0%}. {posisi_info}."
 
+    # BUG #1 FIX: Tambah prediksi_ml_experimental ke output report
+    # agar frontend/PDF bisa tampilkan tabel breakdown heuristic vs ML
+    prediksi_ml = hasil.get("prediksi_ml_experimental")
+    ml_n_samples = hasil.get("ml_info", {}).get("n_samples", 0)
+    ml_conf_debug = hasil.get("ml_info", {}).get("ml_confidence_debug", {})
+
+    # Build tabel perbandingan jika ML prediction tersedia
+    prediksi_comparison = None
+    if prediksi_ml:
+        heuristic_conf_label = "MEDIUM" if confidence >= 0.4 else "LOW"
+        ml_conf_label = ml_conf_debug.get("label", "LOW").upper() if isinstance(ml_conf_debug, dict) else "LOW"
+        prediksi_comparison = {
+            "heuristic": {
+                "label": "Heuristic (Utama)",
+                "prediksi": prediksi,
+                "confidence": heuristic_conf_label,
+                "note": "Prediksi utama — berbasis analisis sentimen agen",
+            },
+            "ml_experimental": {
+                "label": f"ML Experimental ({ml_n_samples} sampel)",
+                "prediksi": prediksi_ml,
+                "confidence": ml_conf_label,
+                "note": "Eksperimental — akurasi meningkat seiring bertambahnya data feedback",
+            },
+        }
+
     return {
         "ringkasan": ringkasan,
         "penyebab": penyebab,
@@ -182,6 +208,7 @@ def generate_report(hasil: dict) -> dict:
         "aktor": aktor_list,
         "events": event_list,
         "keyakinan": keyakinan,
+        "prediksi_comparison": prediksi_comparison,  # BUG #1 FIX: tabel breakdown heuristic vs ML
         "disclaimer": (
             "Ini adalah simulasi eksploratif, bukan prediksi faktual. "
             "Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. "
