@@ -371,21 +371,24 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
         return _score_llm(teks, topik)
 
 
-    # ML untuk teks simpel (confidence >= 0.6, <= 25 kata, tidak ada kontras)
-    # LLM untuk kalimat kompleks (rendah confidence, > 25 kata, atau ada kontras)
+    # ML dipakai seluas mungkin — hanya fallback LLM jika benar-benar perlu.
+    # Alasan:
+    #   - TF-IDF ngram(1,3) sudah handle kontras, bigram/trigram masuk fitur training
+    #   - Opini kebijakan Indonesia rata-rata 30-50 kata, threshold 25 terlalu ketat
+    #   - Confidence threshold 0.6 terlalu tinggi untuk 3-class (random = 33%)
+    # Fallback LLM hanya jika: confidence sangat rendah (<0.45) DAN kalimat panjang (>60 kata)
     if mode == "ml":
         if sentiment_ml.is_available():
             result = sentiment_ml.predict(teks)
             if result is not None:
                 kata_count = len(teks.split())
-                # Deteksi kontras: namun, tetapi, tapi, walaupun, meskipun, sayangnya, ironisnya
-                ada_kontras = any(k in teks.lower() for k in ("namun", "tetapi", " tapi ", "walaupun", "meskipun", "sayangnya", "ironisnya"))
-                is_simple = kata_count <= 25 and not ada_kontras
-                is_confident = result.get("confidence", 0) >= 0.6
-                if is_simple and is_confident:
+                confidence = result.get("confidence", 0)
+                # Kontras (namun/tapi/tetapi) tidak lagi trigger fallback —
+                # ngram(1,3) sudah cover pola kontras dalam training data
+                needs_llm = confidence < 0.45 and kata_count > 60
+                if not needs_llm:
                     return {"label": result["label"], "skor": result["skor"]}
-                _why = "kontras" if ada_kontras else f"kata={kata_count}"
-                print(f"[sentiment] ML fallback LLM ({_why}, conf={result.get('confidence'):.2f})")
+                print(f"[sentiment] ML fallback LLM (conf={confidence:.2f}, kata={kata_count})")
         else:
             print(f"[sentiment] ML model belum siap -> fallback LLM")
         return _score_llm(teks, topik)

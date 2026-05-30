@@ -106,7 +106,18 @@ def generate_report(hasil: dict) -> dict:
     aktor_analisis = hasil.get("aktor_analisis", {})
     prediksi = hasil.get("prediksi", {})
     events = hasil.get("events", [])
-    confidence = hasil.get("prediction_confidence", 0.0)
+    # BUG #4 ROOT CAUSE FIX: prediction_confidence adalah dict {"score", "label", "alasan"},
+    # bukan float. Patch lama (isinstance check di bawah) selalu fallback ke 0.0.
+    # Fix: ekstrak .score lebih dulu, baru validasi.
+    _raw_confidence = hasil.get("prediction_confidence", 0.0)
+    if isinstance(_raw_confidence, dict):
+        confidence = float(_raw_confidence.get("score", 0.0))
+        confidence_label = _raw_confidence.get("label", "")
+        confidence_alasan = _raw_confidence.get("alasan", [])
+    else:
+        confidence = float(_raw_confidence) if _raw_confidence else 0.0
+        confidence_label = ""
+        confidence_alasan = []
     reasoning = hasil.get("prediction_reasoning", "")
 
     # Metrics
@@ -155,8 +166,7 @@ def generate_report(hasil: dict) -> dict:
     event_list = _analisis_event(events)
 
     # Keyakinan
-    if not isinstance(confidence, (int, float)):
-        confidence = 0.0
+    # (confidence sudah di-extract sebagai float di atas — tidak perlu isinstance check lagi)
     if not isinstance(reasoning, str):
         reasoning = ""
 
@@ -170,10 +180,15 @@ def generate_report(hasil: dict) -> dict:
     n_net = len(skor_akhir) - n_pos - n_neg
     posisi_info = f"({n_pos} mendukung, {n_neg} menolak, {n_net} netral dari {len(skor_akhir)} agen)"
 
+    # BUG #4: Tampilkan confidence lengkap dengan label dan alasan
+    conf_label_str = f" ({confidence_label})" if confidence_label else ""
+    conf_alasan_str = " ".join(confidence_alasan[:2]) if confidence_alasan else ""
     if reasoning:
-        keyakinan = f"Keyakinan sistem: {confidence:.0%}. {reasoning[:200]} {posisi_info}."
+        keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {reasoning[:200]} {posisi_info}."
+    elif conf_alasan_str:
+        keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {conf_alasan_str} {posisi_info}."
     else:
-        keyakinan = f"Keyakinan sistem: {confidence:.0%}. {posisi_info}."
+        keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {posisi_info}."
 
     # BUG #1 FIX: Tambah prediksi_ml_experimental ke output report
     # agar frontend/PDF bisa tampilkan tabel breakdown heuristic vs ML

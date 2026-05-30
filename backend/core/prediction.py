@@ -101,6 +101,8 @@ def heuristic_predict(
     quality_score: float,
     events: Optional[list] = None,
     crowd_data: Optional[dict] = None,
+    n_samples_history: int = 0,
+    n_feedback_labels: int = 0,
 ) -> dict:
     """
     Prediksi skenario berbasis aturan (heuristic), tanpa ML.
@@ -222,12 +224,12 @@ def heuristic_predict(
             f"{n_net} netral — skenario paling mungkin adalah status quo."
         )
 
-    # Confidence
+    # Confidence — gunakan n_samples_history & n_feedback_labels dari ML jika tersedia
     confidence = compute_confidence(
         n_agents=n_agents,
         n_rounds=n_rounds,
-        n_samples_history=0,
-        n_feedback_labels=0,
+        n_samples_history=n_samples_history,
+        n_feedback_labels=n_feedback_labels,
         sentiment_variance=variance,
         quality_score=quality_score,
     )

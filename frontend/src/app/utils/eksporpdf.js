@@ -381,17 +381,27 @@ function buildExplainabilitySection(hasil) {
       <div class="section-title">Explainability — Kenapa Hasilnya Begitu?</div>`;
 
   // Metrics baris
+  // CATATAN: polarization_score & consensus_score di sini adalah INDEKS DINAMIKA AGEN
+  // (dihitung dari variansi stance akhir agen, bukan distribusi skenario).
+  // Ini BERBEDA dari "Prediksi Skenario" di halaman 1 yang menghitung
+  // probabilitas outcome (Konsensus/Polarisasi/Status Quo).
   if (metrics.polarization_score !== undefined) {
     const pct = (v) => Math.round((v ?? 0) * 100);
     html += `
+      <p style="font-size:10px;color:#94a3b8;font-style:italic;margin-bottom:8px">
+        ⓘ Indeks di bawah mengukur <strong>dinamika agen</strong> (seberapa terpecah pendapat mereka), 
+        bukan probabilitas skenario. Berbeda dengan "Prediksi Skenario" di halaman sebelumnya.
+      </p>
       <div style="display:flex;gap:12px;margin-bottom:16px">
         <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#f8fafc">
           <p style="font-size:10px;color:#64748b;margin-bottom:2px">Polarisasi</p>
+          <p style="font-size:10px;color:#94a3b8;margin-bottom:4px;font-style:italic">Indeks perpecahan pendapat</p>
           <p style="font-size:18px;font-weight:900;color:#dc2626">${pct(metrics.polarization_score)}%</p>
           <div style="height:6px;background:#e2e8f0;border-radius:99px;margin-top:4px"><div style="height:100%;width:${pct(metrics.polarization_score)}%;background:#dc2626;border-radius:99px"></div></div>
         </div>
         <div style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#f8fafc">
           <p style="font-size:10px;color:#64748b;margin-bottom:2px">Konsensus</p>
+          <p style="font-size:10px;color:#94a3b8;margin-bottom:4px;font-style:italic">Indeks keselarasan pendapat</p>
           <p style="font-size:18px;font-weight:900;color:#16a34a">${pct(metrics.consensus_score)}%</p>
           <div style="height:6px;background:#e2e8f0;border-radius:99px;margin-top:4px"><div style="height:100%;width:${pct(metrics.consensus_score)}%;background:#16a34a;border-radius:99px"></div></div>
         </div>
@@ -541,8 +551,12 @@ function buildHtmlDokumen({ topik, tanggal, hasil, rondeList, narasi, prediksiBa
 
 <div class="section no-break">
   <div class="section-title">Prediksi Skenario</div>
-  <p style="font-size:10px;color:#64748b;margin-bottom:8px">
+  <p style="font-size:10px;color:#64748b;margin-bottom:4px">
     ✅ <strong>Prediksi Utama</strong> — berbasis analisis heuristic sentimen agen
+  </p>
+  <p style="font-size:10px;color:#94a3b8;font-style:italic;margin-bottom:10px">
+    ⓘ Persentase ini menunjukkan <strong>probabilitas outcome diskusi</strong> (seberapa mungkin berakhir Konsensus/Polarisasi/Status Quo).
+    Bukan indeks perpecahan — lihat bagian Explainability untuk indeks dinamika agen.
   </p>
   ${prediksiBar || "<p style='color:#94a3b8'>Tidak ada data prediksi.</p>"}
   ${prediksiComparisonHTML || ""}
