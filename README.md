@@ -1,4 +1,4 @@
-# VoxSwarm — Simulasi Opini Publik Indonesia  
+# VoxSwarm — Simulasi Opini Publik Indonesia
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.2.0-indigo?style=flat-square" />
