@@ -437,7 +437,10 @@ def run_simulation(
             "JANGAN pernah memulai output dengan nama agen lain diikuti titik dua ('Pengusaha: ...', 'Akademisi: ...'). "
             "Langsung ke argumenmu sendiri tanpa menyebut nama agen lain di awal kalimat. "
             "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
-            "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim."
+            "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim. "
+            "Jika kamu menyebut angka, data, atau fakta — WAJIB sebutkan sumbernya: "
+            "'Berdasarkan data [sumber]...', 'Menurut laporan [sumber]...', 'Data menunjukkan...'. "
+            "KLAIM TANPA SUMBER: anggap opini pribadi, bukan fakta."
         )
 
         # ISSUE #22 — guard agen pembuka ronde 1
@@ -504,10 +507,10 @@ def run_simulation(
                 )
         elif adalah_pembuka:
             if briefing_real:
-                parts.append(f"Info konteks: {briefing_real[:200]}")
+                parts.append(f"Info konteks: {briefing_real[:500]}")
             parts.append("Buka diskusi dengan posisimu yang paling kuat tentang topik ini.")
         elif ronde_ke == 1 and briefing_real:
-            parts.append(f"Info: {briefing_real[:200]}")
+            parts.append(f"Info: {briefing_real[:500]}")
 
         # Phase 3: inject event impact note for this agent
         _event_impacts = event_impacts.get(intervensi, {}) if intervensi else {}

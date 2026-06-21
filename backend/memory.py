@@ -208,9 +208,21 @@ def build_influence_context(
     if not kandidat:
         return ""
 
+    def _stance_label(skor):
+        if skor is None:
+            return "NETRAL"
+        if skor > 0.2:
+            return "MENDUKUNG"
+        if skor < -0.2:
+            return "MENOLAK"
+        return "NETRAL"
+
     baris = []
     for p in kandidat:
         pendapat_full = p["pendapat"]
+        skor = p.get("sentimen", {}).get("skor")
+        label = _stance_label(skor)
+
         # Split per kalimat — tidak salah potong di angka desimal (3.5%) atau inisial (Dr. Smith)
         sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', pendapat_full)
         # Ambil kalimat pertama yang >= 30 char (hindari "Iya.", "Benar.", "Tidak.")
@@ -227,7 +239,7 @@ def build_influence_context(
             kutipan = kutipan[:150].rsplit(" ", 1)[0]
         if len(pendapat_full) > len(kutipan) + 1:
             kutipan += "..."
-        baris.append(f'- {p["nama"]}: {kutipan}')
+        baris.append(f'- {p["nama"]} [{label}]: {kutipan}')
 
     konteks  = "Posisi peserta lain sejauh ini:\n" + "\n".join(baris) + "\n"
     konteks += "Respons LANGSUNG ke salah satu — gunakan kata-katamu sendiri, jangan kutip ulang."
