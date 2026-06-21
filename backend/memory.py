@@ -159,8 +159,7 @@ def build_memory_context(agent: dict) -> str:
                 f"Ronde sebelumnya — Posisi: {label_sblm}{skor_sblm_str} "
                 f"— Argumen: '{pendapat_sblm}...' "
                 f"Jika kamu berubah dari {label_sblm} ke posisi berbeda, "
-                f"WAJIB jelaskan di responsmu: data atau argumen baru apa yang mengubah posisimu. "
-                f"Contoh: 'Ronde lalu saya {label_sblm.lower()}, tapi sekarang saya lihat bukti Y — jadi saya revisi.'"
+                f"WAJIB jelaskan di responsmu: data atau argumen baru apa yang mengubah posisimu."
             )
         return base_context + f"— posisi: {label_terakhir}. Pertahankan kecuali ada alasan kuat."
 

@@ -61,6 +61,7 @@ from .core.swarm import CrowdPool
 def _batasi_kalimat(teks: str, max_kalimat: int = 4) -> str:
     """
     Post-processing pure Python — potong output agen di batas kalimat ke-N.
+    Hanya potong kalau melebihi max_kalimat atau hard cap kata.
     """
     if not teks:
         return teks
@@ -73,15 +74,6 @@ def _batasi_kalimat(teks: str, max_kalimat: int = 4) -> str:
         return " ".join(kata_total[:60]).rstrip(' ,;.-_:') + "."
 
     if len(pecahan) <= max_kalimat:
-        kata_kata = teks.split()
-        if len(kata_kata) > 30:
-            potongan = " ".join(kata_kata[:25])
-            for pemisah in [". ", "; ", ", namun ", ", padahal ", ", sehingga ",
-                            ", tetapi ", ", tapi ", "Kami juga ", "Selain itu ", "Dengan demikian "]:
-                idx = potongan.rfind(pemisah)
-                if idx > 10:
-                    return potongan[:idx + 1].rstrip(' ,;.-_:') + "."
-            return " ".join(kata_kata[:20]).rstrip(' ,;.-_:') + "."
         return teks
     hasil = " ".join(pecahan[:max_kalimat])
     if hasil and hasil[-1] not in ".!?":
@@ -295,44 +287,41 @@ def run_simulation(
             voice_anchor = (
                 "Kamu mahasiswa aktif yang vokal. Bicara kayak ngobrol di kantin — "
                 "pakai 'gue/lu', langsung to the point, nggak basa-basi. "
-                "Contoh: 'Gue denger dari temen gue yang kerja di sana...', 'Ini nyata bro, bukan cuma di medsos.' "
+            )
+        elif "founder" in nama_lower or "startup" in nama_lower:
+            voice_anchor = (
+                "Kamu founder startup yang visioner tapi realistis. "
+                "Fokus ke inovasi, skalabilitas, dan dampak teknologi ke bisnis. "
             )
         elif "pengusaha" in nama_lower or "umkm" in nama_lower:
             voice_anchor = (
                 "Kamu pengusaha yang pragmatis. Yang penting: untung rugi, dampak ke bisnis. "
-                "Contoh: 'Dari sisi operasional, ini berarti tambahan biaya 15-20%...', 'UMMK yang gue kenal pada ngeluh.' "
             )
         elif "pekerja" in nama_lower or "kantoran" in nama_lower:
             voice_anchor = (
                 "Kamu pekerja yang ngalamin langsung. Ceritain apa yang terjadi di lapangan. "
-                "Contoh: 'Di kantor gue, efeknya langsung kerasa...', 'Temen gue yang pabrik udah mulai dirumahkan.' "
             )
         elif "pemerintah" in nama_lower or "pejabat" in nama_lower:
             voice_anchor = (
                 "Kamu pejabat pemerintah yang bertanggung jawab. Bicara dengan otoritas, "
                 "tapi tetap manusiawi — nggak robotik. Jelaskan apa yang sudah dan sedang dilakukan. "
-                "Contoh: 'Kami sudah mengambil langkah X karena Y...', 'Dari monitoring kami, situasinya begini.' "
             )
         elif "akademisi" in nama_lower or "dosen" in nama_lower or "peneliti" in nama_lower:
             voice_anchor = (
                 "Kamu akademisi yang suka data tapi nggak ribet. Sebutin angka atau studi yang relevan, "
                 "tapi jelasin dengan bahasa yang bisa dimengerti orang awam. "
-                "Contoh: 'Survei terakhir menunjukkan 65% responden setuju...', 'Dari data BPS, angkanya begini.' "
             )
         elif "media" in nama_lower or "jurnalis" in nama_lower:
             voice_anchor = (
                 "Kamu jurnalis investigatif yang kritis. Tugasnya mengungkap, bukan cuma narasi. "
-                "Contoh: 'Dokumen yang gue dapet menunjukkan...', 'Ada yang nggak beres di sini — data dan fakta nggak cocok.' "
             )
         elif "masyarakat" in nama_lower or "umum" in nama_lower or "warga" in nama_lower:
             voice_anchor = (
                 "Kamu warga biasa yang ngalamin sendiri. Nggak perlu data, cukup cerita nyata. "
-                "Contoh: 'Di kampung gue, orang-orang pada pada komplain...', 'Ibu gue aja bilang harga naik terus.' "
             )
         elif "oposisi" in nama_lower or "kritis" in nama_lower:
             voice_anchor = (
                 "Kamu pengkritik pemerintah yang tajam tapi berbasis fakta. "
-                "Contoh: 'Klaim mereka nggak cocok sama data yang ada...', 'Ini inkonsistensi — kemarin bilang X, sekarang bilang Y.' "
             )
 
         # ERROR-1 FIX: hitung skor_ronde_lalu DI SINI
@@ -412,8 +401,9 @@ def run_simulation(
             "Jangan ulangi argumen agen lain — kasih perspektif baru dari sudut pandangmu. "
             "Langsung ke poin, jangan buka dengan 'Saya pikir' atau 'Menurut saya'. "
             "Tulis 2-3 kalimat pendek. "
-            "Kalau sebut angka atau data, sebut sumbernya dari berita yang sudah dikasih, "
-            "bukan dari ingatanmu sendiri."
+            "JANGAN mengarang angka, persentase, atau nama survei. "
+            "Kalau tidak ada data spesifik dari berita yang dikasih, sampaikan pendapatmu tanpa angka — "
+            "cukup jelaskan alasan atau pengalamanmu."
         )
 
         # ISSUE #22 — guard agen pembuka ronde 1
@@ -468,15 +458,19 @@ def run_simulation(
         if ada_yang_sudah_bicara and konteks_pengaruh:
             parts.append(konteks_pengaruh)
             if current_response_target and current_response_target != agen["nama"]:
+                # Ambil ringkasan singkat argumen target
+                target_opinions = [p for p in pendapat_ronde_sebelumnya + pendapat_dalam_ronde_ini
+                                   if p.get("nama") == current_response_target]
+                target_ringkas = target_opinions[-1]["pendapat"][:120] if target_opinions else ""
                 parts.append(
-                    f"Respons khusus untuk {current_response_target}. "
-                    f"Counter argumen {current_response_target} dengan data dan posisimu. "
-                    "Jangan ulangi argumen yang sudah disampaikan."
+                    f"Counter argumen {current_response_target} langsung — "
+                    f"balas poin spesifik ini: \"{target_ringkas}\". "
+                    "Jangan sebut nama, langsung counter isinya."
                 )
             else:
                 parts.append(
-                    "Respons ke salah satu peserta — boleh sebut namanya, boleh juga langsung counter argumennya "
-                    "tanpa sebut nama. Yang penting posisimu jelas dan berbeda dari yang sudah bicara."
+                    "Pilih salah satu argumen di atas, langsung counter dengan data atau pandanganmu. "
+                    "Jangan sebut nama, langsung counter isinya."
                 )
         elif adalah_pembuka:
             if briefing_real:
@@ -499,7 +493,7 @@ def run_simulation(
             if _fresh_prompt:
                 parts.append(_fresh_prompt)
 
-        parts.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu (2-3 kalimat)?")
+        parts.append(f"Topik diskusi: {topik_ronde[:130]}\nPendapatmu?")
         user_p = "\n".join(parts)
 
         # Pangkas jika > 900 char (naik dari 700 — konteks pengaruh sekarang lebih panjang)
