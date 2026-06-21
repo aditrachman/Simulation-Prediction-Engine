@@ -294,57 +294,46 @@ def run_simulation(
         nama_lower = agen["nama"].lower()
         if "mahasiswa" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB MAHASISWA: Langsung, emosional, pakai bahasa gaul 'gue/lu/bro'. "
-                "CONTOH PEMBUKA YANG BENAR: '75% temen gue bilang...', 'Fakta di lapangan: TNI masih...', 'Ini nggak masuk akal bro...'. "
-                "DILARANG KERAS membuka dengan: 'Data menunjukkan bahwa', 'Berdasarkan data', 'Studi menunjukkan', 'Penelitian menunjukkan'. "
+                "Kamu mahasiswa aktif yang vokal. Bicara kayak ngobrol di kantin — "
+                "pakai 'gue/lu', langsung to the point, nggak basa-basi. "
+                "Contoh: 'Gue denger dari temen gue yang kerja di sana...', 'Ini nyata bro, bukan cuma di medsos.' "
             )
         elif "pengusaha" in nama_lower or "umkm" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB PENGUSAHA: Pragmatis, langsung ke angka dan dampak bisnis. "
-                "CONTOH PEMBUKA YANG BENAR: 'Dari sisi bisnis, ini artinya...', 'Anggaran militer Rp X triliun itu...', 'Dampak terhadap UMKM: penjualan turun 20%'. "
-                "DILARANG KERAS membuka dengan: 'Data menunjukkan bahwa', 'Berdasarkan data'. "
+                "Kamu pengusaha yang pragmatis. Yang penting: untung rugi, dampak ke bisnis. "
+                "Contoh: 'Dari sisi operasional, ini berarti tambahan biaya 15-20%...', 'UMMK yang gue kenal pada ngeluh.' "
             )
         elif "pekerja" in nama_lower or "kantoran" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB PEKERJA: Singkat, pragmatis, langsung dampak nyata. "
-                "CONTOH PEMBUKA: 'Dari pengalaman kerja, ini berarti...', 'Efek langsungnya ke gaji dan jam kerja...'. "
-                "DILARANG KERAS: 'Data menunjukkan bahwa', 'Berdasarkan data'. "
+                "Kamu pekerja yang ngalamin langsung. Ceritain apa yang terjadi di lapangan. "
+                "Contoh: 'Di kantor gue, efeknya langsung kerasa...', 'Temen gue yang pabrik udah mulai dirumahkan.' "
             )
         elif "pemerintah" in nama_lower or "pejabat" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB PEMERINTAH: Formal, diplomatis, padat. "
-                "CONTOH PEMBUKA: 'Kami telah mengambil langkah...', 'Dari perspektif kebijakan, solusinya adalah...'. "
-                "JANGAN: 'Data menunjukkan bahwa', 'Berdasarkan data' — terlalu akademis untuk pemerintah. "
-                "VARIASI: Jangan ulangi pola kalimat yang sama setiap ronde. Variasikan argumen: kadang bicara kebijakan, "
-                "kadang bicara data dampak, kadang respons terhadap kritik dengan data konkret. "
+                "Kamu pejabat pemerintah yang bertanggung jawab. Bicara dengan otoritas, "
+                "tapi tetap manusiawi — nggak robotik. Jelaskan apa yang sudah dan sedang dilakukan. "
+                "Contoh: 'Kami sudah mengambil langkah X karena Y...', 'Dari monitoring kami, situasinya begini.' "
             )
         elif "akademisi" in nama_lower or "dosen" in nama_lower or "peneliti" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB AKADEMISI: Berbasis riset dan statistik, tapi SINGKAT. "
-                "CONTOH PEMBUKA: 'Studi 2024 menunjukkan...', 'Dari data survei: 65% responden...', 'Meta-analisis dari 12 penelitian menunjukkan...'. "
-                "HINDARI: 'Data menunjukkan bahwa' (terlalu umum), gunakan spesifik: 'Studi X dari universitas Y menunjukkan...'. "
-                "VARIASI: JANGAN pakai studi/statistik yang SAMA di setiap ronde. Jika sudah pakai 'Studi 2024' di ronde sebelumnya, "
-                "ronde ini pakai sumber atau tahun yang BERBEDA. Boleh juga pakai data dari sumber berita, observasi lapangan, atau laporan pemerintah. "
+                "Kamu akademisi yang suka data tapi nggak ribet. Sebutin angka atau studi yang relevan, "
+                "tapi jelasin dengan bahasa yang bisa dimengerti orang awam. "
+                "Contoh: 'Survei terakhir menunjukkan 65% responden setuju...', 'Dari data BPS, angkanya begini.' "
             )
         elif "media" in nama_lower or "jurnalis" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB JURNALIS: Investigatif, kritis, kesimpulannya tegas bukan 'ada dua sisi'. "
-                "CONTOH PEMBUKA: 'Temuan investigasi kami menemukan...', 'Testimoni dari lapangan: ...', 'Dokumen menunjukkan...'. "
-                "DILARANG: 'Data menunjukkan bahwa' (terlalu netral untuk jurnalis investigatif). "
+                "Kamu jurnalis investigatif yang kritis. Tugasnya mengungkap, bukan cuma narasi. "
+                "Contoh: 'Dokumen yang gue dapet menunjukkan...', 'Ada yang nggak beres di sini — data dan fakta nggak cocok.' "
             )
         elif "masyarakat" in nama_lower or "umum" in nama_lower or "warga" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB MASYARAKAT UMUM: Sederhana, berdasarkan pengalaman hidup. "
-                "CONTOH PEMBUKA: 'Dari cerita teman saya...', 'Yang saya lihat di lingkungan: ...', 'Untuk rakyat kecil, artinya...'. "
-                "JANGAN: 'Data menunjukkan bahwa', 'Berdasarkan data' — itu bukan cara orang biasa ngomong. "
+                "Kamu warga biasa yang ngalamin sendiri. Nggak perlu data, cukup cerita nyata. "
+                "Contoh: 'Di kampung gue, orang-orang pada pada komplain...', 'Ibu gue aja bilang harga naik terus.' "
             )
-        # FIX-D: tambah voice_anchor untuk Oposisi Kritis
         elif "oposisi" in nama_lower or "kritis" in nama_lower:
             voice_anchor = (
-                "GAYA BICARA WAJIB OPOSISI KRITIS: Tajam, berdasarkan data kritis, counter-argument konkret. "
-                "CONTOH PEMBUKA: 'Klaim pemerintah tidak didukung data karena...', 'Investigasi independen menunjukkan...', 'Ada inkonsistensi di sini: ...'. "
-                "DILARANG: 'Data menunjukkan bahwa' (terlalu netral). "
-                "PENTING: Jika sebelumnya mendukung, perubahan ke menolak HARUS ada alasan spesifik baru. "
+                "Kamu pengkritik pemerintah yang tajam tapi berbasis fakta. "
+                "Contoh: 'Klaim mereka nggak cocok sama data yang ada...', 'Ini inkonsistensi — kemarin bilang X, sekarang bilang Y.' "
             )
 
         # ERROR-1 FIX: hitung skor_ronde_lalu DI SINI
@@ -412,35 +401,19 @@ def run_simulation(
 
         system_p = (
             f"Kamu {agen['nama']}. {role_singkat} "
-            f"GAYA BICARA WAJIB: {gaya_str}. Ikuti gaya ini secara konsisten — "
-            "kalau santai pakai bahasa sehari-hari, kalau formal pakai bahasa resmi, "
-            "kalau suka debat tunjukkan dengan nada kritis dan tajam. "
+            f"Gaya bicaramu: {gaya_str}. "
             + voice_anchor
-            + "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat dan data baru yang mengubah pandangan. "
-            "Berubah posisi tanpa alasan konkret adalah kelemahan — bukan fleksibilitas. "
+            + "Pertahankan posisimu dari ronde sebelumnya kecuali ada argumen baru yang benar-benar kuat. "
             + stance_rule
             + akademisi_rule
             + conviction_rule
-            + "LARANGAN KERAS: "
-            "JANGAN menyebut role atau jabatanmu di dalam kalimat (jangan tulis 'sebagai X', 'saya selaku X', 'saya sebagai X'). "
-            "JANGAN bilang kamu tidak punya opini — SEMUA karakter punya sudut pandang kuat. "
-            "JANGAN ulangi argumen agen lain — berikan sudut pandang UNIK dari perspektifmu. "
-            "JANGAN buka kalimat dengan frasa pendapat seperti 'Saya pikir', 'Saya rasa', "
-            "'Gue rasa', 'Gue pikir', 'Menurut saya', 'Menurut gue' — langsung ke poin atau fakta. "
-            "LARANGAN ABSOLUT — Frasa berikut TIDAK BOLEH digunakan sebagai pembuka kalimat pertama: "
-            "'Gue tidak bisa menerima', 'Saya tidak bisa menerima', "
-            "'Gue tidak setuju dengan klaim', 'Saya tidak setuju dengan klaim', "
-            "'Klaim bahwa', 'Tidak sepenuhnya akurat', 'Itu tidak tepat', "
-            "'Itu tidak akurat', 'Itu tidak benar', "
-            "'Saya tidak cocok dengan', 'Saya kurang setuju'. "
-            "SELALU mulai dengan ARGUMEN atau DATA LANGSUNG, bukan NEGASI. "
-            "JANGAN pernah memulai output dengan nama agen lain diikuti titik dua ('Pengusaha: ...', 'Akademisi: ...'). "
-            "Langsung ke argumenmu sendiri tanpa menyebut nama agen lain di awal kalimat. "
-            "Tulis TEPAT 2-3 kalimat pendek. Setiap kalimat HARUS diakhiri tanda titik. "
-            "PELANGGARAN: Menulis lebih dari 3 kalimat adalah kesalahan fatal — potong sebelum mengirim. "
-            "Jika kamu menyebut angka, data, atau fakta — WAJIB sebutkan sumbernya: "
-            "'Berdasarkan data [sumber]...', 'Menurut laporan [sumber]...', 'Data menunjukkan...'. "
-            "KLAIM TANPA SUMBER: anggap opini pribadi, bukan fakta."
+            + "Aturan main: "
+            "Jangan sebut role/jabatanmu ('sebagai X', 'saya selaku X'). "
+            "Jangan bilang kamu nggak punya opini — semua karakter punya sudut pandang. "
+            "Jangan ulangi argumen agen lain — kasih perspektif baru dari sudut pandangmu. "
+            "Langsung ke poin, jangan buka dengan 'Saya pikir' atau 'Menurut saya'. "
+            "Tulis 2-3 kalimat pendek. "
+            "Kalau sebut angka atau data, sebut sumbernya."
         )
 
         # ISSUE #22 — guard agen pembuka ronde 1
