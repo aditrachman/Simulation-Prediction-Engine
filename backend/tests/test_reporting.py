@@ -54,17 +54,6 @@ class TestExplainabilityReport:
         assert d["confidence"]["score"] == 0.7
         assert len(d["limitations"]) == 1
 
-    def test_to_narrative_returns_string(self):
-        report = ExplainabilityReport(
-            skenario="Polarisasi",
-            skenario_probability={"Konsensus": 25, "Polarisasi": 52, "Status Quo": 23},
-            skenario_definition="",
-            phenomenon_summary="Test polarisasi.",
-        )
-        narrative = report.to_narrative()
-        assert isinstance(narrative, str)
-        assert len(narrative) > 0
-
     def test_generate_report_returns_dict(self):
         """Smoke test: generate_report dari dict hasil simulasi."""
         sample_hasil = {

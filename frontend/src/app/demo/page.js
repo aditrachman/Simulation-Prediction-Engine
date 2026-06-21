@@ -954,8 +954,6 @@ const PanelMLMetrics = ({ apiBase }) => {
 
   useEffect(() => { fetchMetrics(); fetchSentimentMetrics(); }, []);
 
-  useEffect(() => { fetchMetrics(); }, []);
-
   if (loading) return (
     <Kartu>
       <div className="flex items-center gap-2 text-xs text-slate-500">

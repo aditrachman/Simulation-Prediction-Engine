@@ -15,7 +15,9 @@ from typing import Literal, Optional
 
 from backend.agents import get_agents, get_all_categories
 from backend.agent_factory import get_contextual_agents
-from backend.engine import run_simulation, call_llm, call_llm_json, score_sentiment, MODEL_AGENT, MODEL_ANALYSIS
+from backend.simulation import run_simulation
+from backend.llm import call_llm, call_llm_json, MODEL_AGENT, MODEL_ANALYSIS
+from backend.sentiment import score_sentiment
 from backend import sentiment_ml
 from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
 from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
@@ -68,7 +70,14 @@ MAX_TOPIC_LENGTH        = int(os.getenv("MAX_TOPIC_LENGTH",        "300"))
 _rate_limit_state: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
 
-BLOCKED_PATTERNS = ("<script", "javascript:", "onerror=", "onload=", "data:")
+# BUG #6 FIX: Tambah pola XSS dan injeksi yang diblokir
+BLOCKED_PATTERNS = (
+    "<script", "</script", "javascript:", "onerror=", "onload=", "onclick=",
+    "onmouseover=", "onfocus=", "onchange=", "onsubmit=",
+    "data:", "vbscript:", "alert(",
+    "prompt(", "confirm(", "document.cookie", "window.location",
+    "{{", "}}", "{%", "%}", "{{config", "self.__class__",
+)
 
 
 def _client_ip(request: Request) -> str:
@@ -303,6 +312,8 @@ def start_sim(payload: SimRequest, request: Request):
     if not topik_bersih:
         raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
     _validate_text(topik_bersih, "Topik")
+    if payload.kategori:
+        _validate_text(payload.kategori, "Kategori")
 
     if payload.intervensi:
         intervensi_bersih = payload.intervensi.strip() or None
@@ -409,7 +420,12 @@ def start_sim(payload: SimRequest, request: Request):
     # BUG #1 FIX: Heuristic = PRIMARY source of truth.
     # ML hanya disimpan sebagai "prediksi_ml_experimental" — TIDAK menimpa prediksi utama.
     # Laporan hanya tampilkan 1 prediksi utama (heuristic/LLM), ML sebagai catatan tambahan.
-    ml_result = load_or_predict(hasil, konteks_real)
+    # BUG #5 FIX: wrap load_or_predict dalam try/except agar ML error tidak crash simulasi
+    try:
+        ml_result = load_or_predict(hasil, konteks_real)
+    except Exception as exc:
+        print(f"[ML] load_or_predict error: {exc}")
+        ml_result = {"source": "rule_based", "n_samples": 0, "topik_hash": ""}
 
     # Simpan ML prediction sebagai experimental — JANGAN timpa prediksi heuristic utama
     if ml_result["source"] == "ml" and ml_result.get("prediksi"):
@@ -435,9 +451,9 @@ def start_sim(payload: SimRequest, request: Request):
 
     # ── Expose topik_hash agar frontend bisa kirim langsung ke POST /feedback ─
     hasil["topik_hash"] = ml_result.get("topik_hash", "")
-    # ── Prediction source label ──
-    hasil.setdefault("prediction_source", {})
-    hasil["prediction_source"]["ml_aktif"] = ml_result["source"] == "ml"
+    # ── Prediction source label — BUG #10 FIX: flat field, bukan dict ──
+    hasil["prediction_source"] = "heuristic"
+    hasil["ml_active"] = ml_result["source"] == "ml"
     # ──────────────────────────────────────────────────────────────────────────
 
     return {
@@ -457,7 +473,7 @@ def start_sim(payload: SimRequest, request: Request):
 # ---------------------------------------------------------------------------
 
 @app.post("/explain", tags=["Simulation"])
-def explain_sentiment(payload: ExplainRequest):
+def explain_sentiment(payload: ExplainRequest, request: Request):
     """
     Jelaskan sentimen dari satu teks pendapat.
 
@@ -473,6 +489,11 @@ def explain_sentiment(payload: ExplainRequest):
             "source": "ml" | "llm" | "inline",
         }
     """
+    _enforce_rate_limit(request)
+    _validate_text(payload.teks, "Teks")
+    if payload.topik:
+        _validate_text(payload.topik, "Topik")
+
     # Coba ML explain dulu
     if sentiment_ml.is_available():
         ml_exp = sentiment_ml.explain(payload.teks)
@@ -543,7 +564,11 @@ def compare_scenarios(payload: CompareRequest, request: Request):
     for i, sc in enumerate(payload.scenarios):
         topik_bersih = sc.topik.strip()
         _validate_text(topik_bersih, f"Topik skenario {i+1}")
+        _validate_text(sc.label, f"Label skenario {i+1}")
+        _validate_text(sc.kategori, f"Kategori skenario {i+1}")
         intervensi_bersih = sc.intervensi.strip() if sc.intervensi else None
+        if intervensi_bersih:
+            _validate_text(intervensi_bersih, f"Intervensi skenario {i+1}")
 
         daftar_agen = get_agents(sc.kategori)
         # Inject agen kontekstual berdasarkan keyword topik
@@ -572,14 +597,22 @@ def compare_scenarios(payload: CompareRequest, request: Request):
             tier=tier_mode,
             n_crowd=sc.n_crowd,
         )
-        ml_result = load_or_predict(hasil, konteks_real)
-        if ml_result["source"] == "ml":
-            hasil["prediksi"] = ml_result["prediksi"]
-        hasil["prediksi_source"] = ml_result["source"]
+        # BUG #1 FIX: JANGAN timpa prediksi heuristic dengan ML — simpan sebagai experimental
+        # BUG #5 FIX: wrap load_or_predict dalam try/except
+        try:
+            ml_result = load_or_predict(hasil, konteks_real)
+        except Exception as exc:
+            print(f"[ML] load_or_predict error (compare): {exc}")
+            ml_result = {"source": "rule_based", "n_samples": 0, "topik_hash": ""}
+        if ml_result["source"] == "ml" and ml_result.get("prediksi"):
+            hasil["prediksi_ml_experimental"] = ml_result["prediksi"]
+        else:
+            hasil["prediksi_ml_experimental"] = None
+        hasil["prediksi_source"] = "heuristic"
 
-        # Prediction source label untuk compare
-        hasil.setdefault("prediction_source", {})
-        hasil["prediction_source"]["ml_aktif"] = ml_result["source"] == "ml"
+        # BUG #10 FIX: Prediction source label — flat field, bukan dict
+        hasil["prediction_source"] = "heuristic"
+        hasil["ml_active"] = ml_result["source"] == "ml"
 
         results.append({
             "label": sc.label or f"Skenario {i+1}",
@@ -642,7 +675,8 @@ def extract_graph(payload: SimRequest, request: Request):
     """
     _enforce_rate_limit(request)
 
-    from backend.engine import extract_entities, call_llm
+    from backend.graph import extract_entities
+    from backend.llm import call_llm
 
     topik_bersih = payload.topik.strip()
     if not topik_bersih:

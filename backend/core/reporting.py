@@ -1,10 +1,24 @@
 # backend/core/reporting.py
 # Phase 8: Explainability Report — kenapa hasilnya begitu?
 # Pure Python (0 LLM call), hanya memanfaatkan data yang sudah ada.
+#
+# FIX LOG:
+#   FIX-E: confidence_summary field baru — satu angka konsisten, tidak ada 80% vs 0%
+#   FIX-C: prediksi_comparison tidak lagi ditampilkan tanpa konteks — ada penjelasan jelas
+#          mana yang "utama" dan mana yang "eksperimental"
+#   FIX-event: analisis event diperluas — explain KENAPA agen bergerak counter event
 
 from __future__ import annotations
 
-from .metrics import compute_polarization, compute_consensus, compute_volatility, compute_conflict_score
+from dataclasses import dataclass, field
+from typing import List, Dict, Any
+
+from .metrics import (
+    compute_polarization,
+    compute_consensus,
+    compute_volatility,
+    compute_conflict_score,
+)
 
 
 def _label_skor(skor: float) -> str:
@@ -16,10 +30,8 @@ def _label_skor(skor: float) -> str:
 
 
 def _analisis_penyebab(sentimen_agregat: dict, aktor_analisis: dict) -> list[str]:
-    """Analisis penyebab hasil diskusi berdasarkan data."""
     sebab: list[str] = []
 
-    # Analisis siapa yang dominan
     aktor_kunci = (aktor_analisis or {}).get("aktor_kunci", [])
     if aktor_kunci:
         dominan = aktor_kunci[0]
@@ -30,7 +42,6 @@ def _analisis_penyebab(sentimen_agregat: dict, aktor_analisis: dict) -> list[str
             f"(bobot pengaruh {dominan.get('pengaruh_skor', 0.5):.0%})."
         )
 
-    # Analisis swing voter
     swing = (aktor_analisis or {}).get("swing_voter", [])
     if swing:
         nama_swing = [s.get("nama", "?") for s in swing[:2]]
@@ -43,7 +54,6 @@ def _analisis_penyebab(sentimen_agregat: dict, aktor_analisis: dict) -> list[str
 
 
 def _analisis_konflik(sentimen_agregat: dict) -> str:
-    """Analisis konflik antar agen."""
     skor_akhir = {}
     for nama, tren in sentimen_agregat.items():
         if tren:
@@ -51,7 +61,6 @@ def _analisis_konflik(sentimen_agregat: dict) -> str:
 
     positif = {n: s for n, s in skor_akhir.items() if s > 0.2}
     negatif = {n: s for n, s in skor_akhir.items() if s < -0.2}
-    netral_len = len(skor_akhir) - len(positif) - len(negatif)
 
     if positif and negatif:
         return (
@@ -66,22 +75,67 @@ def _analisis_konflik(sentimen_agregat: dict) -> str:
     return "Semua agen cenderung netral — belum ada pergerakan berarti."
 
 
-def _analisis_event(events: list) -> list[str]:
-    """Analisis dampak event/intervensi."""
+def _analisis_event(events: list, sentimen_agregat: dict = None) -> list[str]:
+    """
+    FIX-event: Analisis dampak event diperluas.
+    Sekarang menjelaskan KENAPA agen bergerak counter event (bukan hanya siapa yang terdampak).
+    """
     if not events:
         return []
     hasil: list[str] = []
     for e in events:
-        deskripsi = getattr(e, "deskripsi", e.get("deskripsi", "")) if isinstance(e, dict) else e.deskripsi
+        deskripsi = (
+            getattr(e, "deskripsi", e.get("deskripsi", ""))
+            if isinstance(e, dict)
+            else e.deskripsi
+        )
         ronde = getattr(e, "ronde", e.get("ronde", 0)) if isinstance(e, dict) else e.ronde
-        dampak = getattr(e, "actual_impacts", e.get("actual_impacts", {})) if isinstance(e, dict) else e.actual_impacts
+        dampak = (
+            getattr(e, "actual_impacts", e.get("actual_impacts", {}))
+            if isinstance(e, dict)
+            else e.actual_impacts
+        )
+
         if dampak:
+            mendukung = [(n, s) for n, s in dampak.items() if s > 0.1]
+            menolak = [(n, s) for n, s in dampak.items() if s < -0.1]
+
             agen_terdampak = [f"{n}({s:+.2f})" for n, s in dampak.items() if abs(s) > 0.1]
-            if agen_terdampak:
-                hasil.append(
-                    f"Intervensi ronde {ronde}: '{deskripsi[:60]}' — "
-                    f"berdampak pada {', '.join(agen_terdampak[:4])}."
+            base = (
+                f"Ronde {ronde}: '{deskripsi[:60]}' — "
+                f"berdampak pada {', '.join(agen_terdampak[:4])}."
+            )
+            hasil.append(base)
+
+            if mendukung and menolak:
+                # Analisis lebih dalam: explain KENAPA terjadi respons berlawanan
+                pro_names = [n for n, _ in mendukung[:2]]
+                contra_names = [n for n, _ in menolak[:2]]
+                parts = [
+                    f"Intervensi ini memicu respons berlawanan — "
+                    f"{', '.join(pro_names)} cenderung mendukung, "
+                    f"sementara {', '.join(contra_names)} justru semakin kritis."
+                ]
+
+                # BUG #3 FIX: Analisis dinamis berdasarkan tipe event dan konteks
+                tipe = (
+                    getattr(e, "tipe", e.get("tipe", ""))
+                    if isinstance(e, dict)
+                    else e.tipe
                 )
+                if tipe == "intervensi" or "bantuan" in deskripsi.lower() or "subsidi" in deskripsi.lower():
+                    parts.append(
+                        f"Ini umum terjadi pada intervensi: agen yang skeptis (seperti Jurnalis, "
+                        f"Akademisi, Oposisi) cenderung melihat intervensi sebagai solusi jangka pendek "
+                        f"yang tidak menyentuh akar masalah, sehingga respons mereka justru semakin kritis."
+                    )
+                elif "kenaikan" in deskripsi.lower() or "harga" in deskripsi.lower():
+                    parts.append(
+                        f"Kebijakan yang berdampak pada harga kebutuhan langsung memicu respons "
+                        f"negatif dari agen yang mewakili rakyat kecil (Masyarakat, Mahasiswa) karena "
+                        f"daya beli terdampak langsung."
+                    )
+                hasil.append(" ".join(parts))
     return hasil
 
 
@@ -89,35 +143,39 @@ def generate_report(hasil: dict) -> dict:
     """
     Generate laporan explainability dari hasil simulasi.
 
-    Args:
-        hasil: Dict return dari run_simulation().
+    FIX-E: confidence_summary sekarang konsisten — satu angka, satu label.
+    FIX-C: prediksi_comparison dengan penjelasan jelas mana utama vs eksperimental.
+    Also enrich report with new fields for frontend compatibility.
+    """
+    """
+    Generate laporan explainability dari hasil simulasi.
 
-    Returns:
-        Dict dengan field:
-        - ringkasan: str — paragraf pendek
-        - penyebab: list[str] — analisis sebab-akibat
-        - konflik: str — analisis konflik
-        - aktor: list[str] — analisis aktor
-        - events: list[str] — dampak event
-        - keyakinan: str — confidence note
-        - disclaimer: str
+    FIX-E: confidence_summary sekarang konsisten — satu angka, satu label.
+    FIX-C: prediksi_comparison dengan penjelasan jelas mana utama vs eksperimental.
     """
     sentimen_agregat = hasil.get("sentimen_agregat", {})
     aktor_analisis = hasil.get("aktor_analisis", {})
     prediksi = hasil.get("prediksi", {})
-    events = hasil.get("events", [])
-    # BUG #4 ROOT CAUSE FIX: prediction_confidence adalah dict {"score", "label", "alasan"},
-    # bukan float. Patch lama (isinstance check di bawah) selalu fallback ke 0.0.
-    # Fix: ekstrak .score lebih dulu, baru validasi.
-    _raw_confidence = hasil.get("prediction_confidence", 0.0)
-    if isinstance(_raw_confidence, dict):
-        confidence = float(_raw_confidence.get("score", 0.0))
-        confidence_label = _raw_confidence.get("label", "")
-        confidence_alasan = _raw_confidence.get("alasan", [])
+    events_raw = hasil.get("events", [])
+
+    confidence_summary = hasil.get("confidence_summary", {})
+    if confidence_summary:
+        confidence = float(confidence_summary.get("score", 0.0))
+        confidence_label = confidence_summary.get("label", "")
+        confidence_alasan = confidence_summary.get("alasan", [])
+        confidence_interpretasi = confidence_summary.get("interpretasi", "")
     else:
-        confidence = float(_raw_confidence) if _raw_confidence else 0.0
-        confidence_label = ""
-        confidence_alasan = []
+        _raw_confidence = hasil.get("prediction_confidence", 0.0)
+        if isinstance(_raw_confidence, dict):
+            confidence = float(_raw_confidence.get("score", 0.0))
+            confidence_label = _raw_confidence.get("label", "")
+            confidence_alasan = _raw_confidence.get("alasan", [])
+        else:
+            confidence = float(_raw_confidence) if _raw_confidence else 0.0
+            confidence_label = ""
+            confidence_alasan = []
+        confidence_interpretasi = ""
+
     reasoning = hasil.get("prediction_reasoning", "")
 
     # Metrics
@@ -126,11 +184,10 @@ def generate_report(hasil: dict) -> dict:
     conflict = compute_conflict_score(sentimen_agregat)
     volatility = compute_volatility(sentimen_agregat)
 
-    # Ringkasan — pakai metrik aktual, bukan nama skenario dari prediksi
+    # Ringkasan — pakai metrik aktual
     ringkasan = (
         f"Polarisasi {polarization:.0%}, konsensus {consensus:.0%}, konflik {conflict:.0%}. "
     )
-
     if polarization > 0.5:
         ringkasan += "Pendapat agen sangat terpecah — tidak ada titik temu yang jelas."
     elif polarization > 0.2:
@@ -157,20 +214,16 @@ def generate_report(hasil: dict) -> dict:
     if swing:
         volatile_names = [
             f"{s['nama']} (volatilitas {volatility.get(s['nama'], 0):.2f})"
-            for s in swing if s.get("nama") in volatility
+            for s in swing
+            if s.get("nama") in volatility
         ]
         if volatile_names:
             aktor_list.append(f"Agen dengan perubahan tertinggi: {', '.join(volatile_names[:3])}.")
 
-    # Dampak event
-    event_list = _analisis_event(events)
+    # Event analysis
+    event_list = _analisis_event(events_raw, sentimen_agregat)
 
-    # Keyakinan
-    # (confidence sudah di-extract sebagai float di atas — tidak perlu isinstance check lagi)
-    if not isinstance(reasoning, str):
-        reasoning = ""
-
-    # Tambah hitungan aktual posisi agen untuk konteks
+    # Hitungan posisi akhir
     skor_akhir = {}
     for nama, tren in sentimen_agregat.items():
         if tren:
@@ -180,41 +233,94 @@ def generate_report(hasil: dict) -> dict:
     n_net = len(skor_akhir) - n_pos - n_neg
     posisi_info = f"({n_pos} mendukung, {n_neg} menolak, {n_net} netral dari {len(skor_akhir)} agen)"
 
-    # BUG #4: Tampilkan confidence lengkap dengan label dan alasan
     conf_label_str = f" ({confidence_label})" if confidence_label else ""
     conf_alasan_str = " ".join(confidence_alasan[:2]) if confidence_alasan else ""
-    if reasoning:
+
+    if confidence_interpretasi:
+        keyakinan = (
+            f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. "
+            f"{confidence_interpretasi}"
+        )
+    elif reasoning:
         keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {reasoning[:200]} {posisi_info}."
     elif conf_alasan_str:
         keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {conf_alasan_str} {posisi_info}."
     else:
         keyakinan = f"Keyakinan sistem: {confidence:.0%}{conf_label_str}. {posisi_info}."
 
-    # BUG #1 FIX: Tambah prediksi_ml_experimental ke output report
-    # agar frontend/PDF bisa tampilkan tabel breakdown heuristic vs ML
+    # Prediksi comparison
     prediksi_ml = hasil.get("prediksi_ml_experimental")
     ml_n_samples = hasil.get("ml_info", {}).get("n_samples", 0)
     ml_conf_debug = hasil.get("ml_info", {}).get("ml_confidence_debug", {})
 
-    # Build tabel perbandingan jika ML prediction tersedia
-    prediksi_comparison = None
+    prediksi_comparison = {
+        "utama": {
+            "label": "Heuristic (Prediksi Utama)",
+            "prediksi": prediksi,
+            "confidence_label": confidence_label or "sedang",
+            "note": (
+                "Prediksi ini berbasis analisis sentimen agen secara langsung. "
+                "Ini adalah angka yang harus dibaca sebagai gambaran utama."
+            ),
+        },
+    }
+
     if prediksi_ml:
-        heuristic_conf_label = "MEDIUM" if confidence >= 0.4 else "LOW"
-        ml_conf_label = ml_conf_debug.get("label", "LOW").upper() if isinstance(ml_conf_debug, dict) else "LOW"
-        prediksi_comparison = {
-            "heuristic": {
-                "label": "Heuristic (Utama)",
-                "prediksi": prediksi,
-                "confidence": heuristic_conf_label,
-                "note": "Prediksi utama — berbasis analisis sentimen agen",
-            },
-            "ml_experimental": {
-                "label": f"ML Experimental ({ml_n_samples} sampel)",
-                "prediksi": prediksi_ml,
-                "confidence": ml_conf_label,
-                "note": "Eksperimental — akurasi meningkat seiring bertambahnya data feedback",
-            },
+        ml_conf_label = (
+            ml_conf_debug.get("label", "rendah").upper()
+            if isinstance(ml_conf_debug, dict)
+            else "rendah"
+        )
+        prediksi_comparison["ml_eksperimental"] = {
+            "label": f"ML Eksperimental ({ml_n_samples} sampel)",
+            "prediksi": prediksi_ml,
+            "confidence_label": ml_conf_label,
+            "note": (
+                "Prediksi ini dari model machine learning yang dilatih dari riwayat simulasi. "
+                "EKSPERIMENTAL — akurasi meningkat seiring bertambahnya data feedback. "
+                "Jika berbeda dari heuristic, percayai heuristic dulu."
+            ),
         }
+    else:
+        prediksi_comparison["ml_eksperimental"] = {
+            "label": "ML Belum Aktif",
+            "prediksi": None,
+            "confidence_label": "tidak_tersedia",
+            "note": (
+                "Model ML belum aktif (butuh minimal 5 simulasi). "
+                "Prediksi hanya dari heuristic."
+            ),
+        }
+
+    # Additional fields for frontend compatibility
+    phenomenon_summary = ringkasan
+    # Group breakdown: each agent's final stance and score
+    group_breakdown = []
+    for nama, tren in sentimen_agregat.items():
+        if not tren:
+            continue
+        final_score = tren[-1]
+        stance = _label_skor(final_score)
+        group_breakdown.append({"nama": nama, "final_stance": stance, "score": final_score})
+    # Key driver info
+    key_driver = ""
+    key_driver_impact = ""
+    if (aktor_analisis or {}).get("aktor_kunci"):
+        kd = (aktor_analisis or {}).get("aktor_kunci")[0]
+        key_driver = kd.get("nama", "")
+        key_driver_impact = kd.get("pengaruh_skor", 0)
+    # Swing voters names
+    swing_voters = [s.get("nama") for s in swing] if swing else []
+    # Main conflict description
+    main_conflict = konflik
+    # Confidence dict
+    confidence = {
+        "score": confidence,
+        "label": confidence_label,
+        "reason": confidence_alasan[0] if confidence_alasan else "",
+    }
+    # Limitations (placeholder)
+    limitations = []
 
     return {
         "ringkasan": ringkasan,
@@ -223,10 +329,78 @@ def generate_report(hasil: dict) -> dict:
         "aktor": aktor_list,
         "events": event_list,
         "keyakinan": keyakinan,
-        "prediksi_comparison": prediksi_comparison,  # BUG #1 FIX: tabel breakdown heuristic vs ML
+        "prediksi_comparison": prediksi_comparison,
         "disclaimer": (
             "Ini adalah simulasi eksploratif, bukan prediksi faktual. "
             "Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. "
             "Gunakan sebagai bahan pertimbangan, bukan keputusan final."
         ),
+        "phenomenon_summary": phenomenon_summary,
+        "group_breakdown": group_breakdown,
+        "key_driver": key_driver,
+        "key_driver_impact": key_driver_impact,
+        "swing_voters": swing_voters,
+        "main_conflict": main_conflict,
+        "confidence": confidence,
+        "limitations": limitations,
     }
+
+# Dataclass for explainability report (backward compatibility)
+@dataclass
+class ExplainabilityReport:
+    # Core legacy fields with defaults for flexible init
+    ringkasan: str = ""
+    penyebab: List[str] = field(default_factory=list)
+    konflik: str = ""
+    aktor: List[str] = field(default_factory=list)
+    events: List[str] = field(default_factory=list)
+    keyakinan: str = ""
+    prediksi_comparison: Dict[str, Any] = field(default_factory=dict)
+    disclaimer: str = field(
+        default="Ini adalah simulasi eksploratif, bukan prediksi faktual. Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. Gunakan sebagai bahan pertimbangan, bukan keputusan final."
+    )
+    # New fields required by tests
+    skenario: str = ""
+    skenario_probability: Dict[str, int] = field(default_factory=dict)
+    skenario_definition: str = ""
+    phenomenon_summary: str = ""
+    group_breakdown: List[Dict[str, Any]] = field(default_factory=list)
+    key_driver: str = ""
+    key_driver_impact: Any = None
+    swing_voters: List[str] = field(default_factory=list)
+    main_conflict: str = ""
+    confidence: Dict[str, Any] = field(default_factory=dict)
+    limitations: List[str] = field(default_factory=list)
+
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary with legacy and new keys expected by tests."""
+        base = {
+            "ringkasan": self.ringkasan,
+            "penyebab": self.penyebab,
+            "konflik": self.konflik,
+            "aktor": self.aktor,
+            "events": self.events,
+            "keyakinan": self.keyakinan,
+            "prediksi_comparison": self.prediksi_comparison,
+            "disclaimer": self.disclaimer,
+        }
+        # Add new fields
+        base.update(
+            {
+                "skenario": self.skenario,
+                "skenario_probability": self.skenario_probability,
+                "skenario_definition": self.skenario_definition,
+                "phenomenon_summary": self.phenomenon_summary,
+                "group_breakdown": self.group_breakdown,
+                "key_driver": self.key_driver,
+                "key_driver_impact": self.key_driver_impact,
+                "swing_voters": self.swing_voters,
+                "main_conflict": self.main_conflict,
+                "confidence": self.confidence,
+                "limitations": self.limitations,
+            }
+        )
+        return base
+
+

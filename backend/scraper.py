@@ -276,12 +276,12 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
 # TF-IDF Relevance Scoring (0 LLM call, lebih akurat dari keyword counting)
 # ---------------------------------------------------------------------------
 
-_RE_CLEAN = re.compile(r"[^a-zA-Z0-9\s]")
-
-
 def _bersih_teks(teks: str) -> str:
     """Lowercase, hapus non-alfanumerik, normalize whitespace."""
-    return _RE_CLEAN.sub(" ", teks.lower().strip())
+    return "".join(
+        c if (c.isascii() and c.isalnum()) or c.isspace() else " "
+        for c in teks.lower().strip()
+    )
 
 
 def _hitung_relevansi_tfidf(topik: str, items: list[dict], maks: int = 15) -> list[dict]:

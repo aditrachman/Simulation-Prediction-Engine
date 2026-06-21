@@ -367,13 +367,13 @@ def _load_dataset() -> list[tuple[str, str]]:
 # Preprocessing
 # ---------------------------------------------------------------------------
 
-_RE_CLEAN = re.compile(r"[^a-zA-Z0-9\s]")
-
-
 def _preprocess(text: str) -> str:
     """Bersihkan teks: lowercase, hapus non-alfanumerik (kecuali spasi)."""
     text = text.lower()
-    text = _RE_CLEAN.sub(" ", text)
+    text = "".join(
+        c if (c.isascii() and c.isalnum()) or c.isspace() else " "
+        for c in text
+    )
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
