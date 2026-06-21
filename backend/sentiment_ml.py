@@ -27,7 +27,8 @@ try:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import Pipeline
-    from sklearn.metrics import classification_report, confusion_matrix, precision_recall_fscore_support
+    from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_fscore_support
+    from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
     _SKLEARN_AVAILABLE = True
 except ImportError:
@@ -632,11 +633,10 @@ def get_metrics() -> dict:
     """
     Evaluasi performa model sentimen (TF-IDF + LogisticRegression).
 
-    Compute confusion matrix 3x3, precision/recall/F1 per kelas
-    pada dataset training (SmSA + policy synthetic).
+    Menggunakan 5-fold cross-validation (atau Leave-One-Out jika data < 20)
+    untuk evaluasi out-of-sample yang realistis.
 
-    Returns dict (sama format dengan ml_pipeline.get_ml_metrics untuk
-    konsistensi frontend):
+    Returns dict (sama format dengan ml_pipeline.get_ml_metrics):
         {
             "ok": bool,
             "message": str,
@@ -644,14 +644,17 @@ def get_metrics() -> dict:
             "classes": ["positif", "netral", "negatif"],
             "accuracy": float,
             "accuracy_pct": int,
+            "eval_method": str,
             "confusion_matrix": [[int]],
             "per_class": {kelas: {"precision": float, "recall": float, "f1": float, "support": int}},
             "macro_avg": {"precision": float, "recall": float, "f1": float},
             "weighted_avg": {"precision": float, "recall": float, "f1": float},
-            "training_accuracy": float,
             "note": str,
+            "evaluated_at": str,
         }
     """
+    from datetime import datetime, timezone
+
     if not _SKLEARN_AVAILABLE:
         return {"ok": False, "message": "scikit-learn tidak terinstall."}
 
@@ -668,11 +671,37 @@ def get_metrics() -> dict:
         texts = [_preprocess(t) for _, t in raw]
         labels_true = [l for l, _ in raw]
 
-        # Predict
-        labels_pred = pipeline.predict(texts)
-
         n = len(raw)
-        acc = pipeline.score(texts, labels_true)
+
+        # Build UNFITTED pipeline — clone dari trained untuk ambil parameter,
+        # TAPI cross_val_predict harus mulai dari awal (unfitted) agar
+        # tidak ada data leakage dari TF-IDF vocabulary / LR weights.
+        trained = _load_model()
+        fresh_pipeline = Pipeline([
+            ("tfidf", TfidfVectorizer(
+                max_features=trained.named_steps["tfidf"].max_features,
+                ngram_range=trained.named_steps["tfidf"].ngram_range,
+                sublinear_tf=trained.named_steps["tfidf"].sublinear_tf,
+            )),
+            ("clf", LogisticRegression(
+                C=trained.named_steps["clf"].C,
+                max_iter=trained.named_steps["clf"].max_iter,
+                class_weight=trained.named_steps["clf"].class_weight,
+                random_state=trained.named_steps["clf"].random_state,
+            )),
+        ])
+
+        if n >= 20:
+            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            labels_pred = cross_val_predict(fresh_pipeline, texts, labels_true, cv=cv)
+            eval_method = "5-fold CV"
+        else:
+            from sklearn.model_selection import LeaveOneOut
+            loo = LeaveOneOut()
+            labels_pred = cross_val_predict(fresh_pipeline, texts, labels_true, cv=loo)
+            eval_method = f"Leave-One-Out CV ({n} fold)"
+
+        acc = accuracy_score(labels_true, labels_pred)
 
         # Confusion matrix — urut sesuai _CLASS_ORDER
         cm = confusion_matrix(labels_true, labels_pred, labels=_CLASS_ORDER).tolist()
@@ -708,6 +737,7 @@ def get_metrics() -> dict:
             "classes":          _CLASS_ORDER,
             "accuracy":         round(float(acc), 4),
             "accuracy_pct":     round(float(acc) * 100),
+            "eval_method":      eval_method,
             "confusion_matrix": cm,
             "per_class":        per_class,
             "macro_avg": {
@@ -720,11 +750,11 @@ def get_metrics() -> dict:
                 "recall":    round(float(weight_r), 4),
                 "f1":        round(float(weight_f), 4),
             },
-            "training_accuracy": round(float(acc), 4),
             "note": (
-                "Evaluasi pada dataset training yang sama (bukan hold-out). "
-                "Angka ini optimistis — akurasi di dunia nyata mungkin lebih rendah."
+                "Evaluasi via 5-fold cross-validation — tidak ada data train "
+                "yang bocor ke test. Angka ini lebih realistis dari training accuracy."
             ),
+            "evaluated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 
     except Exception as exc:
