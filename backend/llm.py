@@ -19,17 +19,35 @@ load_dotenv()
 
 
 # ---------------------------------------------------------------------------
-# LLM Client & Model Config
+# LLM Client & Model Config — lazy initialization
 # ---------------------------------------------------------------------------
 
-def _build_client() -> Groq:
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not set on the server environment.")
-    return Groq(api_key=api_key)
+_client_instance: Groq | None = None
+_client_init_lock = threading.Lock()
 
 
-client = _build_client()
+def _get_client() -> Groq | None:
+    """
+    BUG #5 FIX: Lazy client initialization — server tetap jalan meski
+    API key tidak valid/kosong. Endpoints akan fallback ke mode offline.
+    """
+    global _client_instance
+    if _client_instance is not None:
+        return _client_instance
+
+    with _client_init_lock:
+        if _client_instance is not None:
+            return _client_instance
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            print("[LLM] GROQ_API_KEY tidak ditemukan — mode offline.")
+            return None
+        try:
+            _client_instance = Groq(api_key=api_key)
+            return _client_instance
+        except Exception as exc:
+            print(f"[LLM] Gagal inisialisasi Groq client: {exc}")
+            return None
 
 # ─── MODEL CONFIG ──────────────────────────────────────────────────────────
 MODEL_AGENT    = os.getenv("MODEL_AGENT",    "llama-3.1-8b-instant")
@@ -43,7 +61,7 @@ AGENT_FALLBACK_CHAIN = [
 ]
 
 # ─── TOKEN BUDGET ──────────────────────────────────────────────────────────
-MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "350"))  # 350 ≈ 250-280 kata BI = 3-4 kalimat penuh, lebih stabil di model 8B
+MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "500"))  # 500 ≈ 350-400 kata BI = 4-5 kalimat penuh
 MAX_TOKENS_RESPONSE  = int(os.getenv("MAX_TOKENS_RESPONSE",  "400"))
 MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "1200"))
 MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
@@ -145,12 +163,17 @@ def call_llm(
     else:
         chain = [model]
 
+    # BUG #5 FIX: Cek ketersediaan client sebelum request
+    groq_client = _get_client()
+    if groq_client is None:
+        return "[Offline] Groq API tidak tersedia (GROQ_API_KEY tidak dikonfigurasi). Gunakan mode free_tier atau SENTIMENT_MODE=inline."
+
     last_error = ""
 
     for current_model in chain:
         for attempt in range(RETRY_MAX):
             try:
-                resp = client.chat.completions.create(
+                resp = groq_client.chat.completions.create(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user",   "content": user_prompt},

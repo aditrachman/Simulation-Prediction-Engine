@@ -58,10 +58,9 @@ from .core.swarm import CrowdPool
 # Helper: Batasi Output Agen (BUG-20)
 # ---------------------------------------------------------------------------
 
-def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
+def _batasi_kalimat(teks: str, max_kalimat: int = 4) -> str:
     """
     Post-processing pure Python — potong output agen di batas kalimat ke-N.
-    BUG-20 FIX: hard cap 45 kata, threshold 30 kata + split di titik koma.
     """
     if not teks:
         return teks
@@ -70,8 +69,8 @@ def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
 
     # Hard cap total kata
     kata_total = teks.split()
-    if len(kata_total) > 45:
-        return " ".join(kata_total[:45]).rstrip(' ,;.-_:') + "."
+    if len(kata_total) > 60:
+        return " ".join(kata_total[:60]).rstrip(' ,;.-_:') + "."
 
     if len(pecahan) <= max_kalimat:
         kata_kata = teks.split()
@@ -407,13 +406,14 @@ def run_simulation(
             + stance_rule
             + akademisi_rule
             + conviction_rule
-            + "Aturan main: "
+            +             "Aturan main: "
             "Jangan sebut role/jabatanmu ('sebagai X', 'saya selaku X'). "
             "Jangan bilang kamu nggak punya opini — semua karakter punya sudut pandang. "
             "Jangan ulangi argumen agen lain — kasih perspektif baru dari sudut pandangmu. "
             "Langsung ke poin, jangan buka dengan 'Saya pikir' atau 'Menurut saya'. "
             "Tulis 2-3 kalimat pendek. "
-            "Kalau sebut angka atau data, sebut sumbernya."
+            "Kalau sebut angka atau data, sebut sumbernya dari berita yang sudah dikasih, "
+            "bukan dari ingatanmu sendiri."
         )
 
         # ISSUE #22 — guard agen pembuka ronde 1
