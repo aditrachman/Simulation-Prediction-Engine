@@ -8,6 +8,8 @@
 # Phase 5: Integrasi dengan MemoryStore terstruktur (argument + relationship tracking).
 # MemoryStore dipakai di samping dict memori lama untuk backward compatibility.
 
+import re
+
 from .llm import call_llm, MODEL_AGENT, MAX_TOKENS_SUMMARY
 from .core.memory_store import AgentMemoryStore
 
@@ -209,12 +211,22 @@ def build_influence_context(
     baris = []
     for p in kandidat:
         pendapat_full = p["pendapat"]
-        # Ambil kalimat pertama saja (potong di titik pertama)
-        kalimat_pertama = pendapat_full.split(".")[0].strip()
-        # Batasi 90 karakter, potong di kata terakhir yang lengkap
-        if len(kalimat_pertama) > 90:
-            kalimat_pertama = kalimat_pertama[:90].rsplit(" ", 1)[0]
-        kutipan = kalimat_pertama + ("..." if len(pendapat_full) > len(kalimat_pertama) + 1 else "")
+        # Split per kalimat — tidak salah potong di angka desimal (3.5%) atau inisial (Dr. Smith)
+        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', pendapat_full)
+        # Ambil kalimat pertama yang >= 30 char (hindari "Iya.", "Benar.", "Tidak.")
+        kutipan = ""
+        for s in sentences:
+            s = s.strip()
+            if len(s) >= 30:
+                kutipan = s
+                break
+        if not kutipan and sentences:
+            kutipan = sentences[0].strip()
+        # Fallback: potong di 150 char kalau masih terlalu panjang
+        if len(kutipan) > 150:
+            kutipan = kutipan[:150].rsplit(" ", 1)[0]
+        if len(pendapat_full) > len(kutipan) + 1:
+            kutipan += "..."
         baris.append(f'- {p["nama"]}: {kutipan}')
 
     konteks  = "Posisi peserta lain sejauh ini:\n" + "\n".join(baris) + "\n"
