@@ -629,6 +629,9 @@ def get_status() -> dict:
 
 _CLASS_ORDER = ["positif", "netral", "negatif"]
 
+# TODO: cache hasil CV (~23-25s per call) jika endpoint /sentiment-ml-metrics sering diakses dari dashboard.
+# Pola: hash dataset → simpan ke backend/data/sentiment_metrics_cache.json → skip CV kalau hash sama.
+
 def get_metrics() -> dict:
     """
     Evaluasi performa model sentimen (TF-IDF + LogisticRegression).

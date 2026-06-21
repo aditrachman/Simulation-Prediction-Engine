@@ -5,6 +5,9 @@ _proses_satu_agen() where agent name context is available,
 NOT in the scoring functions themselves.
 """
 
+# TODO: tambah unit test untuk get_metrics() versi 5-fold CV — saat ini hanya divalidasi manual
+# (distribusi prediksi vs ground truth, gap CV-vs-training). Belum ada regression test otomatis.
+
 import pytest
 from backend.sentiment import _score_inline
 
