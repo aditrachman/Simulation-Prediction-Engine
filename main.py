@@ -1129,3 +1129,17 @@ def ml_metrics(request: Request):
         "status":  "success" if metrics.get("ok") else "error",
         "metrics": metrics,
     }
+
+
+@app.get("/sentiment-ml-metrics", tags=["ML"])
+def sentiment_ml_metrics(request: Request):
+    """
+    Evaluasi performa sentiment classifier (TF-IDF + LogisticRegression).
+    Menampilkan akurasi, precision/recall/F1 per kelas (positif/netral/negatif),
+    confusion matrix, dan jumlah data training.
+    """
+    metrics = sentiment_ml.get_metrics()
+    return {
+        "status":  "success" if metrics.get("ok") else "error",
+        "metrics": metrics,
+    }
