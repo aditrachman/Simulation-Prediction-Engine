@@ -113,8 +113,8 @@ class ArgumentMemory:
         if not used_terms:
             return ""
         return (
-            f"ARGUMEN YANG SUDAH KAMU SAMPAIKAN: {', '.join(list(used_terms)[:5])}. "
-            f"Cari sudut pandang LAIN — jangan ulangi kata kunci yang sama."
+            f"Topik yang udah kamu bahas: {', '.join(list(used_terms)[:5])}. "
+            f"Cari sudut pandang BARU — jangan ulangin topik yang sama."
         )
 
     def count_repetitions(self) -> int:
@@ -192,9 +192,9 @@ class RelationshipMemory:
 
         parts = []
         if allies:
-            parts.append(f"Lebih setuju dengan: {', '.join(allies)}.")
+            parts.append(f"Kamu sepemikiran dengan: {', '.join(allies)}.")
         if rivals:
-            parts.append(f"Kritis terhadap: {', '.join(rivals)}.")
+            parts.append(f"Kamu beda pendapat sama: {', '.join(rivals)}.")
         return " ".join(parts)
 
 
@@ -270,19 +270,18 @@ class AgentMemoryStore:
         label = self._stance_label(skor)
         skor_str = f" (skor {skor:.2f})" if skor is not None else ""
 
-        parts.append(f"POSISIMU SEJAUH INI: {label}{skor_str}")
+        parts.append(f"Posisi kamu sekarang: {label}{skor_str}")
 
         # Jika ada argumen fresh, sebutkan
         if self.arguments.unique_arguments:
             latest_arg = self.arguments.unique_arguments[-1]
-            parts.append(f"Argumen terakhirmu: \"{latest_arg[:80]}\"")
+            parts.append(f"Terakhir kamu bilang: \"{latest_arg[:80]}\"")
 
         # Repetition warning
         reps = self.arguments.count_repetitions()
         if reps >= 1:
             parts.append(
-                "PERINGATAN: Argumenmu mulai repetitif. Cari sudut pandang atau data BARU — "
-                "jangan ulangi kata kunci atau argumen yang sama."
+                "Kamu udah ngomong ini beberapa kali. Coba sudut pandang atau data BARU."
             )
 
         # Trust summary

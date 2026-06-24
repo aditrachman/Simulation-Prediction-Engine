@@ -81,15 +81,15 @@ GROUP_LLM_AFFINITY: dict[str, str] = {
 def _generate_stance(group: str, rng: random.Random) -> float:
     """Generate initial stance based on group tendency."""
     tendencies = {
-        "mahasiswa":  random.gauss(0.0, 0.3),
-        "pekerja":    random.gauss(-0.1, 0.25),
-        "umkm":       random.gauss(-0.05, 0.25),
-        "masyarakat": random.gauss(0.0, 0.2),
-        "akademisi":  random.gauss(0.0, 0.15),
-        "media":      random.gauss(0.0, 0.2),
-        "oposisi":    random.gauss(-0.3, 0.3),
+        "mahasiswa":  rng.gauss(0.0, 0.3),
+        "pekerja":    rng.gauss(-0.1, 0.25),
+        "umkm":       rng.gauss(-0.05, 0.25),
+        "masyarakat": rng.gauss(0.0, 0.2),
+        "akademisi":  rng.gauss(0.0, 0.15),
+        "media":      rng.gauss(0.0, 0.2),
+        "oposisi":    rng.gauss(-0.3, 0.3),
     }
-    s = tendencies.get(group, random.gauss(0.0, 0.3))
+    s = tendencies.get(group, rng.gauss(0.0, 0.3))
     return max(-1.0, min(1.0, s))
 
 
@@ -105,7 +105,7 @@ def _generate_susceptibility(group: str, rng: random.Random) -> float:
         "oposisi":    0.3,
     }
     b = base.get(group, 0.5)
-    return max(0.0, min(1.0, b + random.gauss(0, 0.15)))
+    return max(0.0, min(1.0, b + rng.gauss(0, 0.15)))
 
 
 class CrowdPool:
@@ -158,8 +158,9 @@ class CrowdPool:
             affinity_name = GROUP_LLM_AFFINITY.get(crowd.group)
             affinity_stance = llm_map.get(affinity_name, 0.0)
 
-            # Jika tidak ada affinity, pakai rata-rata semua LLM agents
-            if affinity_stance == 0.0 and llm_map:
+            # BUG #7 FIX: cek apakah affinity_name ADA di llm_map, bukan cek nilai stance
+            # (stance=0.0 adalah nilai valid untuk netral, bukan berarti 'not found')
+            if affinity_name not in llm_map and llm_map:
                 affinity_stance = statistics.mean(llm_map.values())
 
             # Propagasi: crowd bergerak menuju affinity LLM

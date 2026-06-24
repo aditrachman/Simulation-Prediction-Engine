@@ -444,7 +444,8 @@ def predict_outcome(feature_row: dict) -> Optional[dict]:
 
         X     = [[feature_row.get(f, 0.0) for f in FEATURE_COLS]]
         proba = clf.predict_proba(X)[0]
-        classes = [str(c) for c in le.inverse_transform(list(range(len(proba))))]
+        # BUG #2 FIX: pakai len(le.classes_) bukan hardcode 3 — handle jika <3 kelas
+        classes = [str(c) for c in le.inverse_transform(list(range(len(le.classes_))))]
 
         pct_raw = {c: p for c, p in zip(classes, proba)}
         total   = sum(pct_raw.values()) or 1.0
@@ -684,6 +685,14 @@ def get_ml_metrics() -> dict:
             clf = pickle.loads(MODEL_FILE.read_bytes())
             le  = pickle.loads(ENCODER_FILE.read_bytes())
 
+        # BUG #3 FIX: filter label yang belum dikenal encoder agar tidak crash
+        known_labels = set(le.classes_)
+        filtered = [(X[i], y_raw[i]) for i in range(len(y_raw)) if y_raw[i] in known_labels]
+        if not filtered:
+            return {"ok": False, "message": "Tidak ada label yang dikenal encoder setelah filtering."}
+        X_filt, y_raw_filt = zip(*filtered)
+        X = list(X_filt)
+        y_raw = list(y_raw_filt)
         y = le.transform(y_raw)   # encode menggunakan LE yang sudah di-fit
 
         n = len(dataset)

@@ -44,6 +44,16 @@ _KATA_NEGATIF = {
     "larang", "dilarang", "hentikan", "stop", "hapus",
     "cabut", "batalkan", "cegah",
     "curiga", "curigai", "mencurigai", "skeptis",
+    # BUG #2 FIX: Tambah kata kunci negatif umum yang hilang
+    "kenaikan", "naik", "mahal", "kemahalan", "tinggi",
+    "turun", "penurunan", "merosot", "anjlok", "jatuh",
+    "beban", "membebani", "terbebani", "pajak", "pungutan",
+    "korupsi", "koruptor", "nepotisme", "kolusi",
+    "krisis", "darurat", "bencana", "malapetaka",
+    "diskriminasi", "ketidakadilan", "timpang", "senjang",
+    "pengangguran", "miskin", "kemiskinan", "kelaparan",
+    "kebocoran", "pemborosan", "boros", "sia-sia",
+    "gagal", "kegagalan", "kerugian",
 }
 
 _KATA_POSITIF = {
@@ -53,6 +63,17 @@ _KATA_POSITIF = {
     "bagus", "baik", "tepat", "cocok", "sesuai",
     "efisien", "efektif", "inovatif",
     "rasional", "didukung", "percaya",
+    # BUG #2 FIX: Tambah kata kunci positif umum yang hilang
+    "stabil", "stabilitas", "aman", "keamanan",
+    "adil", "keadilan", "merata", "pemerataan",
+    "sejahtera", "kesejahteraan", "makmur", "kemakmuran",
+    "berhasil", "keberhasilan", "sukses", "kesuksesan",
+    "tumbuh", "pertumbuhan", "berkembang", "perkembangan",
+    "reformasi", "perbaikan", "pembenahan",
+    "terobosan", "kemajuan", "maju", "modern",
+    "terjangkau", "murah", "ringan",
+    "terbuka", "transparan", "akuntabel",
+    "apresiasi", "menghargai", "hormati",
 }
 
 _NEGASI = {"tidak", "nggak", "gak", "bukan", "jangan", "tanpa", "belum"}
@@ -250,38 +271,16 @@ def _score_llm(teks: str, topik: str = "") -> dict:
 # ---------------------------------------------------------------------------
 
 _FORBIDDEN_OPENS = [
-    # BUG-12 FIX: Varian "Data menunjukkan bahwa" yang sering muncul — DILARANG semuanya
+    # Cuma yang BENAR-BENAR robotik — buang sisanya biar agent bisa bicara natural
     r"^Data menunjukkan bahwa\b",
-    r"^Data menunjukkan\b",
     r"^Berdasarkan data\b",
-    r"^Dari data\b",
     r"^Studi menunjukkan bahwa\b",
     r"^Penelitian menunjukkan\b",
-    r"^Fakta menunjukkan bahwa\b",
-    # Opini eksplisit
-    r"^Gue rasa\b",
-    r"^Gue pikir\b",
-    r"^Saya rasa\b",
-    r"^Saya pikir\b",
-    r"^Menurut saya\b",
-    r"^Menurut gue\b",
-    # Penolakan / ketidaksetujuan
-    r"^Saya tidak setuju\b",
-    r"^Gue tidak setuju\b",
+    # Penolakan yang terlalu formal
     r"^Saya tidak bisa menerima\b",
-    r"^Gue tidak bisa menerima\b",
     r"^Saya tidak cocok\b",
-    r"^Saya kurang setuju\b",
-    r"^Gue tidak setuju dengan klaim\b",
-    r"^Saya tidak setuju dengan klaim\b",
-    # Negasi langsung
-    r"^Klaim bahwa\b",
-    r"^Tidak sepenuhnya akurat\b",
-    r"^Itu tidak\b",
-    r"^Klaim bahwa .+tidak (tepat|akurat|benar)",
-    r"^Itu tidak (tepat|akurat|benar)",
-    # BUG-21 FIX: Pola "NamaAgen: ..." — agen mengutip verbatim agen lain
-    r"^[A-Z][a-zA-Z/]+(?:\s+[A-Z][a-zA-Z/]+)*\s*:",  # "NamaAgen:" atau "Nama Agen:"
+    # Agent name prefixes — paling bikin kaku
+    r"^[A-Z][a-zA-Z/]+(?:\s+[A-Z][a-zA-Z/]+)*\s*:",
     r"^Pengusaha\b",
     r"^Pekerja\b",
     r"^Pemerintah\b",
@@ -365,8 +364,11 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
 
     # ── BUG #2 FIX: Implicit Negative Context Detection ──────────────────────
     # Jika teks mengandung pola negatif tersirat (pertanyaan retoris kritis,
-    # preferensi implisit, dll.), bypass ML/inline dan paksa gunakan LLM.
-    if mode in ("ml", "inline") and _has_implicit_negative(teks):
+    # preferensi implisit, dll.), bypass ML dan paksa gunakan LLM.
+    # BUG #9 FIX: Mode "inline" TIDAK boleh memanggil LLM — fallback ke inline saja.
+    if mode == "inline":
+        pass  # inline mode konsisten: tidak ada LLM call
+    elif mode in ("ml",) and _has_implicit_negative(teks):
         print(f"[sentiment] Implicit negative pattern detected → force LLM")
         return _score_llm(teks, topik)
 

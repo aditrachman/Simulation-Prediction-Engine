@@ -611,18 +611,6 @@ def is_available() -> bool:
     return MODEL_FILE.exists()
 
 
-def get_status() -> dict:
-    """Return status info."""
-    return {
-        "sklearn_available": _SKLEARN_AVAILABLE,
-        "model_exists": MODEL_FILE.exists(),
-        "model_loaded": _pipeline is not None,
-        "dataset_source": "huggingface+policy" if _load_hf_smsa() else "policy_only",
-        "model_file": str(MODEL_FILE),
-        "policy_samples": 1500,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Metrics — confusion matrix & per-class evaluation
 # ---------------------------------------------------------------------------

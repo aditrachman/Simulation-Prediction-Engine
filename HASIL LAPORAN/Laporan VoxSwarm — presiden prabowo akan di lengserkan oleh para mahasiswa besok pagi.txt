@@ -1,0 +1,529 @@
+5/30/26, 8:41 PM
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+
+VOXSWARM — L APORAN SIMUL ASI OPINI MULTI-AGEN
+
+presiden prabowo akan di lengserkan oleh para
+mahasiswa besok pagi
+TAN G GA L
+
+J U M L AH PU TAR AN
+
+J U ML AH AGEN
+
+K ATE GOR I
+
+30 Mei 2026
+
+2
+
+4
+
+Umum
+
+RINGKASAN ANALISIS
+
+Mode hemat aktif, jadi analisis ini dibuat dari skor simulasi tanpa LLM tambahan. Untuk topik 'presiden
+prabowo akan di lengserkan oleh para mahasiswa besok pagi', diskusi menunjukkan perbedaan posisi
+yang cukup kuat. Ringkasan posisi akhir: Mahasiswa cenderung netral (+0.00), Pengusaha/UMKM
+cenderung menolak (-0.35), Pekerja Kantoran cenderung netral (+0.00), Pemerintah cenderung
+mendukung (+0.35). PREDIKSI SKENARIO: Konsensus 20%, Polarisasi 60%, Status Quo 20%
+
+PREDIKSI SKENARIO
+
+✅ Prediksi Utama — berbasis analisis heuristic sentimen agen
+
+ⓘ Persentase ini menunjukkan probabilitas outcome diskusi (seberapa mungkin berakhir Konsensus/Polarisasi/Status Quo). Bukan
+indeks perpecahan — lihat bagian Explainability untuk indeks dinamika agen.
+
+Konsensus
+
+25%
+
+Polarisasi
+
+25%
+
+Status Quo
+
+50%
+
+KUALITAS SIMULASI
+
+M O DE HE MAT
+
+Draft cepat
+
+30%
+
+Simulasi minimalis — cocok untuk uji coba cepat.
+Estimasi LLM calls: 8 · Sumber real: 15 · Relevansi konteks: 0.04
+Keterbatasan
+Sentimen pakai mode inline (kata kunci) — kurang akurat untuk kalimat kompleks, negasi ganda, atau ironi.
+GraphRAG dinonaktifkan — peta entitas dan hubungan antar aktor tidak diekstrak. Fitur ini opsional, tidak memengaruhi
+jalannya simulasi.
+Analisis akhir pakai aturan otomatis (rule-based), bukan narasi LLM. Ringkasan lebih pendek tapi tetap informatif.
+Hanya 4 agen — variasi sudut pandang terbatas, hasil mungkin kurang mewakili dinamika opini publik.
+Hanya 2 ronde — perubahan opini sulit diamati dalam durasi pendek.
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+1/6
+
+5/30/26, 8:41 PM
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+
+EXPLAINABILITY — KENAPA HASILNYA BEGITU?
+
+ⓘ Indeks di bawah mengukur dinamika agen (seberapa terpecah pendapat mereka), bukan probabilitas skenario. Berbeda dengan
+"Prediksi Skenario" di halaman sebelumnya.
+Polarisasi
+
+Konsensus
+
+Event
+
+Indeks perpecahan pendapat
+
+Indeks keselarasan pendapat
+
+6%
+
+94%
+
+0x
+
+Ringkasan
+
+Polarisasi 6%, konsensus 94%, konflik 4%. Sebagian besar agen sepakat — diskusi cenderung homogen.
+
+Penyebab
+
+Aktor paling berpengaruh adalah Pengusaha/UMKM yang cenderung negatif (bobot pengaruh 80%).
+Beberapa agen masih bisa berubah: Pemerintah menunjukkan volatilitas tinggi.
+Konflik & Polarisasi
+
+Terjadi polarisasi: 1 agen mendukung (Pemerintah) vs 1 agen menolak (Pengusaha/UMKM).
+
+Keyakinan Sistem
+Keyakinan sistem: 57% (sedang). Prediksi ini EKSPLORASI, bukan keputusan final. Variansi sentimen 0.03 — opini relatif searah.
+Distribusi akhir: 1 mendukung, 1 menolak, 2 netral dari 4 agen.
+Catatan: Keyakinan dihitung dari kualitas simulasi ( jumlah agen, ronde, data real). Model ML terpisah (lihat tabel prediksi) bersifat eksperimental —
+keduanya adalah metrik berbeda dan tidak dapat dibandingkan langsung.
+Ini adalah simulasi eksploratif, bukan prediksi faktual. Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. Gunakan sebagai bahan
+pertimbangan, bukan keputusan final.
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+2/6
+
+5/30/26, 8:41 PM
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+
+PREDIKSI AKTOR KUNCI & SWING VOTER
+
+A K TO R PALI NG M ENENT UKA N
+
+Pengusaha/UMKM
+Fokus pada Pengusaha/UMKM (pengaruh tinggi + konsisten). Waspadai Pemerintah sebagai swing voter.
+
+A K TO R K U N C I
+
+S W I N G V OT E R
+
+Pengusaha/UMKM
+
+Pemerintah
+
+negatif
+
+Pengaruh 80% × Konsistensi 94% = Skor komposit
+0.79
+
+Volatilitas 0.35 — paling sering berubah pendapat
+Tren skor: 0.00 → 0.35
+
+Jika berubah: Dapat menggeser konsensus
+Pengaruh
+
+80%
+
+Pemerintah
+
+→ positif
+
+Volatilitas
+
+35%
+
+positif
+
+Pengaruh 75% × Konsistensi 94% = Skor komposit
+0.74
+Jika berubah: Dapat menggeser konsensus
+Pengaruh
+
+Mahasiswa
+
+75%
+
+netral
+
+Pengaruh 70% × Konsistensi 100% = Skor komposit
+0.70
+Jika berubah: Dapat menggeser konsensus
+Pengaruh
+
+70%
+
+PENDAPAT AGEN PER PUTARAN
+
+Putaran 1
+Agen
+
+Pengusaha/UMKM
+
+Sikap
+Netral
+
+Skor
+
+Pendapat
+
+0
+
+Dari sisi bisnis, ini artinya bahwa kegiatan aksi mahasiswa akan
+mengganggu aktivitas ekonomi di kota. Anggaran militer Rp X triliun itu
+akan terganggu karena mahasiswa akan mengadakan aksi demonstrasi.
+
+Mahasiswa
+
+Netral
+
+0
+
+Gue tidak bisa meladeni klaim bahwa presiden Prabowo akan dilepas oleh
+para mahasiswa besok pagi.
+
+Pekerja Kantoran
+
+Netral
+
+0
+
+Dari pengalaman kerja, saya tahu bahwa kegiatan aksi mahasiswa tidak
+pernah berhasil menggulingkan presiden.
+
+Pemerintah
+
+Netral
+
+0
+
+Kami telah mengambil langkah untuk meningkatkan komunikasi dengan
+mahasiswa dan mendengar kekhawatiran mereka.
+
+Putaran 2
+Agen
+
+Pengusaha/UMKM
+
+Sikap
+Menolak
+
+Skor
+
+Pendapat
+
+-0.35
+
+Dari sisi bisnis, ini artinya bahwa aksi mahasiswa akan mengganggu
+kegiatan operasional perusahaan dan berpotensi mengakibatkan
+kerugian. Anggaran mahasiswa yang digunakan untuk mendukung
+aksi ini mungkin tidak efektif dalam meningkatkan kehidupan
+ekonomi masyarakat. Dampak terhadap UMKM juga tidak dapat
+diabaikan, karena aksi mahasiswa dapat mengganggu.
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+3/6
+
+5/30/26, 8:41 PM
+Agen
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+Sikap
+
+Skor
+
+Pendapat
+
+Mahasiswa
+
+Netral
+
+0
+
+Ini nggak masuk akal bro, Presiden Prabowo tidak akan digulingkan
+begitu saja.
+
+Pekerja Kantoran
+
+Netral
+
+0
+
+Efek langsungnya ke gaji dan jam kerja mahasiswa adalah mereka
+tidak memiliki kekuatan untuk menggulingkan pemerintah.
+
+Pemerintah
+
+Mendukung
+
+0.35
+
+Kami telah mengambil langkah yang proaktif untuk memastikan
+keamanan dan stabilitas negara, termasuk pengawasan terhadap
+potensi aksi mahasiswa yang dapat mengganggu ketenangan
+masyarakat. Dari perspektif kebijakan, solusinya adalah dengan
+meningkatkan komunikasi dan koordinasi antara pihak berwenang
+dan mahasiswa untuk mencegah konflik. Kami akan terus
+memantau.
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+4/6
+
+5/30/26, 8:41 PM
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+
+EVOLUSI PENDAPAT AGEN
+Perubahan sikap setiap agen dari putaran ke putaran.
+
+Pengusaha/UMKM
+Ronde
+
+Menolak
+
+Sikap
+
+P1
+
+Netral
+
+Skor
+
+Pendapat
+
+0
+
+"Dari sisi bisnis, ini artinya bahwa kegiatan aksi mahasiswa akan mengganggu
+aktivitas ekonomi di kota. Anggaran militer Rp X triliun itu akan terganggu karena
+mahasiswa akan mengadakan aksi demonstrasi."
+
+P2
+
+-0.35
+
+Menolak
+
+"Dari sisi bisnis, ini artinya bahwa aksi mahasiswa akan mengganggu kegiatan
+operasional perusahaan dan berpotensi mengakibatkan kerugian. Anggaran
+mahasiswa yang digunakan untuk mendukung aksi ini mungkin tidak efektif
+dalam meningkatkan kehidupan ekonomi masyarakat. Dampak terhadap UMKM
+juga tidak dapat diabaikan, karena aksi mahasiswa dapat mengganggu."
+
+Mahasiswa
+Ronde
+
+Netral
+Sikap
+
+P1
+
+Netral
+
+Skor
+
+Pendapat
+
+0
+
+"Gue tidak bisa meladeni klaim bahwa presiden Prabowo akan dilepas oleh para
+mahasiswa besok pagi."
+
+P2
+
+Netral
+
+Pekerja Kantoran
+Ronde
+
+"Ini nggak masuk akal bro, Presiden Prabowo tidak akan digulingkan begitu saja."
+
+Skor
+
+Pendapat
+
+0
+
+"Dari pengalaman kerja, saya tahu bahwa kegiatan aksi mahasiswa tidak pernah
+
+Netral
+
+Sikap
+
+P1
+
+0
+
+Netral
+
+berhasil menggulingkan presiden."
+P2
+
+Netral
+
+0
+
+"Efek langsungnya ke gaji dan jam kerja mahasiswa adalah mereka tidak memiliki
+kekuatan untuk menggulingkan pemerintah."
+
+Pemerintah
+Ronde
+
+P1
+
+Mendukung
+
+Sikap
+Netral
+
+Skor
+
+Pendapat
+
+0
+
+"Kami telah mengambil langkah untuk meningkatkan komunikasi dengan
+mahasiswa dan mendengar kekhawatiran mereka."
+
+P2
+
+Mendukung
+
+0.35
+
+"Kami telah mengambil langkah yang proaktif untuk memastikan keamanan dan
+stabilitas negara, termasuk pengawasan terhadap potensi aksi mahasiswa yang
+dapat mengganggu ketenangan masyarakat. Dari perspektif kebijakan, solusinya
+adalah dengan meningkatkan komunikasi dan koordinasi antara pihak
+berwenang dan mahasiswa untuk mencegah konflik. Kami akan terus
+memantau."
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+5/6
+
+5/30/26, 8:41 PM
+
+Laporan VoxSwarm — presiden prabowo akan di lengserkan oleh para mahasiswa besok pagi
+
+LAPORAN MACHINE LEARNING — PREDIKSI CERDAS VOXSWARM
+Model ini belajar dari pola simulasi yang sudah dijalankan untuk memprediksi skenario diskusi yang belum terjadi. Semakin
+banyak data, semakin akurat prediksinya.
+
+89%
+
+Akurasi Internal Model
+Metode: 5-fold CV
+
+Dataset: 124 sampel (6 label manual)
+
+KE TE PATAN PER SKENAR IO
+
+94%
+
+Konsensus
+
+Ketepatan: 96% Kelengkapan: 92%
+Data: 25 kasus
+
+Polarisasi
+
+85%
+
+Ketepatan: 89% Kelengkapan: 80%
+Data: 41 kasus
+
+89%
+
+Status Quo
+
+Ketepatan: 86% Kelengkapan: 93%
+Data: 58 kasus
+
+89%
+
+Skor gabungan (weighted F1)
+TE BA K AN VS KE NYATAAN (CON FU SI ON M ATRIX )
+Baris = kenyataan · Kolom = tebakan VoxSwarm · Hijau = benar · Merah = meleset
+Konsensus
+
+Polarisasi
+
+Status Quo
+
+Konsensus
+
+23
+
+1
+
+1
+
+Polarisasi
+
+0
+
+33
+
+8
+
+Status Quo
+
+1
+
+3
+
+54
+
+DI ST R IB US I L ABEL T R AIN IN G
+Polarisasi
+
+41
+
+Konsensus
+
+25
+
+Status Quo
+
+58
+
+Risiko overfitting: LOW · Total data: 124 · Dummy: 60 · Feedback: 6
+
+Catatan: Evaluasi ML bersifat internal. Mayoritas label dapat berasal dari weak label simulasi kecuali sudah tersedia feedback
+manual yang cukup.
+
+Laporan ini dibuat otomatis oleh VoxSwarm — Sistem Simulasi Opini Multi-Agen | 30 Mei 2026
+
+blob:http://localhost:3000/684c9128-7eea-45e4-a269-b59d59ae09df
+
+6/6
+
+

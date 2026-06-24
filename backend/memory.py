@@ -10,7 +10,7 @@
 
 import re
 
-from .llm import call_llm, MODEL_AGENT, MAX_TOKENS_SUMMARY
+# ponytail: call_llm, MODEL_AGENT, MAX_TOKENS_SUMMARY dihapus — ga dipake setelah summarize_memory dihapus
 from .core.memory_store import AgentMemoryStore
 
 
@@ -79,34 +79,6 @@ def _compute_gaya_str(agent: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Memory Summarization
-# ---------------------------------------------------------------------------
-
-def summarize_memory(agent: dict) -> str:
-    """
-    Ringkas riwayat memori agen menjadi 1 kalimat.
-    Hasil di-cache di agent["_ringkasan_cache"]; hanya di-invalidasi oleh
-    update_agent_memory() saat ada memori baru — menghilangkan call LLM
-    redundan di setiap ronde selama konteks memori belum berubah.
-    """
-    if len(agent["memori"]) < 3:
-        return ""
-    if "_ringkasan_cache" in agent:
-        return agent["_ringkasan_cache"]
-    riwayat = " | ".join(
-        f"R{m['ronde']}: {m['pendapat'][:60]}" for m in agent["memori"][:-1]
-    )
-    ringkasan = call_llm(
-        "Ringkas jadi 1 kalimat: apa sikap agen ini?",
-        f"Agen: {agent['nama']}\n{riwayat}",
-        max_tokens=MAX_TOKENS_SUMMARY,
-        model=MODEL_AGENT,
-    )
-    agent["_ringkasan_cache"] = ringkasan
-    return ringkasan
-
-
-# ---------------------------------------------------------------------------
 # Context Builders
 # ---------------------------------------------------------------------------
 
@@ -145,8 +117,8 @@ def build_memory_context(agent: dict) -> str:
     if len(agent["memori"]) >= 2:
         base_context = (
             f"{structured_ctx} "
-            f"Ronde terakhir — Posisi: {label_terakhir}{skor_str} "
-            f"— Argumen: \"{terakhir['pendapat'][:80]}\" "
+            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+            f"(posisi: {label_terakhir}{skor_str}). "
         )
         if has_previous:
             mem_sebelumnya = agent["memori"][-2]
@@ -156,18 +128,17 @@ def build_memory_context(agent: dict) -> str:
             pendapat_sblm = mem_sebelumnya["pendapat"][:40]
             return (
                 base_context +
-                f"Ronde sebelumnya — Posisi: {label_sblm}{skor_sblm_str} "
-                f"— Argumen: '{pendapat_sblm}...' "
-                f"Jika kamu berubah dari {label_sblm} ke posisi berbeda, "
-                f"WAJIB jelaskan di responsmu: data atau argumen baru apa yang mengubah posisimu."
+                f"Sebelumnya kamu {label_sblm}{skor_sblm_str}: '{pendapat_sblm}...'. "
+                f"Kalau sekarang posisimu berubah, JELASKAN kenapa — "
+                f"apa data baru atau argumen yang bikin kamu pikir ulang."
             )
-        return base_context + f"— posisi: {label_terakhir}. Pertahankan kecuali ada alasan kuat."
+        return base_context + "Pertahankan posisi ini kecuali ada alasan kuat."
 
     # Hanya 1 entri memori
     return (
-        f"Posisimu sebelumnya: {label_terakhir}{skor_str} "
-        f"— Kamu bilang: \"{terakhir['pendapat'][:80]}\" "
-        f"— Pertahankan posisi ini kecuali ada argumen baru yang sangat kuat."
+        f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+        f"(posisi: {label_terakhir}{skor_str}). "
+        f"Pertahankan posisi ini kecuali ada argumen baru yang sangat kuat."
     )
 
 
@@ -216,15 +187,15 @@ def build_influence_context(
             return "MENOLAK"
         return "NETRAL"
 
+    # Bikin konteks yang KAYAK OBROLAN BENERAN, bukan laporan formal
     baris = []
     for p in kandidat:
         pendapat_full = p["pendapat"]
         skor = p.get("sentimen", {}).get("skor")
         label = _stance_label(skor)
 
-        # Split per kalimat — tidak salah potong di angka desimal (3.5%) atau inisial (Dr. Smith)
+        # Ambil kutipan yang natural — kalimat pertama yang cukup panjang
         sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', pendapat_full)
-        # Ambil kalimat pertama yang >= 30 char (hindari "Iya.", "Benar.", "Tidak.")
         kutipan = ""
         for s in sentences:
             s = s.strip()
@@ -233,13 +204,20 @@ def build_influence_context(
                 break
         if not kutipan and sentences:
             kutipan = sentences[0].strip()
-        # Fallback: potong di 150 char kalau masih terlalu panjang
         if len(kutipan) > 150:
             kutipan = kutipan[:150].rsplit(" ", 1)[0]
         if len(pendapat_full) > len(kutipan) + 1:
             kutipan += "..."
-        baris.append(f'- {p["nama"]} [{label}]: {kutipan}')
 
-    konteks  = "Posisi peserta lain sejauh ini:\n" + "\n".join(baris) + "\n"
-    konteks += "Respons LANGSUNG ke salah satu — gunakan kata-katamu sendiri, jangan kutip ulang."
+        # Format yang natural — kayak orang ngomong
+        if label == "MENDUKUNG":
+            baris.append(f'- {p["nama"]} setuju: "{kutipan}"')
+        elif label == "MENOLAK":
+            baris.append(f'- {p["nama"]} menyangkal: "{kutipan}"')
+        else:
+            baris.append(f'- {p["nama"]} bilang: "{kutipan}"')
+
+    konteks = "Yang baru aja ngomong:\n" + "\n".join(baris) + "\n\n"
+    konteks += "Sekarang giliranmu. Tanggapi yang baru aja dikatakan — boleh setuju, sanggah, atau tambahin sudut pandangmu. "
+    konteks += "Pakai kata-katamu sendiri, jangan kutip ulang."
     return konteks

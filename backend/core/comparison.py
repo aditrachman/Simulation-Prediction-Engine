@@ -174,8 +174,9 @@ def generate_comparison_report(
     prediksi_b = hasil_b.get("prediksi", {})
     sentimen_a = hasil_a.get("sentimen_agregat", {})
     sentimen_b = hasil_b.get("sentimen_agregat", {})
-    aktor_a = hasil_a
-    aktor_b = hasil_b
+    # BUG #6 FIX: ambil sub-dict aktor_analisis, bukan full hasil dict
+    aktor_a = hasil_a.get("aktor_analisis", {})
+    aktor_b = hasil_b.get("aktor_analisis", {})
 
     prediksi_comp = compare_prediction(prediksi_a, prediksi_b, label_a, label_b)
     sentimen_comp = compare_sentiment_trends(sentimen_a, sentimen_b, label_a, label_b)
