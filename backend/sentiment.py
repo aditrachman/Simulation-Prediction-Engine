@@ -144,6 +144,21 @@ _IMPLICIT_NEGATIVE_PATTERNS = [
     r"tidak\s+ada\s+(yang\s+peduli|solusi|hasil|perubahan|perkembangan)",
     # Implisit ketidakpuasan: "seharusnya", "mestinya" diikuti kritik
     r"(seharusnya|mestinya|harusnya)\s+(lebih|sudah|bisa|dapat)\s+(baik|serius|efektif|berhasil)",
+    # ── BUG SENTIMEN FIX: Pola negatif implisit baru ──
+    # "belum/tidak terbukti/efektif/berhasil/merata/optimal"
+    r"(belum|tidak)\s+(terbukti|efektif|berhasil|merata|optimal)",
+    # "perlu/harus ditinjau/dievaluasi/diperbaiki/dipertanyakan"
+    r"(perlu|harus)\s+(ditinjau|dievaluasi|diperbaiki|dipertanyakan)",
+    # "sulit/susah dipercaya/diterima/dibuktikan"
+    r"(sulit|susah)\s+(dipercaya|diterima|dibuktikan)",
+    # "masih banyak yang (belum/tidak/kekurangan/masalah)"
+    r"masih\s+banyak\s+(yang\s+)?(belum|tidak|kekurangan|masalah)",
+    # "meragukan", "patut dipertanyakan", "perlu dikritisi"
+    r"(meragukan|patut\s+dipertanyakan|perlu\s+dikritisi)",
+    # "belum tentu" → skeptis/negatif implisit
+    r"belum\s+tentu",
+    # "kekhawatiran" → sinyal negatif implisit
+    r"kekhawatiran",
 ]
 
 _IMPLICIT_NEGATIVE_COMPILED = [re.compile(p, re.IGNORECASE) for p in _IMPLICIT_NEGATIVE_PATTERNS]
@@ -194,6 +209,9 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "  • Contoh: 'Apa yang dilakukan pemerintah selama ini?' → {\"label\":\"negatif\",\"skor\":-0.5}\n"
         "  • Contoh: 'Kebijakan telah gagal mencapai target, masih banyak siswa belum dapat menikmati' → {\"label\":\"negatif\",\"skor\":-0.65}\n"
         "  • Contoh: 'Tidak terwujud, jauh dari harapan' → {\"label\":\"negatif\",\"skor\":-0.6}\n"
+        "  • 'belum tentu ini langkah yang tepat' → NEGATIF (ragu-ragu terhadap langkah = bentuk kritik)\n"
+        "  • 'saya rasa kebijakan ini perlu ditinjau ulang' → NEGATIF (mempertanyakan = kritis)\n"
+        "  • 'ada kekhawatiran yang cukup beralasan' → NEGATIF (kekhawatiran = sinyal ketidaksetujuan)\n"
         "Contoh lain:\n"
         "  'memberatkan rakyat' → {\"label\":\"negatif\",\"skor\":-0.8}\n"
         "  'mendukung demi kebaikan bersama' → {\"label\":\"positif\",\"skor\":0.7}\n"
@@ -387,7 +405,7 @@ def score_sentiment(teks: str, topik: str = "", sentiment_mode: str | None = Non
                 confidence = result.get("confidence", 0)
                 # Kontras (namun/tapi/tetapi) tidak lagi trigger fallback —
                 # ngram(1,3) sudah cover pola kontras dalam training data
-                needs_llm = confidence < 0.45 and kata_count > 60
+                needs_llm = confidence < 0.55 or kata_count > 40
                 if not needs_llm:
                     return {"label": result["label"], "skor": result["skor"]}
                 print(f"[sentiment] ML fallback LLM (conf={confidence:.2f}, kata={kata_count})")

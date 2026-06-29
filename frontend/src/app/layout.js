@@ -1,28 +1,34 @@
-import { JetBrains_Mono } from "next/font/google";
-
+import { DM_Sans, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700", "800"],
+  variable: "--font-display",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body",
+});
 
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "700"], // bebas mau nambah
+  weight: ["400", "500"],
+  variable: "--font-mono",
 });
 
 export const metadata = {
-  title: "VoxSwarm",
+  title: "VoxSwarm — Social Simulation Engine",
   description:
-    "VoxSwarm is a scenario rehearsal engine for Indonesian public opinion — explore social dynamics, polarization risk, and key actors before issues go public.",
+    "VoxSwarm is a social simulation and prediction engine for decision-makers. Simulate public opinion, assess policy reception, and identify key actors before issues go public.",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body style={{ fontFamily: "JetBrains Mono, monospace" }}>
+    <html lang="id" className={`${dmSans.variable} ${inter.variable} ${jetbrains.variable}`}>
+      <body style={{ fontFamily: "var(--font-body), Inter, sans-serif" }}>
         {children}
       </body>
     </html>

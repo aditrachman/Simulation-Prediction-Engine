@@ -6,141 +6,199 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell,
-  LineChart, Line, Tooltip, Legend, CartesianGrid, ReferenceLine,
+  LineChart, Line, Tooltip, CartesianGrid, ReferenceLine, Legend,
 } from "recharts";
 
-// ─── Konstanta ────────────────────────────────────────────────────────
-const WARNA_SENTIMEN  = { positif: "#22c55e", netral: "#6366f1", negatif: "#ef4444" };
-const LABEL_SENTIMEN  = { positif: "Mendukung", netral: "Netral", negatif: "Menolak" };
-const WARNA_SKENARIO  = { "Semua Setuju": "#22c55e", "Masyarakat Terpecah": "#ef4444", "Tidak Ada Perubahan": "#6366f1" };
-const WARNA_AGEN_LIST = ["#6366f1","#22c55e","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#ec4899","#14b8a6"];
+// ─── Warna & Label ─────────────────────────────────────────────────
+const SENTIMEN = {
+  positif: { warna: "#22c55e", label: "Setuju", bg: "bg-green-500/15 border-green-500/30 text-green-400" },
+  netral:  { warna: "#64748b", label: "Netral",     bg: "bg-slate-500/15 border-slate-500/30 text-slate-300" },
+  negatif: { warna: "#ef4444", label: "Tidak Setuju", bg: "bg-red-500/15 border-red-500/30 text-red-400" },
+};
+const WARNA_AGEN = ["#3B82F6","#22c55e","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#ec4899","#14b8a6"];
+const LABEL_SENTIMEN = { positif: "Mendukung", netral: "Netral", negatif: "Menolak" };
+const WARNA_SENTIMEN = { positif: "#22c55e", netral: "#64748b", negatif: "#ef4444" };
 
-// ─── Export utils ─────────────────────────────────────────────────────
-// ─── Util: Bersihkan teks dari emoji untuk ekspor profesional ──────────
-function cleanTextForExport(teks) {
+// ─── Helper ────────────────────────────────────────────────────────
+function bersihkanTeks(teks) {
   if (!teks) return "";
-  return teks
-    .replace(/[^\x00-\x7F]/g, "")
-    .replace(/  +/g, " ")
-    .split("\n").map(l => l.trim()).join("\n")
-    .trim();
+  return teks.replace(/[^\x00-\x7F]/g, "").replace(/  +/g, " ").trim();
 }
 
-// ─── Sub-komponen ─────────────────────────────────────────────────────
-const BadgeSentimen = ({ label }) => {
-  const style = {
-    positif: "bg-green-900/50 text-green-300 border-green-700 print-badge-mendukung",
-    netral:  "bg-indigo-900/50 text-indigo-300 border-indigo-700 print-badge-netral",
-    negatif: "bg-red-900/50 text-red-300 border-red-700 print-badge-menolak",
-  }[label] ?? "bg-slate-800 text-slate-400 border-slate-600";
-  return <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${style}`}>{LABEL_SENTIMEN[label] ?? label ?? "–"}</span>;
-};
-
-const Kartu = ({ children, className = "" }) => (
-  <div className={`rounded-2xl border border-white/10 bg-[#0C0F1D] p-6 page-break-avoid print-card ${className}`}>{children}</div>
-);
-
-const JudulSeksi = ({ children }) => (
-  <p className="mb-4 text-xs font-bold tracking-widest text-indigo-400 uppercase">{children}</p>
-);
-
-function unwrapApiData(payload, fallbackMessage = "Response API tidak berisi data hasil.") {
-  if (!payload || typeof payload !== "object" || !payload.data) {
-    throw new Error(payload?.detail || payload?.message || fallbackMessage);
-  }
+function bacaData(payload, pesan = "Data tidak ditemukan.") {
+  if (!payload || typeof payload !== "object" || !payload.data)
+    throw new Error(payload?.detail || payload?.message || pesan);
   return payload.data;
 }
 
-// ─── Komponen: Memori Agen ────────────────────────────────────────────
-// Menampilkan akordion riwayat pendapat agen di setiap ronde
-const KartuMemoriAgen = ({ rondeDetail, warnaAgen }) => {
-  const [bukaIndex, setBukaIndex] = useState(null);
+// ─── Badge Sikap ────────────────────────────────────────────────────
+const BadgeSikap = ({ label }) => {
+  const s = SENTIMEN[label] ?? SENTIMEN.netral;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${s.bg}`}>
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.warna }} />
+      {s.label}
+    </span>
+  );
+};
 
-  // Susun data: { namaAgen → [{ ronde, pendapat, sentimen }] }
-  const memoriPerAgen = {};
-  (rondeDetail ?? []).forEach(ronde => {
-    (ronde.agen ?? []).forEach(a => {
-      if (!memoriPerAgen[a.nama]) memoriPerAgen[a.nama] = [];
-      memoriPerAgen[a.nama].push({ ronde: ronde.ronde, pendapat: a.pendapat, sentimen: a.sentimen });
-    });
-  });
+// ─── A1: Kartu & JudulSeksi ───────────────────────────────────────────
+const Kartu = ({ children, className = "" }) => (
+  <div className={`rounded-2xl border border-white/8 bg-[#0D1017] p-6 page-break-avoid print-card hover:border-white/[0.14] transition-all duration-200 ${className}`}>
+    {children}
+  </div>
+);
 
-  const namaAgenList = Object.keys(memoriPerAgen);
-  if (!namaAgenList.length) return null;
+const JudulSeksi = ({ children }) => (
+  <p className="mb-3 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">{children}</p>
+);
+
+// ─── A2: BadgeSentimen ───────────────────────────────────────────────
+const BadgeSentimen = ({ label }) => {
+  const style = {
+    positif: "bg-emerald-950 text-emerald-300 border-emerald-800 print-badge-mendukung",
+    netral:  "bg-slate-800 text-slate-300 border-slate-700 print-badge-netral",
+    negatif: "bg-red-950 text-red-300 border-red-800 print-badge-menolak",
+  }[label] ?? "bg-slate-800/60 text-slate-400 border-slate-700";
+  return (
+    <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${style}`}>
+      {LABEL_SENTIMEN[label] ?? label ?? "–"}
+    </span>
+  );
+};
+
+// ─── B1: KartuKesimpulan ─────────────────────────────────────────────
+const KartuKesimpulan = ({ topik, status, narasi, daftarRonde, rondeIni }) => {
+  const INFO = {
+    stabil:    { label: "Situasi Stabil",   border: "border-l-emerald-500", dot: "bg-emerald-400", teks: "text-emerald-300" },
+    berbahaya: { label: "Potensi Konflik",  border: "border-l-red-500",     dot: "bg-red-400",     teks: "text-red-300" },
+    terbagi:   { label: "Pendapat Terbagi", border: "border-l-amber-500",   dot: "bg-amber-400",   teks: "text-amber-300" },
+  };
+  const info = INFO[status] ?? INFO.terbagi;
+
+  const ringkasan = (() => {
+    if (!narasi) return "—";
+    const idx = narasi.indexOf(".", 60);
+    return idx > 0 ? narasi.slice(0, idx + 1) : narasi.slice(0, 180);
+  })();
+
+  const pesertaCount = rondeIni?.agen?.length ?? 0;
+  const putaranCount = daftarRonde?.length ?? 0;
+
+  return (
+    <div className={`rounded-2xl border border-white/8 bg-[#0D1017] p-6 border-l-4 ${info.border}`}>
+      {/* Status badge */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`inline-block h-2 w-2 rounded-full ${info.dot}`} />
+        <span className={`text-xs font-semibold ${info.teks}`}>{info.label}</span>
+        <span className="text-slate-700 text-xs">·</span>
+        <span className="text-xs text-slate-600">
+          {putaranCount} putaran · {pesertaCount} peserta
+        </span>
+      </div>
+
+      {/* Topik */}
+      <p className="text-[11px] text-slate-600 mb-1 uppercase tracking-widest font-medium">Topik simulasi</p>
+      <p className="text-base font-semibold text-white mb-4 leading-snug">"{topik}"</p>
+
+      {/* Ringkasan */}
+      <p className="text-sm text-slate-300 leading-7">{ringkasan}</p>
+    </div>
+  );
+};
+
+// ─── B2: KartuDistribusiSingkat ──────────────────────────────────────
+const KartuDistribusiSingkat = ({ dataBar }) => {
+  const menolak   = dataBar.filter(a => a.skor < 40).length;
+  const mendukung = dataBar.filter(a => a.skor >= 60).length;
+  const netral    = dataBar.length - menolak - mendukung;
+  const total     = dataBar.length || 1;
+
+  const items = [
+    { label: "Menolak",    count: menolak,   bg: "bg-red-950",     text: "text-red-300",     bar: "bg-red-500" },
+    { label: "Netral",     count: netral,    bg: "bg-slate-800/60",text: "text-slate-300",   bar: "bg-slate-600" },
+    { label: "Mendukung",  count: mendukung, bg: "bg-emerald-950", text: "text-emerald-300", bar: "bg-emerald-500" },
+  ];
 
   return (
     <Kartu>
-      <JudulSeksi>🧠 Perubahan Pendapat Tiap Peserta</JudulSeksi>
-      <p className="mb-4 text-xs text-slate-500">Klik nama agen untuk melihat bagaimana pendapatnya berubah dari putaran ke putaran.</p>
+      <JudulSeksi>Distribusi Pendapat</JudulSeksi>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {items.map(({ label, count, bg, text }) => (
+          <div key={label} className={`text-center py-4 px-3 rounded-xl ${bg} border border-white/5`}>
+            <p className={`text-3xl font-bold ${text} mb-1`}>{count}</p>
+            <p className={`text-xs ${text} opacity-70`}>{label}</p>
+          </div>
+        ))}
+      </div>
+      {/* Progress bar */}
+      <div className="h-1.5 rounded-full overflow-hidden flex bg-white/5">
+        {items.map(({ label, count, bar }) => (
+          count > 0 && (
+            <div key={label} className={`h-full ${bar} transition-all`}
+              style={{ width: `${(count / total) * 100}%` }} />
+          )
+        ))}
+      </div>
+      <div className="flex justify-between mt-2">
+        {items.map(({ label, count, text }) => (
+          <span key={label} className={`text-[11px] ${text} opacity-60`}>
+            {Math.round((count / total) * 100)}%
+          </span>
+        ))}
+      </div>
+    </Kartu>
+  );
+};
+
+// ─── B3: KartuAgenRingkas ────────────────────────────────────────────
+const KartuAgenRingkas = ({ rondeIni }) => {
+  const [bukaIndex, setBukaIndex] = useState(null);
+  const agen = rondeIni?.agen ?? [];
+
+  return (
+    <Kartu>
+      <JudulSeksi>Suara Tiap Kelompok</JudulSeksi>
       <div className="space-y-2">
-        {namaAgenList.map((nama, i) => {
-          const warna   = warnaAgen[nama] ?? WARNA_AGEN_LIST[i % WARNA_AGEN_LIST.length];
-          const riwayat = memoriPerAgen[nama];
-          const buka    = bukaIndex === i;
-          const sentimenAkhir = riwayat.at(-1)?.sentimen?.label ?? "netral";
-          // Hitung apakah ada perubahan sentimen
-          const perubahanSentimen = new Set(riwayat.map(r => r.sentimen?.label)).size > 1;
+        {agen.map((a, i) => {
+          const warnaMap = { positif: "#22c55e", netral: "#64748b", negatif: "#ef4444" };
+          const warna = warnaMap[a.sentimen?.label] ?? "#6366f1";
+          const buka  = bukaIndex === i;
+          const quoteSingkat = a.pendapat
+            ? a.pendapat.slice(0, 85) + (a.pendapat.length > 85 ? "..." : "")
+            : "";
 
           return (
-            <div key={nama} className="rounded-xl border border-white/10 overflow-hidden">
-              {/* Header agen */}
+            <div key={i} className="agen-card overflow-hidden">
               <button
                 onClick={() => setBukaIndex(buka ? null : i)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 text-left"
               >
                 {/* Avatar */}
                 <div
-                  className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black"
-                  style={{ backgroundColor: warna + "22", border: `1.5px solid ${warna}`, color: warna }}
+                  className="h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold"
+                  style={{ backgroundColor: warna + "1A", border: `1px solid ${warna}55`, color: warna }}
                 >
-                  {nama.slice(0, 2).toUpperCase()}
+                  {a.nama.slice(0, 2).toUpperCase()}
                 </div>
+
+                {/* Konten */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-slate-200">{nama}</span>
-                    <BadgeSentimen label={sentimenAkhir} />
-                    {perubahanSentimen && (
-                      <span className="rounded-full bg-amber-900/40 border border-amber-700 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        🔄 Pendapat berubah
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-slate-200">{a.nama}</span>
+                    <BadgeSentimen label={a.sentimen?.label} />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{riwayat.length} putaran terekam</p>
+                  {!buka && (
+                    <p className="text-xs text-slate-500 truncate">"{quoteSingkat}"</p>
+                  )}
                 </div>
-                <span className="text-slate-600 text-xs ml-2">{buka ? "▲" : "▼"}</span>
+
+                <span className="text-slate-700 text-[10px] shrink-0 ml-2">{buka ? "▲" : "▼"}</span>
               </button>
 
-              {/* Konten akordion: timeline per ronde */}
               {buka && (
-                <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/5">
-                  {riwayat.map((item, j) => {
-                    const w = WARNA_SENTIMEN[item.sentimen?.label] ?? "#6366f1";
-                    return (
-                      <div key={j} className="flex gap-3">
-                        {/* Indikator ronde */}
-                        <div className="flex flex-col items-center gap-1">
-                          <div
-                            className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
-                            style={{ backgroundColor: w + "22", border: `1px solid ${w}`, color: w }}
-                          >
-                            {item.ronde}
-                          </div>
-                          {j < riwayat.length - 1 && <div className="w-px flex-1 bg-white/10" />}
-                        </div>
-                        {/* Konten */}
-                        <div className="pb-2">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[11px] font-bold text-slate-400">Babak {item.ronde}</span>
-                            <BadgeSentimen label={item.sentimen?.label} />
-                            <span className="text-[10px] text-slate-600">
-                              nilai: {item.sentimen?.skor > 0 ? "+" : ""}{item.sentimen?.skor ?? 0}
-                            </span>
-                          </div>
-                          <p className="text-xs leading-relaxed text-slate-300 italic">"{item.pendapat}"</p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="px-4 pb-4 pt-1 border-t border-white/5">
+                  <p className="text-sm leading-7 text-slate-300">"{a.pendapat}"</p>
                 </div>
               )}
             </div>
@@ -151,1229 +209,51 @@ const KartuMemoriAgen = ({ rondeDetail, warnaAgen }) => {
   );
 };
 
-// ─── Komponen: Badge Dual-Model Info ─────────────────────────────────
-// Menampilkan model mana yang dipakai untuk agen vs analisis (ala MiroFish)
-const DualModelBadge = ({ modelInfo }) => {
-  if (!modelInfo) return null;
-  const shortName = (m) => m?.split("-").slice(0, 3).join("-") ?? "—";
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/5 bg-[#0C0F1D] px-4 py-2.5 print:hidden">
-      <span className="text-[10px] font-bold tracking-widest uppercase text-slate-600">⚡ Dual-Model</span>
-      <div className="flex items-center gap-1.5">
-        <span className="rounded-md bg-violet-900/50 border border-violet-700/50 px-2 py-0.5 text-[10px] font-semibold text-violet-300">
-          Peserta: {shortName(modelInfo.agen)}
-        </span>
-        <span className="text-slate-700 text-xs">+</span>
-        <span className="rounded-md bg-cyan-900/50 border border-cyan-700/50 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
-          Analisis: {shortName(modelInfo.analisis)}
-        </span>
-      </div>
-      <span className="text-[10px] text-slate-700">Model kecil → cepat · Model besar → akurat</span>
-    </div>
-  );
-};
-
-// ─── Komponen: Graf Knowledge Interaktif (SVG) ────────────────────────
-// Visualisasi entitas & relasi dari GraphRAG sebagai node-edge diagram
-// Menggantikan tampilan teks statis, mendekati tampilan MiroFish
-const GrafKnowledge = ({ grafData }) => {
-  const canvasRef = useRef(null);
-  const [hoveredNode, setHoveredNode] = useState(null);
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
-
-  const WARNA_TIPE = {
-    orang:        "#6366f1",
-    organisasi:   "#f59e0b",
-    konsep:       "#22c55e",
-    kebijakan:    "#06b6d4",
-  };
-  const WARNA_REL = {
-    mendukung:       "#22c55e",
-    menolak:         "#ef4444",
-    mempengaruhi:    "#f59e0b",
-    bergantung_pada: "#8b5cf6",
-  };
-
-  useEffect(() => {
-    const entitas = grafData?.entitas ?? [];
-    if (!entitas.length) return;
-
-    // Tata letak melingkar sederhana (force-layout simulasi ringan)
-    const cx = 280, cy = 150, r = 110;
-    const builtNodes = entitas.slice(0, 10).map((e, i) => {
-      const angle = (i / Math.min(entitas.length, 10)) * 2 * Math.PI - Math.PI / 2;
-      // Atur radius berdasarkan jumlah node agar tidak tumpang tindih
-      const radius = entitas.length <= 4 ? 80 : entitas.length <= 6 ? 100 : r;
-      return {
-        id:   e.nama,
-        x:    cx + radius * Math.cos(angle),
-        y:    cy + radius * Math.sin(angle),
-        tipe: e.tipe ?? "konsep",
-        sentimen: e.sentimen_umum ?? "netral",
-        warna:    WARNA_TIPE[e.tipe] ?? "#6366f1",
-      };
-    });
-
-    const nodeMap = Object.fromEntries(builtNodes.map(n => [n.id, n]));
-    const builtEdges = (grafData?.relasi ?? []).slice(0, 14).map((rel, i) => ({
-      id:    i,
-      dari:  nodeMap[rel.dari],
-      ke:    nodeMap[rel.ke],
-      label: rel.label ?? "mempengaruhi",
-      warna: WARNA_REL[rel.label] ?? "#6b7280",
-    })).filter(e => e.dari && e.ke);
-
-    setNodes(builtNodes);
-    setEdges(builtEdges);
-  }, [grafData]);
-
-  if (!grafData?.entitas?.length) return null;
-
-  return (
-    <Kartu>
-      <JudulSeksi>🕸️ Graf Pengetahuan — Peta Relasi Entitas</JudulSeksi>
-      <p className="mb-3 text-xs text-slate-500">
-        Visualisasi entitas dan hubungan yang diekstrak dari diskusi (GraphRAG-lite).
-        Hover pada node untuk detail.
-      </p>
-
-      {/* Legend warna relasi */}
-      <div className="mb-3 flex flex-wrap gap-3">
-        {Object.entries(WARNA_REL).map(([label, warna]) => (
-          <span key={label} className="flex items-center gap-1.5 text-[10px] text-slate-500">
-            <span className="inline-block h-2 w-5 rounded-full" style={{ backgroundColor: warna }} />
-            {label.replace("_", " ")}
-          </span>
-        ))}
-      </div>
-
-      {/* SVG Graf */}
-      <div className="relative overflow-hidden rounded-xl bg-[#080b15] border border-white/5" style={{ height: 300 }}>
-        <svg ref={canvasRef} width="100%" height="300" viewBox="0 0 560 300">
-          {/* Definisi arrowhead */}
-          <defs>
-            {Object.entries(WARNA_REL).map(([label, warna]) => (
-              <marker
-                key={label}
-                id={`arrow-${label}`}
-                viewBox="0 0 10 10"
-                refX="16" refY="5"
-                markerWidth="5" markerHeight="5"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={warna} opacity="0.8" />
-              </marker>
-            ))}
-          </defs>
-
-          {/* Edges */}
-          {edges.map(e => {
-            const dx = e.ke.x - e.dari.x;
-            const dy = e.ke.y - e.dari.y;
-            const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            // Kurva sedikit untuk tidak overlap dengan edge lain
-            const mx = (e.dari.x + e.ke.x) / 2 - dy * 0.15;
-            const my = (e.dari.y + e.ke.y) / 2 + dx * 0.15;
-            return (
-              <g key={e.id}>
-                <path
-                  d={`M${e.dari.x},${e.dari.y} Q${mx},${my} ${e.ke.x},${e.ke.y}`}
-                  fill="none"
-                  stroke={e.warna}
-                  strokeWidth="1.5"
-                  strokeOpacity="0.6"
-                  markerEnd={`url(#arrow-${e.label})`}
-                />
-                {/* Label relasi di tengah kurva */}
-                <text
-                  x={mx} y={my - 4}
-                  textAnchor="middle"
-                  fontSize="7"
-                  fill={e.warna}
-                  opacity="0.8"
-                >
-                  {e.label.replace("_", " ")}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Nodes */}
-          {nodes.map(n => {
-            const isHovered = hoveredNode?.id === n.id;
-            const r = isHovered ? 22 : 18;
-            return (
-              <g
-                key={n.id}
-                onMouseEnter={() => setHoveredNode(n)}
-                onMouseLeave={() => setHoveredNode(null)}
-                style={{ cursor: "pointer" }}
-              >
-                {/* Glow effect untuk node yang di-hover */}
-                {isHovered && (
-                  <circle cx={n.x} cy={n.y} r={r + 8} fill={n.warna} opacity="0.12" />
-                )}
-                {/* Lingkaran utama */}
-                <circle
-                  cx={n.x} cy={n.y} r={r}
-                  fill={n.warna + "22"}
-                  stroke={n.warna}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
-                />
-                {/* Inisial nama */}
-                <text
-                  x={n.x} y={n.y + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="8"
-                  fontWeight="bold"
-                  fill={n.warna}
-                >
-                  {n.id.slice(0, 3).toUpperCase()}
-                </text>
-                {/* Nama lengkap di bawah node */}
-                <text
-                  x={n.x} y={n.y + r + 11}
-                  textAnchor="middle"
-                  fontSize="8"
-                  fill="#94a3b8"
-                >
-                  {n.id.length > 14 ? n.id.slice(0, 13) + "…" : n.id}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Tooltip hover node */}
-        {hoveredNode && (
-          <div className="absolute bottom-3 left-3 rounded-xl border border-white/10 bg-[#0C0F1D] px-3 py-2 text-[11px] shadow-xl">
-            <p className="font-bold text-slate-200">{hoveredNode.id}</p>
-            <p className="text-slate-500">
-              Tipe: <span className="text-slate-300">{hoveredNode.tipe}</span>
-              {" · "}
-              Sentimen: <span style={{ color: { positif: "#22c55e", negatif: "#ef4444", netral: "#6366f1" }[hoveredNode.sentimen] }}>
-                {hoveredNode.sentimen}
-              </span>
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Relasi teks (sebagai referensi) */}
-      {edges.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-          {edges.slice(0, 6).map((e, i) => (
-            <p key={i} className="text-[10px] text-slate-600">
-              <span style={{ color: e.warna }} className="font-medium">{e.dari.id}</span>
-              <span className="mx-1 text-slate-700">→{e.label}→</span>
-              <span style={{ color: e.warna }} className="font-medium">{e.ke.id}</span>
-            </p>
-          ))}
-        </div>
-      )}
-    </Kartu>
-  );
-};
-
-// ─── Komponen: Panel Intervensi Post-Simulasi ─────────────────────────
-const PanelIntervensi = ({ topik, kategori, jumlahRonde, agenCustom, onHasilBaru, memuat, setMemuat, apiBase, tier }) => {
-  const [intervensi,  setIntervensi]  = useState("");
-  const [tampil,      setTampil]      = useState(false);
-  const [pesanError,  setPesanError]  = useState("");
-
-  const kirimIntervensi = async () => {
-    if (!intervensi.trim()) return;
-    setPesanError("");
-    setMemuat(true);
-    try {
-      const body = {
-        topik:         topik.trim(),
-        kategori,
-        jumlah_ronde:  jumlahRonde,
-        intervensi:    intervensi.trim(),
-        agen_custom:   agenCustom.length ? agenCustom : undefined,
-        tier,
-      };
-      const res = await fetch(`${apiBase}/start-simulation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Permintaan gagal.");
-      }
-      const data = await res.json();
-      onHasilBaru(unwrapApiData(data, "Response start-simulation tidak berisi data."));
-      setIntervensi("");
-      setTampil(false);
-    } catch (err) {
-      setPesanError(err.message || "Server tidak dapat dihubungi.");
-    }
-    setMemuat(false);
-  };
-
-  return (
-    <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5 print:hidden">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-base">👁️</span>
-          <span className="text-sm font-bold text-amber-300">God's Eye — Injeksi Intervensi</span>
-          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">LIVE</span>
-        </div>
-        <button
-          onClick={() => { setTampil(v => !v); setPesanError(""); }}
-          className="text-xs text-amber-500 hover:text-amber-300 transition underline underline-offset-2"
-        >
-          {tampil ? "Tutup ▲" : "Buka ▼"}
-        </button>
-      </div>
-      <p className="text-[11px] text-amber-700 mb-3">
-        Suntikkan isu baru ke dalam analisis yang sudah berjalan. Semua peserta akan bereaksi ulang terhadap variabel baru ini.
-      </p>
-
-      {tampil && (
-        <div className="space-y-3">
-          <textarea
-            rows={2}
-            className="w-full rounded-xl border border-amber-500/30 bg-[#0E1220] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-500 transition resize-none"
-            value={intervensi}
-            onChange={e => setIntervensi(e.target.value)}
-            placeholder='Contoh: "Pemerintah tiba-tiba umumkan subsidi baru senilai Rp 50 triliun"'
-          />
-          {pesanError && <p className="text-xs text-red-400">❌ {pesanError}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={kirimIntervensi}
-              disabled={memuat || !intervensi.trim()}
-              className="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-black transition hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {memuat ? "⏳ Memproses..." : "🚀 Suntik & Analisis Ulang"}
-            </button>
-            <button
-              onClick={() => { setIntervensi(""); setPesanError(""); }}
-              className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-400 hover:text-white transition"
-            >
-              Reset
-            </button>
-          </div>
-          <p className="text-[10px] text-amber-800">
-            ⚠️ Analisis akan dijalankan ulang penuh dengan isu baru ini dimasukkan di tengah babak.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Komponen: Tambah Agen Custom ─────────────────────────────────────
-const PanelAgenCustom = ({ agenCustom, setAgenCustom }) => {
-  const [tampil,   setTampil]   = useState(false);
-  const [nama,     setNama]     = useState("");
-  const [role,     setRole]     = useState("");
-  const [pengaruh, setPengaruh] = useState(0.7);
-
-  const tambahAgen = () => {
-    if (!nama.trim() || !role.trim()) return;
-    setAgenCustom(prev => [...prev, {
-      nama:      nama.trim(),
-      role:      role.trim(),
-      pengaruh:  parseFloat(pengaruh),
-      kepribadian: { openness: 0.6, agreeableness: 0.6, neuroticism: 0.4 },
-    }]);
-    setNama(""); setRole(""); setPengaruh(0.7);
-  };
-
-  const hapusAgen = (i) => setAgenCustom(prev => prev.filter((_, idx) => idx !== i));
-
-  return (
-    <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/10 p-4 print:hidden">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-base">👤</span>
-          <span className="text-sm font-bold text-indigo-300">Tambah Agen Custom</span>
-          {agenCustom.length > 0 && (
-            <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-400">
-              {agenCustom.length} peserta ditambahkan
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setTampil(v => !v)}
-          className="text-xs text-indigo-500 hover:text-indigo-300 transition underline underline-offset-2"
-        >
-          {tampil ? "Tutup ▲" : "Tambah ▼"}
-        </button>
-      </div>
-      <p className="text-[11px] text-indigo-700 mb-2">
-        Tambahkan karakter peserta baru dengan perspektif khusus yang tidak ada di daftar bawaan.
-      </p>
-
-      {/* Daftar agen custom yang sudah ditambahkan */}
-      {agenCustom.length > 0 && (
-        <div className="mb-3 space-y-1.5">
-          {agenCustom.map((a, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-              <div className="h-6 w-6 rounded-full bg-indigo-500/20 border border-indigo-500 flex items-center justify-center text-[9px] font-black text-indigo-300 shrink-0">
-                {a.nama.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-200 truncate">{a.nama}</p>
-                <p className="text-[10px] text-slate-500 truncate">{a.role.slice(0, 60)}...</p>
-              </div>
-              <span className="text-[10px] text-slate-600">pengaruh: {a.pengaruh}</span>
-              <button onClick={() => hapusAgen(i)} className="text-red-500 hover:text-red-300 text-xs ml-1 transition">✕</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tampil && (
-        <div className="space-y-2.5 border-t border-white/5 pt-3">
-          <div>
-            <label className="text-[11px] text-slate-500 block mb-1">Nama / Peran Agen</label>
-            <input
-              type="text"
-              className="w-full rounded-lg border border-white/10 bg-[#0E1220] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-400 transition"
-              value={nama}
-              onChange={e => setNama(e.target.value)}
-              placeholder='Contoh: "Aktivis Lingkungan"'
-            />
-          </div>
-          <div>
-            <label className="text-[11px] text-slate-500 block mb-1">Deskripsi karakter & sudut pandang</label>
-            <textarea
-              rows={2}
-              className="w-full rounded-lg border border-white/10 bg-[#0E1220] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 outline-none focus:border-indigo-400 transition resize-none"
-              value={role}
-              onChange={e => setRole(e.target.value)}
-              placeholder='Contoh: "Kamu aktivis lingkungan yang kritis terhadap dampak industri. Kamu selalu menempatkan kelestarian alam di atas keuntungan ekonomi."'
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="text-[11px] text-slate-500 whitespace-nowrap">Bobot pengaruh:</label>
-            <input
-              type="range" min="0.1" max="1.0" step="0.1"
-              value={pengaruh}
-              onChange={e => { const v = parseFloat(parseFloat(e.target.value).toFixed(1)); if (!isNaN(v) && v !== pengaruh) setPengaruh(v); }}
-              className="flex-1"
-            />
-            <span className="text-xs font-bold text-indigo-300 w-6 text-right">{pengaruh}</span>
-          </div>
-          <button
-            onClick={tambahAgen}
-            disabled={!nama.trim() || !role.trim()}
-            className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            + Tambahkan Peserta
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Komponen: Aktor Kunci & Swing Voter ──────────────────────────────
-const KartuAktorKunci = ({ aktorAnalisis, warnaAgen }) => {
-  if (!aktorAnalisis) return null;
-
-  const aktorKunci  = aktorAnalisis.aktor_kunci  ?? [];
-  const swingVoter  = aktorAnalisis.swing_voter  ?? [];
-  const penggerak   = aktorAnalisis.aktor_penggerak ?? "-";
-  const rekomendasi = aktorAnalisis.rekomendasi  ?? "";
-
-  const WARNA_LABEL = { Mendukung: "#22c55e", Menolak: "#ef4444", Netral: "#6366f1" };
-  const BG_LABEL    = { Mendukung: "bg-green-900/40 text-green-300 border-green-700", Menolak: "bg-red-900/40 text-red-300 border-red-700", Netral: "bg-indigo-900/40 text-indigo-300 border-indigo-700" };
-
-  // Bar pengaruh (0–1 → 0–100%)
-  const PengaruhBar = ({ skor }) => (
-    <div className="flex items-center gap-2 mt-1">
-      <div className="flex-1 h-1.5 rounded-full bg-white/5">
-        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.round((skor ?? 0) * 100)}%` }} />
-      </div>
-      <span className="text-[10px] text-indigo-300 font-bold w-7 text-right">{Math.round((skor ?? 0) * 100)}%</span>
-    </div>
-  );
-
-  // Bar volatilitas (-1..1 jarak → 0..1)
-  const VolatilitasBar = ({ vol }) => {
-    const pct = Math.min(100, Math.round((vol ?? 0) * 100));
-    const warna = pct > 60 ? "#ef4444" : pct > 30 ? "#f59e0b" : "#22c55e";
-    return (
-      <div className="flex items-center gap-2 mt-1">
-        <div className="flex-1 h-1.5 rounded-full bg-white/5">
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: warna }} />
-        </div>
-        <span className="text-[10px] font-bold w-7 text-right" style={{ color: warna }}>{pct}%</span>
-      </div>
-    );
-  };
-
-  return (
-    <Kartu>
-      <JudulSeksi>🎯 Siapa yang Paling Menentukan Hasil?</JudulSeksi>
-      <p className="mb-5 text-xs text-slate-500">
-        Siapa yang paling menentukan hasil akhir, dan siapa yang masih bisa berpindah pihak.
-      </p>
-
-      {/* Aktor Penggerak — highlight utama */}
-      <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 flex items-start gap-3">
-        <span className="text-xl shrink-0">👑</span>
-        <div>
-          <p className="text-xs font-bold text-amber-300 mb-0.5">Aktor Paling Menentukan</p>
-          <p className="text-sm font-black text-white">{penggerak}</p>
-          {rekomendasi && (
-            <p className="mt-1.5 text-xs text-amber-200/70 leading-relaxed">💡 {rekomendasi}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-
-        {/* Aktor Kunci */}
-        <div>
-          <p className="mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-            🏛️ Tokoh Paling Berpengaruh
-          </p>
-          <div className="space-y-3">
-            {aktorKunci.length === 0 && <p className="text-xs text-slate-600">Tidak ada data.</p>}
-            {aktorKunci.map((a, i) => {
-              const warna = warnaAgen[a.nama] ?? WARNA_AGEN_LIST[i % WARNA_AGEN_LIST.length];
-              const lb    = a.sikap_label ?? "Netral";
-              return (
-                <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0"
-                      style={{ backgroundColor: warna + "22", border: `1.5px solid ${warna}`, color: warna }}>
-                      {a.nama.slice(0,2).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 flex-1 truncate">{a.nama}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${BG_LABEL[lb] ?? "bg-slate-800 text-slate-400 border-slate-600"}`}>{lb}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mb-1.5 leading-relaxed">{a.alasan}</p>
-                  <p className="text-[10px] text-slate-600 italic mb-1">
-                    ⚡ Jika berubah: <span className="text-slate-400 not-italic">{a.dampak_jika_berubah}</span>
-                  </p>
-                  <p className="text-[10px] text-slate-600 mb-0.5">Bobot pengaruh</p>
-                  <PengaruhBar skor={a.pengaruh_skor} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Swing Voter */}
-        <div>
-          <p className="mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-            🔄 Peserta yang Mudah Goyah
-          </p>
-          <div className="space-y-3">
-            {swingVoter.length === 0 && <p className="text-xs text-slate-600">Semua agen cukup konsisten.</p>}
-            {swingVoter.map((a, i) => {
-              const warna = warnaAgen[a.nama] ?? WARNA_AGEN_LIST[i % WARNA_AGEN_LIST.length];
-              const arahWarna = a.potensi_arah === "mendukung" ? "#22c55e" : "#ef4444";
-              const skorAwal  = typeof a.sikap_awal  === "number" ? a.sikap_awal.toFixed(2)  : "?";
-              const skorAkhir = typeof a.sikap_akhir === "number" ? a.sikap_akhir.toFixed(2) : "?";
-              return (
-                <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-6 w-6 rounded-full flex items-center justify-center text-[9px] font-black shrink-0"
-                      style={{ backgroundColor: warna + "22", border: `1.5px solid ${warna}`, color: warna }}>
-                      {a.nama.slice(0,2).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 flex-1 truncate">{a.nama}</span>
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold border"
-                      style={{ color: arahWarna, borderColor: arahWarna + "50", backgroundColor: arahWarna + "15" }}>
-                      → {a.potensi_arah}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mb-1.5 leading-relaxed">{a.alasan_volatil}</p>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-600 mb-1">
-                    <span>Tren: <span className="text-slate-400">{skorAwal} → {skorAkhir}</span></span>
-                  </div>
-                  <p className="text-[10px] text-slate-600 mb-0.5">Seberapa sering berubah pikiran</p>
-                  <VolatilitasBar vol={a.volatilitas} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-      </div>
-    </Kartu>
-  );
-};
-
-
-// ─── Komponen: Badge Sumber Prediksi ─────────────────────────────────
-const SOURCE_BADGES = {
-  ml_model: { icon: "🤖", label: "ML Model", cls: "bg-green-900/40 border-green-500/40 text-green-300" },
-  llm_analysis: { icon: "🧠", label: "LLM Analysis", cls: "bg-indigo-900/40 border-indigo-500/40 text-indigo-300" },
-  heuristic_fallback: { icon: "📐", label: "Heuristic", cls: "bg-amber-900/40 border-amber-500/40 text-amber-300" },
-};
-
-const PrediksiSourceBadge = ({ source, detail, note }) => {
-  // New format: { method, confidence }
-  if (detail?.method) {
-    const badge = SOURCE_BADGES[detail.method] ?? SOURCE_BADGES.heuristic_fallback;
-    const conf = detail.confidence != null ? Math.round(detail.confidence * 100) : null;
-    return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${badge.cls}`}>
-        {badge.icon} {badge.label}
-        {conf !== null && <span className="text-[10px] opacity-70">({conf}%)</span>}
-      </span>
-    );
-  }
-  // Old format: string ("ml" | "rule_based")
-  if (!source) return null;
-  if (source === "ml") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/40 border border-green-500/40 px-3 py-1 text-[11px] font-bold text-green-300">
-        🤖 ML Model
-      </span>
-    );
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-white/10 px-3 py-1 text-[11px] font-bold text-slate-400 cursor-help"
-      title={note ?? "Model belum aktif — perlu lebih banyak sampel"}
-    >
-      📐 Rule-based {note ? `(${note})` : ""}
-    </span>
-  );
-};
-
-
-
-
-
-
-
-// ─── Komponen: Badge Kualitas Simulasi ─────────────────────────────
-const QualityBadge = ({ quality, runtimeMode }) => {
-  if (!quality) return null;
-  const tier = quality.tier ?? "medium";
-  const style = {
-    high: "bg-emerald-900/40 border-emerald-500/40 text-emerald-300",
-    medium: "bg-amber-900/40 border-amber-500/40 text-amber-300",
-    low: "bg-red-900/40 border-red-500/40 text-red-300",
-    minimal: "bg-slate-800 border-white/10 text-slate-400",
-  }[tier] ?? "bg-slate-800 border-white/10 text-slate-400";
-  const pct = quality.score_persen ?? Math.round((quality.score ?? 0) * 100);
-  const mode = runtimeMode?.free_tier_like ? "Mode hemat" : "Mode penuh";
-  const kelebihan = (quality.kelebihan ?? []).map(s => `+ ${s}`).join("\n");
-  const keterbatasan = (quality.keterbatasan ?? []).map(s => `- ${s}`).join("\n");
-  const detail = [kelebihan, keterbatasan].filter(Boolean).join("\n");
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold cursor-help ${style}`}
-      title={`${mode} · skor ${pct}%${detail ? `\n\n${detail}` : ""}`}
-    >
-      {mode} · {quality.label ?? "Simulasi"} {pct}%
-    </span>
-  );
-};
-
-// ─── Komponen: Panel Perbandingan Skenario ────────────────────────────
-const PanelPerbandingan = ({ riwayatSim, hasil }) => {
+// ─── B4: LaciDetail ──────────────────────────────────────────────────
+const LaciDetail = ({ children }) => {
   const [buka, setBuka] = useState(false);
 
-  if (riwayatSim.length < 1) return null;
-
-  const baseline = riwayatSim[0];
-  const latest   = riwayatSim[riwayatSim.length - 1];
-
-  const getPrediksiEntries = (data) => Object.entries(data?.prediksi ?? {});
-
-  const getAgenList = (data) => {
-    const agen = data?.sentimen_agregat ?? {};
-    return Object.entries(agen).map(([nama, skorArr]) => {
-      const skorAkhir = skorArr?.at(-1) ?? 0;
-      let labelAkhir = "netral";
-      if (skorAkhir > 0.2) labelAkhir = "positif";
-      else if (skorAkhir < -0.2) labelAkhir = "negatif";
-      return { nama, skorAkhir, labelAkhir };
-    });
-  };
-
-  const baselineAgen = getAgenList(baseline);
-  const latestAgen   = getAgenList(latest);
-
-  // Diff prediksi
-  const allKeys = [...new Set([...Object.keys(baseline?.prediksi ?? {}), ...Object.keys(latest?.prediksi ?? {})])];
-  const diffPrediksi = allKeys.map(k => ({
-    key: k,
-    baseline: baseline?.prediksi?.[k] ?? 0,
-    latest: latest?.prediksi?.[k] ?? 0,
-    diff: (latest?.prediksi?.[k] ?? 0) - (baseline?.prediksi?.[k] ?? 0),
-  }));
-
-  // Agen yang berubah stance signifikan
-  const agenMap = {};
-  baselineAgen.forEach(a => { agenMap[a.nama] = { baseline: a }; });
-  latestAgen.forEach(a => {
-    if (agenMap[a.nama]) agenMap[a.nama].latest = a;
-    else agenMap[a.nama] = { latest: a };
-  });
-  const changedAgents = Object.values(agenMap).filter(({ baseline: b, latest: l }) => {
-    if (!b || !l) return false;
-    return b.labelAkhir !== l.labelAkhir;
-  });
-
-  const ARROW = { positif: "↑", negatif: "↓", netral: "→" };
-
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-white">🔁 Bandingkan Skenario</span>
-          <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
-            {riwayatSim.length + 1} skenario
-          </span>
-        </div>
-        <button
-          onClick={() => setBuka(v => !v)}
-          className="text-xs text-indigo-400 hover:text-indigo-300 transition underline underline-offset-2"
-        >
-          {buka ? "Tutup ▲" : "Bandingkan Skenario ▼"}
-        </button>
-      </div>
-
-      {buka && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4">
-          {/* Baseline */}
-          <div className="rounded-xl border border-white/10 bg-[#0E1220] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-300">Awal</span>
-              <span className="text-sm font-bold text-slate-200 truncate">{baseline?.intervensi || "(Awal)"}</span>
-            </div>
-            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Prediksi</p>
-            <div className="space-y-1.5 mb-4">
-              {getPrediksiEntries(baseline).map(([k, v]) => (
-                <div key={k} className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 w-24 shrink-0">{k}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${v}%`, backgroundColor: WARNA_SKENARIO[k] ?? "#6366f1" }} />
-                  </div>
-                  <span className="text-[10px] font-bold w-8 text-right" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Peserta</p>
-            <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-              {baselineAgen.map(a => (
-                <div key={a.nama} className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-300 flex-1 truncate">{a.nama}</span>
-                  <span className="text-slate-500 shrink-0">{a.skorAkhir > 0 ? `+${a.skorAkhir.toFixed(2)}` : a.skorAkhir.toFixed(2)}</span>
-                  <span className="shrink-0" style={{ color: WARNA_SENTIMEN[a.labelAkhir] }}>{ARROW[a.labelAkhir]}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3">
-              <PrediksiSourceBadge source={baseline?.prediksi_source} detail={baseline?.prediction_source} note={baseline?.ml_info?.note} />
-            </div>
-          </div>
-
-          {/* Diff column */}
-          <div className="flex flex-col gap-4 lg:w-44 shrink-0">
-            <div className="rounded-xl border border-white/5 bg-white/3 p-3">
-              <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider text-center">Δ Prediksi</p>
-              <div className="space-y-2">
-                {diffPrediksi.map(({ key, diff }) => {
-                  const color = diff > 0 ? "#22c55e" : diff < 0 ? "#ef4444" : "#6366f1";
-                  const prefix = diff > 0 ? "+" : "";
-                  return (
-                    <div key={key} className="text-center">
-                      <p className="text-[10px] text-slate-500">{key}</p>
-                      <p className="text-sm font-black" style={{ color }}>{prefix}{diff}%</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {changedAgents.length > 0 && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3">
-                <p className="text-[10px] font-bold text-amber-400 mb-2 uppercase tracking-wider text-center">Perubahan Sikap</p>
-                <div className="space-y-1">
-                  {changedAgents.map(({ baseline: b, latest: l }) => {
-                    const nama = b?.nama ?? l?.nama;
-                    return (
-                      <p key={nama} className="text-[10px] text-slate-300 text-center">
-                        {nama}: {b ? `${b.labelAkhir} → ${l?.labelAkhir}` : `(baru) ${l?.labelAkhir}`}
-                      </p>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Latest */}
-          <div className="rounded-xl border border-amber-500/20 bg-[#0E1220] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">Intervensi</span>
-              <span className="text-sm font-bold text-slate-200 truncate">{latest?.intervensi || "(Intervensi)"}</span>
-            </div>
-            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Prediksi</p>
-            <div className="space-y-1.5 mb-4">
-              {getPrediksiEntries(latest).map(([k, v]) => (
-                <div key={k} className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 w-24 shrink-0">{k}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${v}%`, backgroundColor: WARNA_SKENARIO[k] ?? "#6366f1" }} />
-                  </div>
-                  <span className="text-[10px] font-bold w-8 text-right" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Peserta</p>
-            <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-              {latestAgen.map(a => (
-                <div key={a.nama} className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-300 flex-1 truncate">{a.nama}</span>
-                  <span className="text-slate-500 shrink-0">{a.skorAkhir > 0 ? `+${a.skorAkhir.toFixed(2)}` : a.skorAkhir.toFixed(2)}</span>
-                  <span className="shrink-0" style={{ color: WARNA_SENTIMEN[a.labelAkhir] }}>{ARROW[a.labelAkhir]}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3">
-              <PrediksiSourceBadge source={latest?.prediksi_source} detail={latest?.prediction_source} note={latest?.ml_info?.note} />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Komponen: Panel Crowd Agent (Swarm-lite Phase 8) ─────────────────
-// ─── Komponen: Explainability Report ──────────────────────────────────
-const PanelExplainability = ({ hasil }) => {
-  const [buka, setBuka] = useState({});
-
-  // Event explanations
-  const eventExplanations = hasil?.event_explanations ?? [];
-
-  // Explainability report
-  const report = hasil?.explainability_report ?? {};
-
-  // Simulation metrics
-  const metrics = hasil?.simulation_metrics ?? {};
-
-  if (!eventExplanations.length && !report.ringkasan) return null;
-
-  const metricItems = [
-    { label: "Polarisasi", value: metrics.polarization_score, warna: "#ef4444", format: "pct" },
-    { label: "Konsensus", value: metrics.consensus_score, warna: "#22c55e", format: "pct" },
-    { label: "Konflik", value: hasil?.explainability_report?.konflik ? null : null, warna: "#f59e0b", format: "pct" },
-  ].filter(m => m.value !== null && m.value !== undefined);
-
-  return (
-    <Kartu>
-      <JudulSeksi>🔍 Explainability — Kenapa Hasilnya Begitu?</JudulSeksi>
-
-      {/* ── Metric ringkasan ── */}
-      {metricItems.length > 0 && (
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
-            { label: "Polarisasi", value: metrics.polarization_score, warna: "#ef4444", tooltip: "Seberapa terpecah pendapat agen (0=konsensus, 1=terbelah)" },
-            { label: "Konsensus", value: metrics.consensus_score, warna: "#22c55e", tooltip: "Tingkat kesepakatan antar agen (0=terpolarisasi, 1=konsensus)" },
-            ...(metrics.event_count !== undefined ? [{ label: "Event", value: metrics.event_count, warna: "#f59e0b", tooltip: "Jumlah intervensi/event dalam simulasi", suffix: "x" }] : []),
-          ].map((m, i) => (
-            <div key={i} className="group relative rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
-              <p className="text-lg font-bold" style={{ color: m.warna }}>
-                {m.suffix ? `${m.value}${m.suffix}` : `${Math.round(m.value * 100)}%`}
-              </p>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full transition-all" style={{ width: `${m.value * 100}%`, backgroundColor: m.warna }} />
-              </div>
-              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2 py-1 text-[10px] text-slate-300 opacity-0 shadow-lg transition group-hover:opacity-100">
-                {m.tooltip}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Ringkasan ── */}
-      {report.ringkasan && (
-        <div className="mb-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-          <p className="text-xs text-indigo-300 font-semibold mb-1">Ringkasan</p>
-          <p className="text-sm leading-6 text-slate-300">{report.ringkasan}</p>
-        </div>
-      )}
-
-      {/* ── Penyebab ── */}
-      {report.penyebab?.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs text-slate-500 font-semibold mb-2">Penyebab</p>
-          <ul className="space-y-1.5">
-            {report.penyebab.map((p, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* ── Konflik ── */}
-      {report.konflik && (
-        <div className="mb-4">
-          <p className="text-xs text-slate-500 font-semibold mb-2">Konflik & Polarisasi</p>
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-            <p className="text-xs text-amber-300 leading-6">{report.konflik}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Aktor ── */}
-      {report.aktor?.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs text-slate-500 font-semibold mb-2">Analisis Aktor</p>
-          <ul className="space-y-1.5">
-            {report.aktor.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
-                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                {a}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* ── Event Explanations ── */}
-      {eventExplanations.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs text-slate-500 font-semibold mb-2">
-            Dampak Event ({eventExplanations.length})
-          </p>
-          <div className="space-y-2">
-            {eventExplanations.map((ev, i) => {
-              const tipeWarna = {
-                intervensi: "#f59e0b",
-                berita_baru: "#6366f1",
-                pernyataan_pemerintah: "#22c55e",
-                protes: "#ef4444",
-                eksternal: "#8b5cf6",
-              }[ev.tipe] ?? "#6366f1";
-              const isOpen = buka[i] ?? false;
-              return (
-                <div key={i} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                  <button
-                    onClick={() => setBuka(p => ({ ...p, [i]: !isOpen }))}
-                    className="flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-white/5"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tipeWarna }} />
-                      <span className="text-xs font-medium text-slate-300">
-                        Ronde {ev.ronde}: {ev.deskripsi?.slice(0, 50)}{ev.deskripsi?.length > 50 ? "..." : ""}
-                      </span>
-                    </div>
-                    <span className="text-slate-600 text-xs">{isOpen ? "▲" : "▼"}</span>
-                  </button>
-                  {isOpen && (
-                    <div className="border-t border-white/10 px-3 py-3">
-                      <p className="text-xs text-slate-400 mb-2">{ev.deskripsi}</p>
-                      {ev.terdampak?.length > 0 && (
-                        <>
-                          <p className="text-[10px] text-slate-500 font-semibold mb-1">Agen terdampak:</p>
-                          <div className="space-y-1">
-                            {ev.terdampak.map((t, j) => (
-                              <div key={j} className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5">
-                                <span className="text-xs text-slate-300">{t.nama}</span>
-                                <div className="flex items-center gap-2">
-                                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${Math.min(Math.abs(t.impact) * 100, 100)}%`,
-                                        backgroundColor: t.arah === "mendukung" ? "#22c55e" : "#ef4444",
-                                      }}
-                                    />
-                                  </div>
-                                  <span className="text-[10px] font-bold" style={{ color: t.arah === "mendukung" ? "#22c55e" : "#ef4444" }}>
-                                    {t.impact > 0 ? "+" : ""}{t.impact}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Keyakinan ── */}
-      {report.keyakinan && (
-        <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="text-[10px] text-slate-500 font-semibold mb-1">Keyakinan Sistem</p>
-          <p className="text-xs text-slate-400 leading-6">{report.keyakinan}</p>
-        </div>
-      )}
-
-      {/* ── Disclaimer ── */}
-      {report.disclaimer && (
-        <p className="text-[10px] text-slate-600 italic">{report.disclaimer}</p>
-      )}
-    </Kartu>
-  );
-};
-
-const PanelCrowd = ({ crowdData }) => {
-  const [buka, setBuka] = useState(false);
-
-  if (!crowdData) return null;
-
-  const dist = crowdData.distribution ?? {};
-  const total = crowdData.total ?? 0;
-
-  const CLUSTER_STYLE = {
-    mendukung: { card: "border-emerald-500/20 bg-emerald-500/5", badge: "bg-emerald-500/20 border-emerald-500/30", text: "text-emerald-400", glow: "shadow-emerald-500/10", icon: "👍" },
-    netral:    { card: "border-slate-500/20 bg-slate-500/5",    badge: "bg-slate-500/20 border-slate-500/30",    text: "text-slate-400", glow: "shadow-slate-500/10", icon: "➖" },
-    menolak:   { card: "border-red-500/20 bg-red-500/5",      badge: "bg-red-500/20 border-red-500/30",      text: "text-red-400", glow: "shadow-red-500/10", icon: "👎" },
-  };
-
-  const BAR_COLOR = {
-    mendukung: "bg-gradient-to-r from-emerald-500 to-emerald-400",
-    netral:    "bg-gradient-to-r from-slate-500 to-slate-400",
-    menolak:   "bg-gradient-to-r from-red-500 to-red-400",
-  };
-
-  const CS = CLUSTER_STYLE;
-
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-5 shadow-lg">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-5">
+    <div className="rounded-2xl border border-white/8 overflow-hidden">
+      <button
+        onClick={() => setBuka(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 bg-[#0D1017] hover:bg-white/5 transition text-left"
+      >
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20">
-            <svg className="h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-            </svg>
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-white">Respons Masyarakat</h3>
-            <p className="text-[10px] text-slate-500">Simulasi opini publik — {total} responden</p>
-          </div>
+          <span className="text-sm font-semibold text-slate-300">Detail Lengkap</span>
+          <span className="rounded-md bg-indigo-500/15 px-2 py-0.5 text-[10px] font-medium text-indigo-400 border border-indigo-500/20">
+            Teknis & grafik
+          </span>
         </div>
-        <button
-          onClick={() => setBuka(v => !v)}
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold text-violet-300 transition hover:bg-white/10 hover:border-violet-500/30"
-        >
-          {buka ? "Ringkas" : "Detail"}
-          <svg className={`h-3 w-3 transition ${buka ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
-      </div>
-
-      {/* ── Distribution bar ── */}
-      <div className="group relative mb-3">
-        <div className="flex h-5 w-full overflow-hidden rounded-full bg-white/5 shadow-inner">
-          {["mendukung", "netral", "menolak"].map(label => {
-            const pct = dist[label] ?? 0;
-            if (pct <= 0) return null;
-            return (
-              <div
-                key={label}
-                className={`h-full ${BAR_COLOR[label]} transition-all duration-500 first:rounded-l-full last:rounded-r-full`}
-                style={{ width: `${pct}%` }}
-                title={`${label}: ${pct}%`}
-              />
-            );
-          })}
-        </div>
-        {/* label di atas bar */}
-        <div className="mt-2 flex justify-between px-0.5">
-          {["mendukung", "netral", "menolak"].map(label => {
-            const pct = dist[label] ?? 0;
-            const s = CS[label];
-            return (
-              <div key={label} className="flex items-center gap-1">
-                <span className="text-[11px]">{s.icon}</span>
-                <span className={`text-[11px] font-bold ${s.text}`}>{pct}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Sentiment breakdown chips ── */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {["mendukung", "netral", "menolak"].map(label => {
-          const pct = dist[label] ?? 0;
-          const s = CS[label];
-          return (
-            <div key={label} className={`flex items-center gap-1.5 rounded-full border ${s.badge} px-3 py-1`}>
-              <span className="text-[10px]">{s.icon}</span>
-              <span className={`text-[10px] font-semibold ${s.text}`}>
-                {label.charAt(0).toUpperCase() + label.slice(1)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+        <span className="text-xs text-slate-500 font-medium">
+          {buka ? "Sembunyikan ▲" : "Lihat detail ▼"}
+        </span>
+      </button>
 
       {buka && (
-        <div className="space-y-6 border-t border-white/5 pt-5">
-          {/* ── Klaster Cards ── */}
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">🏘️ Klaster Opini</span>
-              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {(crowdData.clusters ?? []).map((c, i) => {
-                const s = CS[c.label] ?? CS.netral;
-                return (
-                  <div
-                    key={i}
-                    className={`group relative overflow-hidden rounded-2xl border ${s.card} p-4 transition hover:shadow-lg ${s.glow}`}
-                  >
-                    {/* bg glow */}
-                    <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-0 blur-2xl transition group-hover:opacity-20 ${s.badge.replace("border", "bg")}`} />
-                    <div className="relative z-10">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${s.badge} ${s.text}`}>
-                          {s.icon} {c.label}
-                        </span>
-                        <span className="text-xs font-bold text-slate-400">{c.size} org</span>
-                      </div>
-                      {/* Stance meter */}
-                      <div className="mb-3">
-                        <div className="mb-1 flex items-center justify-between text-[10px]">
-                          <span className="text-slate-600">Stance rata-rata</span>
-                          <span className={`font-bold ${s.text}`}>
-                            {c.mean_stance > 0 ? "+" : ""}{c.mean_stance?.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-                          <div
-                            className={`h-full rounded-full transition-all duration-700 ${s.badge.split(" ")[0]}`}
-                            style={{ width: `${Math.abs(c.mean_stance ?? 0) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                      {/* Top groups */}
-                      <div>
-                        <p className="mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Komposisi</p>
-                        {(c.top_groups ?? []).slice(0, 3).map((g, j) => {
-                          const maxCount = Math.max(...(c.top_groups ?? []).map(t => t.count), 1);
-                          const barPct = (g.count / maxCount) * 100;
-                          return (
-                            <div key={j} className="mb-1 flex items-center gap-2">
-                              <span className="w-16 truncate text-[10px] text-slate-400">{g.group}</span>
-                              <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${s.badge.split(" ")[0]}`}
-                                  style={{ width: `${barPct}%` }}
-                                />
-                              </div>
-                              <span className="w-5 text-right text-[9px] text-slate-600">{g.count}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Propagation ── */}
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">🔄 Aliran Propagasi</span>
-              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-            </div>
-            <div className="space-y-2">
-              {(crowdData.propagation_graph ?? []).map((edge, i) => {
-                const pct = Math.round((edge.weight ?? 0) * 100);
-                const stanceColor = edge.mean_stance > 0.1 ? "text-emerald-400" : edge.mean_stance < -0.1 ? "text-red-400" : "text-slate-500";
-                return (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 transition hover:bg-white/[0.05] hover:border-white/10"
-                  >
-                    {/* Source agent */}
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-[10px] font-bold text-violet-300">
-                        {edge.from?.charAt(0) ?? "?"}
-                      </div>
-                      <span className="truncate text-xs font-medium text-slate-200">{edge.from}</span>
-                    </div>
-
-                    {/* Arrow */}
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <div className="h-px w-4 bg-gradient-to-r from-slate-600 to-slate-500" />
-                      <svg className="h-3 w-3 -ml-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                      </svg>
-                    </div>
-
-                    {/* Target group */}
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="truncate text-xs text-slate-400">{edge.to}</span>
-                    </div>
-
-                    {/* Influence bar */}
-                    <div className="flex w-28 shrink-0 items-center gap-2">
-                      <div className="h-1.5 flex-1 rounded-full bg-white/5 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="w-8 text-right text-[10px] font-semibold text-slate-500">{pct}%</span>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex shrink-0 items-center gap-3 text-[10px]">
-                      <span className="text-slate-600">{edge.crowd_size} org</span>
-                      <span className={`font-semibold ${stanceColor}`}>
-                        {edge.mean_stance > 0 ? "+" : ""}{edge.mean_stance?.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <div className="border-t border-white/8 space-y-5 p-5 bg-[#08090F]">
+          {children}
         </div>
       )}
     </div>
   );
 };
 
-export default function VoxSwarmDashboard() {
-  const [terpasang,    setTerpasang]    = useState(false);
-  const [topik,        setTopik]        = useState("");
-  const [kategori,     setKategori]     = useState("Umum");
-  const [jumlahRonde,  setJumlahRonde]  = useState(3);
-  const [agenCustom,   setAgenCustom]   = useState([]);     // ← baru
-  const [hasil,        setHasil]        = useState(null);
-  const [memuat,       setMemuat]       = useState(false);
-  const [rondeAktif,   setRondeAktif]   = useState(0);
-  const [bukaEkspor,   setBukaEkspor]   = useState(false);
-  const [riwayatSim,   setRiwayatSim]   = useState([]);     // ← riwayat tiap run intervensi
-  const [kategoriList, setKategoriList] = useState(["Auto","Umum","Ekonomi","Politik","Sosial","Hukum","Teknologi"]);
-  const [tier, setTier] = useState("free");
-  const [nCrowd, setNCrowd] = useState(0);
-  // ── State topik_hash & prediksi source ──
-  const [topikHash,      setTopikHash]      = useState(null);
-  const [prediksiSource, setPrediksiSource] = useState(null);   // "ml" | "rule_based"
-  const [prediksiNote,   setPrediksiNote]   = useState(null);
-  const [predictionSourceDetail, setPredictionSourceDetail] = useState(null); // dari field prediction_source
-
+// ═══════════════════════════════════════════════════════════════════
+//                         HALAMAN UTAMA
+// ═══════════════════════════════════════════════════════════════════
+export default function HalamanSimulasi() {
+  const [terpasang,   setTerpasang]   = useState(false);
+  const [topik,       setTopik]       = useState("");
+  const [kategori,    setKategori]    = useState("Umum");
+  const [jumlahRonde, setJumlahRonde] = useState(3);
+  const [hasil,       setHasil]       = useState(null);
+  const [memuat,      setMemuat]      = useState(false);
+  const [tier,        setTier]        = useState("free");
+  const [lihatDetail, setLihatDetail] = useState(false);
+  const [warningTopik, setWarningTopik] = useState(null);
+  const [bukaEkspor, setBukaEkspor] = useState(false);
+  const [rondeAktif, setRondeAktif] = useState(0);
 
   const inputRef = useRef(null);
   const hasilRef = useRef(null);
@@ -1381,33 +261,15 @@ export default function VoxSwarmDashboard() {
 
   useEffect(() => {
     setTerpasang(true);
-    fetch(`${apiBase}/categories`)
-      .then(r => r.json())
-      .then(d => { if (d.kategori?.length) setKategoriList(d.kategori); })
-      .catch(() => {});
   }, []);
 
-  // ── Mulai analisis baru (dari form) ─────────────────────────────
+  // ── Mulai Simulasi ──────────────────────────────────────────────
   const mulaiAnalisis = async () => {
     if (!topik.trim()) { inputRef.current?.focus(); return; }
     setMemuat(true);
     setHasil(null);
-    setRondeAktif(0);
-    setBukaEkspor(false);
-    setRiwayatSim([]);
-    setTopikHash(null);
-    setPrediksiSource(null);
-    setPrediksiNote(null);
-    setPredictionSourceDetail(null);
     try {
-      const body = {
-        topik: topik.trim(),
-        kategori,
-        jumlah_ronde: jumlahRonde,
-        agen_custom:  agenCustom.length ? agenCustom : undefined,
-        tier,
-        n_crowd: nCrowd,
-      };
+      const body = { topik: topik.trim(), kategori, jumlah_ronde: jumlahRonde, tier };
       const res = await fetch(`${apiBase}/start-simulation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1418,13 +280,9 @@ export default function VoxSwarmDashboard() {
         throw new Error(err.detail || "Permintaan gagal.");
       }
       const data = await res.json();
-      const hasilData = unwrapApiData(data, "Response start-simulation tidak berisi data.");
-      setHasil(hasilData);
-      // Simpan topik_hash & prediksi source dari response
-      setTopikHash(hasilData?.topik_hash ?? null);
-      setPrediksiSource(hasilData?.prediksi_source ?? null);
-      setPrediksiNote(hasilData?.ml_info?.note ?? null);
-      setPredictionSourceDetail(hasilData?.prediction_source ?? null);
+      setHasil(bacaData(data, "Respons tidak berisi data."));
+      if (data.warning) setWarningTopik(data.warning);
+      else setWarningTopik(null);
       setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
     } catch (err) {
       alert("❌ " + (err.message || "Server tidak dapat dihubungi."));
@@ -1432,328 +290,336 @@ export default function VoxSwarmDashboard() {
     setMemuat(false);
   };
 
-  // ── Terima hasil simulasi baru dari intervensi ───────────────────
-  const handleHasilIntervensi = (hasilBaru) => {
-    // Simpan run sebelumnya ke riwayat
-    setRiwayatSim(prev => [...prev, hasil]);
-    setHasil(hasilBaru);
-    setRondeAktif(0);
-    setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
-  };
+  // ── Data turunan ────────────────────────────────────────────────
+  const daftarRonde   = hasil?.ronde_detail ?? [];
+  const rondePertama  = daftarRonde[0] ?? null;
+  const rondeTerakhir = daftarRonde[daftarRonde.length - 1] ?? null;
+  const agenAkhir     = rondeTerakhir?.agen ?? [];
+  const analisis      = hasil?.analisis ?? "";
+  const prediksi      = hasil?.prediksi ?? {};
+  const sentimenAgr   = hasil?.sentimen_agregat ?? {};
+  const aktorAnalisis = hasil?.aktor_analisis ?? null;
+  const aktorKunci    = aktorAnalisis?.aktor_kunci ?? [];
+  const rekomendasi   = aktorAnalisis?.rekomendasi ?? "";
+  const rekomendasiStrategis = hasil?.rekomendasi_strategis ?? [];
+  const risikoUtama   = hasil?.risiko_utama ?? "";
+  const kelompokKritis = aktorAnalisis?.kelompok_kritis ?? [];
+  const penggerak     = aktorAnalisis?.aktor_penggerak ?? "";
 
-  // ── Data turunan ─────────────────────────────────────────────────
-  const daftarRonde = hasil?.ronde_detail ?? [];
-  const rondeIni    = daftarRonde[rondeAktif] ?? null;
-  const analisis    = hasil?.analisis ?? "";
-  const prediksi    = hasil?.prediksi ?? {};
-  const sentimenAgr = hasil?.sentimen_agregat ?? {};
-  const grafData       = hasil?.graf_data ?? { entitas: [], relasi: [] };
-  const aktorAnalisis  = hasil?.aktor_analisis ?? null;
-
-  const narasiRaw = analisis
+  // Ringkasan — bersihin teks dari markdown noise & jargon
+  const ringkasan = analisis
     .split("\n")
     .filter(l => {
-      const trimmed = l.trim();
-      if (!trimmed) return false;
-      if (trimmed.includes("|")) return false;
-      if (/^#{1,4}\s/.test(trimmed)) return false;
-      if (/^\*{1,2}[^*]+\*{1,2}$/.test(trimmed)) return false;
-      if (/^\d+\.\s+(Buat|Tugas|Narasi|Tabel|Prediksi)/i.test(trimmed)) return false;
-      if (/PREDIKSI SKENARIO:/i.test(trimmed)) return false;
-      if (/^(Konsensus|Polarisasi|Status Quo)\s+\d+%/i.test(trimmed)) return false;
+      const t = l.trim();
+      if (!t) return false;
+      if (t.includes("|")) return false;
+      if (/^#{1,4}\s/.test(t)) return false;
+      if (/^\d+\.\s+(Buat|Tugas|Narasi|Tabel|Prediksi)/i.test(t)) return false;
+      if (/Pengaruh|Konsistensi|Skor\s*komposit|komposit/i.test(t)) return false;
       return true;
     })
     .join(" ")
     .replace(/\*{1,2}/g, "")
-    .slice(0, 1200);
+    .slice(0, 800);
 
-  const narasi = narasiRaw.includes(".")
-    ? narasiRaw.slice(0, narasiRaw.lastIndexOf(".") + 1)
-    : narasiRaw;
+  // Hitung sentimen akhir
+  const jumlahMendukung = agenAkhir.filter(a => a.sentimen?.label === "positif").length;
+  const jumlahMenolak   = agenAkhir.filter(a => a.sentimen?.label === "negatif").length;
+  const jumlahNetral    = agenAkhir.filter(a => a.sentimen?.label === "netral").length;
 
-  // FIX infinite loop Recharts: useMemo agar referensi array stabil
-  const dataBar = useMemo(() => (rondeIni?.agen ?? []).map(a => ({
+  // Tentukan hasil akhir
+  let hasilAkhir = { label: "Belum Ada", warna: "#64748b", ikon: "", desc: "" };
+  if (Object.keys(prediksi).length > 0) {
+    const sorted = Object.entries(prediksi).sort((a, b) => b[1] - a[1]);
+    const p = sorted[0];
+    if (p[0] === "Semua Setuju") {
+      hasilAkhir = { label: "Semua Setuju", warna: "#22c55e", ikon: "🤝", desc: "Mayoritas peserta sepakat dengan isu ini — opini publik cenderung positif." };
+    } else if (p[0] === "Masyarakat Terpecah") {
+      hasilAkhir = { label: "Masyarakat Terpecah", warna: "#ef4444", ikon: "⚡", desc: "Pendapat peserta terbelah dan berpotensi memicu konflik." };
+    } else {
+      hasilAkhir = { label: "Opini Stabil", warna: "#f59e0b", ikon: "🔹", desc: "Pendapat peserta cenderung stabil sepanjang simulasi — tidak ada perdebatan yang berarti." };
+    }
+  } else if (agenAkhir.length > 0) {
+    if (jumlahMendukung > jumlahMenolak && jumlahMendukung > jumlahNetral) {
+      hasilAkhir = { label: "Cenderung Setuju", warna: "#22c55e", ikon: "📈", desc: "Mayoritas peserta setuju dengan isu ini — opini publik cenderung positif." };
+    } else if (jumlahMenolak > jumlahMendukung && jumlahMenolak > jumlahNetral) {
+      hasilAkhir = { label: "Cenderung Tidak Setuju", warna: "#ef4444", ikon: "📉", desc: "Mayoritas peserta tidak setuju dengan isu ini — opini publik cenderung negatif." };
+    } else {
+      hasilAkhir = { label: "Pendapat Terbagi", warna: "#f59e0b", ikon: "⚖️", desc: "Pendapat peserta terbagi rata — belum ada dominasi sikap yang jelas." };
+    }
+  }
+
+  // Data untuk chart distribusi akhir
+  const dataBar = useMemo(() => agenAkhir.map(a => ({
     nama:      a.nama,
-    namaLabel: a.nama.length > 10 ? a.nama.slice(0, 9) + "..." : a.nama,
-    skor:  Math.round(((a.sentimen?.skor ?? 0) + 1) * 50),
-    warna: WARNA_SENTIMEN[a.sentimen?.label] ?? "#6366f1",
-    label: a.sentimen?.label ?? "netral",
-  })), [rondeIni]);
+    namaLabel: a.nama.length > 10 ? a.nama.slice(0, 9) + "…" : a.nama,
+    skor:      Math.round(((a.sentimen?.skor ?? 0) + 1) * 50),
+    warna:     SENTIMEN[a.sentimen?.label]?.warna ?? "#64748b",
+    label:     a.sentimen?.label ?? "netral",
+  })), [agenAkhir]);
 
-  const warnaAgen = Object.keys(sentimenAgr).reduce((acc, nama, i) => {
-    acc[nama] = WARNA_AGEN_LIST[i % WARNA_AGEN_LIST.length];
-    return acc;
-  }, {});
-
-  // FIX: useMemo agar LineChart tidak re-render infinite loop
+  // Data untuk chart tren
   const dataTren = useMemo(() => {
-    const agen = Object.keys(sentimenAgr);
-    if (!agen.length) return [];
-    return Array.from({ length: sentimenAgr[agen[0]]?.length ?? 0 }, (_, i) => {
-      const obj = { label: `Babak ${i + 1}` };
-      agen.forEach(n => { obj[n] = +(sentimenAgr[n]?.[i] ?? 0).toFixed(2); });
+    const namaAgen = Object.keys(sentimenAgr);
+    if (!namaAgen.length) return [];
+    return Array.from({ length: sentimenAgr[namaAgen[0]]?.length ?? 0 }, (_, i) => {
+      const obj = { label: i + 1 };
+      namaAgen.forEach(n => { obj[n] = +(sentimenAgr[n]?.[i] ?? 0).toFixed(2); });
       return obj;
     });
   }, [sentimenAgr]);
 
-  const jmlNegatif = dataBar.filter(a => a.skor < 40).length;
-  const jmlPositif = dataBar.filter(a => a.skor >= 60).length;
-  const status = jmlNegatif > jmlPositif && jmlNegatif >= 2 ? "berbahaya" : jmlPositif >= jmlNegatif ? "stabil" : "terbagi";
-  const INFO_STATUS = {
-    stabil:    { label: "✅ Situasi Stabil",   kelas: "bg-green-600" },
-    berbahaya: { label: "⚠️ Potensi Konflik",  kelas: "bg-red-600" },
-    terbagi:   { label: "⚡ Pendapat Terbagi", kelas: "bg-amber-600" },
-  };
+  // Warna per agen
+  const warnaAgen = Object.keys(sentimenAgr).reduce((acc, nama, i) => {
+    acc[nama] = WARNA_AGEN[i % WARNA_AGEN.length];
+    return acc;
+  }, {});
+
+  // ── Simpan hasil ───────────────────────────────────────────────
+  const handleSimpanPDF = () => eksporPDF(hasil, topik, analisis, aktorAnalisis, null);
+  const handleSimpanCSV = () => eksporCSV(hasil, topik);
+  const handleSimpanWord = () => eksporWord(hasil, topik, analisis).catch(e => alert(e.message));
 
   if (!terpasang) return null;
 
   return (
-    <main className="min-h-screen bg-[#06080F] p-4 text-white md:p-8 print:bg-white print:p-8 print:text-slate-900">
-      <div className="mx-auto max-w-5xl">
+    <main className="bg-[#0B1120] text-[#F1F5F9]">
 
-        {/* ══ HEADER ══ */}
-        <header className="mb-6 flex items-center justify-between print:hidden">
-          <Link href="/" className="text-sm text-slate-500 hover:text-white transition">← Kembali</Link>
+      {/* ════════════════ HEADER ════════════════ */}
+      <div className="mx-auto max-w-4xl px-4 py-5 md:px-6">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 text-sm text-slate-500 hover:text-white transition">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Beranda
+          </Link>
           <div className="flex items-center gap-2">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
-            <span className="text-sm font-black tracking-widest uppercase">VoxSwarm</span>
-            <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300">v3</span>
+            <span className="text-lg font-bold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>VoxSwarm</span>
+            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-400">Simulasi</span>
           </div>
-        </header>
+        </div>
+      </div>
 
-        {/* ══ FORM INPUT ══ */}
-        <section className="mb-4 rounded-2xl border border-white/10 bg-[#0C0F1D] p-5 print:hidden">
+      {/* ════════════════ ONBOARDING CONTEXT ════════════════ */}
+      <section className="mx-auto max-w-4xl px-4 pt-6 pb-2 md:px-6">
+        <p className="mb-1 text-xs font-medium tracking-wider text-blue-300 uppercase">
+          Social Simulation Engine
+        </p>
+        <h2 className="mb-2 text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "var(--font-display)" }}>
+          Simulasi Opini Publik
+        </h2>
+        <p className="text-sm leading-7 text-slate-400 max-w-2xl">
+          Masukkan topik atau isu kebijakan — VoxSwarm akan mensimulasikan bagaimana berbagai kelompok masyarakat merespons dan berdebat. Hasilnya berupa analisis sentimen, prediksi skenario, dan rekomendasi strategis.
+        </p>
+      </section>
 
-          <p className="mb-1 text-base font-bold text-white">
-            Isu apa yang ingin kamu analisis hari ini?
-          </p>
-          <p className="mb-4 text-xs text-slate-500">
-            Masukkan topik, pilih kategori dan jumlah babak diskusi, lalu klik Analisis.
-          </p>
+      {/* ════════════════ FORM INPUT ════════════════ */}
+      <section className="mx-auto max-w-4xl px-4 md:px-6">
+        <div className="rounded-2xl border border-white/10 bg-[#132237] p-6 md:p-8 shadow-[0_0_40px_-12px_rgba(59,130,246,0.12)]">
+          <h2 className="mb-4 text-xl font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>
+            Coba Simulasi Opini Publik
+          </h2>
 
-          <div className="mb-3 flex gap-2">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
             <input
               ref={inputRef}
-              className="flex-1 rounded-xl border border-white/10 bg-[#0E1220] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-indigo-500"
+              className="flex-1 rounded-xl border border-white/10 bg-[#1A2D4A] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-blue-400 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.08)]"
               value={topik}
-              onChange={e => { const v = e.target.value; setTopik(v.length > 300 ? v.slice(0, 300) : v); }}
+              onChange={e => setTopik(e.target.value.slice(0, 300))}
               onKeyDown={e => e.key === "Enter" && mulaiAnalisis()}
-              placeholder="Contoh: Kenaikan harga BBM, RUU Ketenagakerjaan baru, dll..."
+              placeholder='Contoh: "Apakah kenaikan UMP 2025 menguntungkan buruh atau merugikan UMKM?"'
             />
             <button
               onClick={mulaiAnalisis}
               disabled={memuat}
-              className="rounded-xl bg-indigo-600 px-7 py-3 text-sm font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl bg-blue-600 px-8 py-3 text-sm font-bold text-white transition hover:bg-blue-500 hover:shadow-[0_0_20px_-5px_rgba(59,130,246,0.4)] disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             >
-              {memuat ? "⏳ Memproses..." : "Analisis →"}
+              {memuat ? "Memproses…" : "Analisis"}
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 border-t border-white/5 pt-3 mb-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Kategori isu:</span>
-              <select
-                value={kategori}
-                onChange={e => setKategori(e.target.value)}
-                className="rounded-lg border border-white/10 bg-[#0E1220] px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-400"
-              >
-                {kategoriList.map(k => <option key={k} value={k}>{k}</option>)}
+              <span>Kategori:</span>
+              <select value={kategori} onChange={e => setKategori(e.target.value)}
+                className="rounded-lg border border-white/10 bg-[#1A2D4A] px-3 py-1.5 text-slate-300 outline-none focus:border-blue-400">
+                {["Umum","Ekonomi","Politik","Sosial","Hukum","Teknologi"].map(k =>
+                  <option key={k} value={k}>{k}</option>
+                )}
               </select>
             </div>
-
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Jumlah putaran:</span>
+              <span>Putaran:</span>
               <div className="flex gap-1">
                 {[1,2,3,4,5].map(n => (
                   <button key={n} onClick={() => setJumlahRonde(n)}
-                    className={`h-7 w-7 rounded-lg text-xs font-bold transition ${jumlahRonde === n ? "bg-indigo-600 text-white" : "border border-white/10 text-slate-500 hover:border-indigo-500 hover:text-white"}`}
-                  >{n}</button>
+                    className={`h-7 w-7 rounded-lg text-xs font-bold transition ${jumlahRonde === n ? "bg-blue-600 text-white" : "border border-white/10 text-slate-600 hover:border-blue-500 hover:text-white"}`}>
+                    {n}
+                  </button>
                 ))}
               </div>
             </div>
-
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Mode:</span>
-              <button onClick={() => setTier("free")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "free" ? "bg-emerald-600 text-white" : "border border-white/10 text-slate-500 hover:border-emerald-500 hover:text-white"}`}
-              >Free</button>
-              <button onClick={() => setTier("normal")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "normal" ? "bg-amber-600 text-white" : "border border-white/10 text-slate-500 hover:border-amber-500 hover:text-white"}`}
-              >Normal</button>
+              <span>Mode:</span>
+              <button onClick={() => setTier("free")} title="Lebih cepat, model ringan. Cocok untuk eksplorasi awal."
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "free" ? "bg-emerald-600 text-white shadow-[0_0_12px_-4px_rgba(16,185,129,0.3)]" : "border border-white/10 text-slate-600 hover:border-emerald-500 hover:text-white"}`}>
+                Cepat
+              </button>
+              <button onClick={() => setTier("normal")} title="Lebih dalam, analisis lebih akurat dan detail."
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${tier === "normal" ? "bg-amber-600 text-white shadow-[0_0_12px_-4px_rgba(245,158,11,0.3)]" : "border border-white/10 text-slate-600 hover:border-amber-500 hover:text-white"}`}>
+                Lengkap
+              </button>
             </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Crowd:</span>
-              <input type="range" min="0" max="200" step="50" value={nCrowd}
-                onChange={e => setNCrowd(Number(e.target.value))}
-                className="w-20 accent-indigo-500"
-              />
-              <span className="min-w-[3rem] text-xs font-bold text-indigo-400">
-                {nCrowd > 0 ? nCrowd : "nonaktif"}
-              </span>
-            </div>
-
-          {/* ── Tambah Agen Custom ── */}
-          <PanelAgenCustom agenCustom={agenCustom} setAgenCustom={setAgenCustom} />
-        </section>
-
-        {/* ══ KOSONG ══ */}
-        {!hasil && !memuat && (
-          <div className="rounded-2xl border border-dashed border-white/10 p-16 text-center">
-            <div className="mb-3 text-5xl">🧠</div>
-            <h2 className="mb-2 text-xl font-bold">Belum ada analisis</h2>
-            <p className="text-sm text-slate-500">
-              Masukkan topik di atas dan klik <strong className="text-white">Analisis</strong> untuk memulai.
-            </p>
           </div>
-        )}
+        </div>
+      </section>
 
-        {/* ══ LOADING ══ */}
-        {memuat && (
-          <div className="rounded-2xl border border-white/10 bg-[#0C0F1D] p-16 text-center">
-            <div className="mx-auto mb-6 flex w-fit gap-2">
+      {/* ════════════════ LOADING ════════════════ */}
+      {memuat && (
+        <section className="mx-auto mt-4 max-w-4xl px-4 md:px-6">
+          <div className="rounded-2xl border border-white/10 bg-[#132237] p-10 text-center animate-pulse-border">
+            <div className="mx-auto mb-6 flex w-fit gap-2.5">
               {[0,1,2,3].map(i => (
-                <div key={i} className="h-2.5 w-2.5 rounded-full bg-indigo-500"
+                <div key={i} className="h-2.5 w-2.5 rounded-full bg-blue-500"
                   style={{ animation: `lompat 1s ease-in-out ${i*0.15}s infinite` }} />
               ))}
             </div>
-            <p className="mb-1 font-semibold text-slate-300">Sedang mensimulasikan {jumlahRonde} putaran diskusi...</p>
-            <p className="text-xs text-slate-600">Menggunakan dual-model: respons agen (cepat) + analisis mendalam. Mohon tunggu 15–45 detik.</p>
+            <p className="mb-2 text-lg font-bold text-slate-100" style={{ fontFamily: "var(--font-display)" }}>
+              Mensimulasikan diskusi…
+            </p>
+            <p className="mb-6 text-sm text-slate-400">
+              {jumlahRonde} putaran · estimasi {jumlahRonde * 10}–{jumlahRonde * 20} detik
+            </p>
+            <div className="mx-auto max-w-xs space-y-2.5 text-left">
+              {[
+                "Menyiapkan agen dari berbagai latar belakang",
+                "Mensimulasikan diskusi antar kelompok",
+                "Menganalisis sentimen dan dinamika opini",
+                "Menyusun rekomendasi strategis",
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="h-1.5 w-1.5 rounded-full bg-blue-500/40 shrink-0" />
+                  <p className="text-xs text-slate-500">{step}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
+        </section>
+      )}
 
-        {/* ══ HASIL ══ */}
-        {hasil && (
-          <div ref={hasilRef} className="space-y-5 duration-500 animate-in fade-in">
+      {/* ════════════════ KOSONG ════════════════ */}
+      {!hasil && !memuat && (
+        <section className="mx-auto mt-6 max-w-4xl px-4 md:px-6">
+          <div className="rounded-2xl border border-dashed border-white/10 p-16 text-center group hover:border-blue-500/30 transition-all duration-300">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20 group-hover:bg-blue-500/20 group-hover:border-blue-500/40 transition-all duration-300">
+              <svg className="h-7 w-7 text-blue-400 group-hover:scale-110 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" />
+              </svg>
+            </div>
+            <h3 className="mb-2 text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+              Belum Ada Simulasi
+            </h3>
+            <p className="text-base text-slate-400">
+              Ketik topik di atas lalu klik <strong className="text-white">Analisis</strong> untuk memulai.
+            </p>
+          </div>
+        </section>
+      )}
 
-            {/* ── Riwayat intervensi (badge) ── */}
-            {riwayatSim.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap print:hidden">
-                <span className="text-xs text-slate-600">Riwayat analisis:</span>
-                {riwayatSim.map((r, i) => (
-                  <span key={i} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-500">
-                    Run #{i + 1} {r.intervensi ? `— "${r.intervensi.slice(0, 30)}..."` : "(awal)"}
-                  </span>
-                ))}
-                <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-3 py-1 text-[11px] text-amber-300 font-bold">
-                  ▶ Run #{riwayatSim.length + 1} {hasil.intervensi ? "(dengan intervensi)" : ""}
-                </span>
+      {/* ════════════════ HASIL SIMULASI ════════════════ */}
+      {hasil && (
+        <div ref={hasilRef} className="mx-auto mt-6 max-w-4xl px-4 pb-8 md:px-6 space-y-4">
+
+          {/* ── C2: ZONA 1 — Kesimpulan utama ── */}
+          <KartuKesimpulan
+            topik={topik}
+            status={hasilAkhir.label === "Cenderung Tidak Setuju" || hasilAkhir.label === "Masyarakat Terpecah" ? "berbahaya" : hasilAkhir.label === "Pendapat Terbagi" ? "terbagi" : "stabil"}
+            narasi={ringkasan}
+            daftarRonde={daftarRonde}
+            rondeIni={rondeTerakhir}
+          />
+
+          {/* ── C3: ZONA 2 — Distribusi singkat ── */}
+          <KartuDistribusiSingkat dataBar={dataBar} />
+
+          {/* ── C4: ZONA 3 — Suara tiap kelompok ── */}
+          <KartuAgenRingkas rondeIni={rondeTerakhir} />
+
+          {/* ── C5: ZONA 4 — Aktor kunci & penggerak ── */}
+          {penggerak && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-base">🎯</span>
+              <div>
+                <p className="text-xs font-semibold text-amber-400/70 uppercase tracking-wider mb-0.5">Aktor Paling Berpengaruh</p>
+                <p className="text-sm font-bold text-amber-200">{penggerak}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── C6: ZONA 5 — Disclaimer ── */}
+          <div className="rounded-xl border border-white/5 bg-[#0D1017] px-4 py-3">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              ⚠️ VoxSwarm adalah alat eksplorasi dan referensi awal, bukan pengganti survei atau riset empiris.
+              Hasil simulasi bergantung pada konfigurasi agen dan topik yang diberikan.
+              Gunakan sebagai bahan pertimbangan, bukan keputusan final.
+            </p>
+          </div>
+
+          {/* ── C7: ZONA 6 — Laci detail collapsed ── */}
+          <LaciDetail>
+
+            {/* Warning topik */}
+            {warningTopik && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex items-start gap-2">
+                <span className="text-sm shrink-0 mt-0.5">⚠️</span>
+                <p className="text-xs text-amber-200/80 leading-relaxed">{warningTopik}</p>
               </div>
             )}
 
-            {/* ── Dual-Model Info Badge ── */}
-            {hasil.model_info && <DualModelBadge modelInfo={hasil.model_info} />}
-
-            {/* ── Bar status + ekspor ── */}
-            <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`rounded-full px-4 py-1.5 text-xs font-bold text-white ${INFO_STATUS[status].kelas}`}>
-                  {INFO_STATUS[status].label}
-                </span>
-                <PrediksiSourceBadge source={prediksiSource} detail={hasil.prediction_source} note={prediksiNote} />
-                <QualityBadge quality={hasil.simulation_quality} runtimeMode={hasil.runtime_mode} />
-                <span className="text-xs text-slate-500">
-                  Topik: <span className="font-medium text-slate-300">"{topik}"</span>
-                  {hasil.intervensi && <span className="text-amber-400"> · 🔀 {hasil.intervensi.slice(0, 40)}...</span>}
-                  {" · "}{daftarRonde.length} putaran · {(rondeIni?.agen ?? []).length} agen
-                </span>
-              </div>
-              <div className="relative">
-                <button
-                  onClick={() => setBukaEkspor(v => !v)}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#0C0F1D] px-4 py-2 text-xs font-bold text-slate-300 hover:border-indigo-500 hover:text-white transition"
-                >
-                  📥 Unduh Laporan ▾
-                </button>
-                {bukaEkspor && (
-                  <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#131726] p-2 shadow-2xl">
-                    {[
-                      { ikon: "🖨️", label: "Cetak / Simpan PDF",  aksi: () => { eksporPDF(hasil, topik, analisis, aktorAnalisis, null); setBukaEkspor(false); } },
-                      { ikon: "📊", label: "Unduh Excel / CSV",    aksi: () => { eksporCSV(hasil, topik); setBukaEkspor(false); } },
-                      { ikon: "📄", label: "Unduh Word (.docx)",   aksi: () => { eksporWord(hasil, topik, analisis).catch(e => alert(e.message)); setBukaEkspor(false); } },
-                    ].map(({ ikon, label, aksi }) => (
-                      <button key={label} onClick={aksi}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs text-slate-300 hover:bg-white/10 transition">
-                        <span className="text-base">{ikon}</span> {label}
-                      </button>
+            {/* Rekomendasi Strategis */}
+            {(rekomendasi || rekomendasiStrategis.length > 0) && (
+              <Kartu>
+                <JudulSeksi>Rekomendasi Strategis</JudulSeksi>
+                {rekomendasiStrategis.length > 0 ? (
+                  <div className="space-y-3">
+                    {rekomendasiStrategis.map((item, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0 mt-0.5">
+                          {i + 1}
+                        </div>
+                        <p className="text-sm leading-relaxed text-slate-200">{item}</p>
+                      </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-sm leading-relaxed text-slate-200">{rekomendasi}</p>
                 )}
-              </div>
-            </div>
+              </Kartu>
+            )}
 
-            {/* ── GOD'S EYE INTERVENTION ── tampil setelah simulasi ada ── */}
-            <PanelIntervensi
-              topik={topik}
-              kategori={kategori}
-              jumlahRonde={jumlahRonde}
-              agenCustom={agenCustom}
-              onHasilBaru={handleHasilIntervensi}
-              memuat={memuat}
-              setMemuat={setMemuat}
-              apiBase={apiBase}
-              tier={tier}
-            />
-
-            {/* ── Ringkasan ── */}
-            <Kartu>
-              <JudulSeksi>📋 Ringkasan Hasil</JudulSeksi>
-              <p className="text-sm leading-7 text-slate-300 print:text-slate-800">{narasi || "—"}</p>
-              {Object.keys(prediksi).length > 0 && (
-                <div className="mt-5 space-y-2.5">
-                  <p className="text-xs font-semibold text-slate-500">Kemungkinan hasil akhir:</p>
-                  {Object.entries(prediksi).map(([k, v]) => (
-                    <div key={k} className="flex items-center gap-3">
-                      <span className="w-28 shrink-0 text-xs text-slate-400">{k}</span>
-                      <div className="flex-1 h-2 overflow-hidden rounded-full bg-white/5">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, backgroundColor: WARNA_SKENARIO[k] ?? "#6366f1" }} />
-                      </div>
-                      <span className="w-8 shrink-0 text-right text-xs font-bold" style={{ color: WARNA_SKENARIO[k] }}>{v}%</span>
-                    </div>
-                  ))}
-                  {/* Sumber prediksi — gunakan prediction_source baru jika ada */}
-                  {hasil.prediction_source?.method ? (
-                    <div className="mt-2 rounded-lg border border-white/5 bg-white/3 px-3 py-2">
-                      <p className="text-[10px] text-slate-600 leading-relaxed">
-                        Sumber prediksi: <span className="text-slate-400 font-medium">
-                          {{ ml_model: "ML Model", llm_analysis: "analisis LLM", heuristic_fallback: "aturan heuristic" }[hasil.prediction_source.method] ?? hasil.prediction_source.method}
-                        </span>
-                        {hasil.prediction_source.confidence != null && (
-                          <span className="text-slate-400"> · confidence: {Math.round(hasil.prediction_source.confidence * 100)}%</span>
-                        )}
-                      </p>
-                      <p className="text-[9px] text-slate-700 mt-0.5">
-                        Simulasi eksploratif — bukan prediksi faktual
-                      </p>
-                    </div>
-                  ) : predictionSourceDetail && (
-                    <div className="mt-2 rounded-lg border border-white/5 bg-white/3 px-3 py-2">
-                      <p className="text-[10px] text-slate-600 leading-relaxed">
-                        Sumber prediksi: <span className="text-slate-400 font-medium">
-                          {predictionSourceDetail.prediksi === "llm_analisis" ? "analisis LLM" : "aturan heuristic"}
-                        </span>
-                        <span className="text-slate-600"> · keyakinan: heuristic</span>
-                      </p>
-                      <p className="text-[9px] text-slate-700 mt-0.5">
-                        Simulasi eksploratif — bukan prediksi faktual
-                      </p>
-                    </div>
-                  )}
+            {/* Risiko Utama */}
+            {risikoUtama && (
+              <Kartu>
+                <JudulSeksi>Risiko Utama</JudulSeksi>
+                <div className="flex items-start gap-2">
+                  <span className="text-lg shrink-0">⚠️</span>
+                  <p className="text-sm leading-relaxed text-slate-300">{risikoUtama}</p>
                 </div>
-              )}
-            </Kartu>
+              </Kartu>
+            )}
 
-            {/* ── Aktor Kunci & Swing Voter ── */}
-            <KartuAktorKunci aktorAnalisis={aktorAnalisis} warnaAgen={warnaAgen} />
-
-            {/* ── Navigasi putaran ── */}
+            {/* Navigasi putaran */}
             {daftarRonde.length > 1 && (
               <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <span className="text-xs text-slate-500">Lihat putaran:</span>
                 {daftarRonde.map((_, i) => (
                   <button key={i} onClick={() => setRondeAktif(i)}
-                    className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${rondeAktif === i ? "bg-indigo-600 text-white" : "border border-white/10 text-slate-500 hover:border-indigo-400 hover:text-white"}`}
+                    className={`rounded-lg px-4 py-1.5 text-xs font-medium transition ${
+                      rondeAktif === i
+                        ? "bg-indigo-600 text-white"
+                        : "border border-white/10 text-slate-500 hover:border-indigo-400 hover:text-white"
+                    }`}
                   >
                     Babak {i + 1}
                   </button>
@@ -1761,103 +627,68 @@ export default function VoxSwarmDashboard() {
               </div>
             )}
 
-            {/* ── Grid chart ── */}
+            {/* Chart grid */}
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <Kartu>
-                <JudulSeksi>📊 Peta Dukungan — Babak {rondeAktif + 1}</JudulSeksi>
-                <p className="mb-4 text-xs text-slate-500">Skor 0 = sangat menolak, 100 = sangat mendukung.</p>
-                <div style={{ height: 220, width: '100%' }}>
-                  <ResponsiveContainer width="100%" height={220} minWidth={0}>
-                    <BarChart data={dataBar} margin={{ bottom: 0 }}>
-                      <XAxis dataKey="namaLabel" interval={0} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[0,100]} hide />
-                      <Tooltip
-                        cursor={{ fill: "rgba(99,102,241,0.07)" }}
-                        contentStyle={{ background: "#0C0F1D", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 11, color: "#e2e8f0" }}
-                        labelStyle={{ color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}
-                        itemStyle={{ color: "#e2e8f0" }}
-                        formatter={(v, _, p) => [`${v}/100 — ${LABEL_SENTIMEN[p.payload.label] ?? "-"}`, "Skor dukungan"]}
-                      />
-                      <Bar dataKey="skor" radius={[6,6,0,0]} barSize={34}>
-                        {dataBar.map((e, i) => <Cell key={i} fill={e.warna} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-3 flex gap-4 text-[11px] text-slate-500">
-                  {Object.entries(WARNA_SENTIMEN).map(([k, w]) => (
-                    <span key={k} className="flex items-center gap-1.5">
-                      <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: w }} />
-                      {LABEL_SENTIMEN[k]}
-                    </span>
-                  ))}
-                </div>
-              </Kartu>
+              {/* BarChart */}
+              {dataBar.length > 0 && (
+                <Kartu>
+                  <JudulSeksi>Peta Dukungan — Babak {rondeAktif + 1}</JudulSeksi>
+                  <p className="mb-4 text-xs text-slate-600">Skor 0 = sangat menolak · 100 = sangat mendukung</p>
+                  <div style={{ height: 220, width: "100%" }}>
+                    <ResponsiveContainer width="100%" height={220} minWidth={0}>
+                      <BarChart data={dataBar} margin={{ bottom: 0 }}>
+                        <XAxis dataKey="namaLabel" interval={0} tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0,100]} hide />
+                        <Tooltip
+                          cursor={{ fill: "rgba(99,102,241,0.06)" }}
+                          contentStyle={{ background: "#0D1017", border: "0.5px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 11, color: "#e2e8f0" }}
+                          formatter={(v, _, p) => [`${v}/100 — ${LABEL_SENTIMEN[p.payload.label] ?? "-"}`, "Skor dukungan"]}
+                        />
+                        <Bar dataKey="skor" radius={[5,5,0,0]} barSize={32}>
+                          {dataBar.map((e, i) => <Cell key={i} fill={e.warna} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-3 flex gap-4">
+                    {Object.entries(WARNA_SENTIMEN).map(([k, w]) => (
+                      <span key={k} className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: w }} />
+                        {LABEL_SENTIMEN[k]}
+                      </span>
+                    ))}
+                  </div>
+                </Kartu>
+              )}
 
+              {/* LineChart atau peserta */}
               {dataTren.length > 1 ? (
                 <Kartu>
-                  <JudulSeksi>📈 Perubahan Sikap Tiap Babak</JudulSeksi>
-                  {/* Label sumbu Y */}
-                  <div className="mb-2 flex items-center justify-between text-[10px] text-slate-600">
-                    <span>← Menolak</span>
-                    <span className="text-slate-700">Netral (0)</span>
-                    <span>Mendukung →</span>
+                  <JudulSeksi>Perubahan Sikap Tiap Babak</JudulSeksi>
+                  <div className="mb-2 flex items-center justify-between text-[10px] text-slate-700">
+                    <span>← Menolak</span><span>Netral</span><span>Mendukung →</span>
                   </div>
-                  <div style={{ height: 210, width: '100%' }}>
+                  <div style={{ height: 210, width: "100%" }}>
                     <ResponsiveContainer width="100%" height={210} minWidth={0}>
                       <LineChart data={dataTren} margin={{ left: 8, right: 8, top: 4, bottom: 4 }}>
-                        {/* Garis bantu tengah (netral = 0) */}
                         <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 10, fill: "#64748b" }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          domain={[-1, 1]}
-                          ticks={[-1, -0.5, 0, 0.5, 1]}
-                          tick={{ fontSize: 9, fill: "#475569" }}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={v => v === 0 ? "0" : v > 0 ? `+${v}` : `${v}`}
-                          width={28}
-                        />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#475569" }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[-1,1]} ticks={[-1,-0.5,0,0.5,1]} tick={{ fontSize: 9, fill: "#334155" }} axisLine={false} tickLine={false}
+                          tickFormatter={v => v === 0 ? "0" : v > 0 ? `+${v}` : `${v}`} width={28} />
+                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 3" />
                         <Tooltip
-                          contentStyle={{
-                            background: "#131726",
-                            border: "1px solid rgba(255,255,255,0.18)",
-                            borderRadius: 10,
-                            fontSize: 11,
-                            color: "#e2e8f0",
-                            padding: "8px 12px",
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.8)",
-                            opacity: 1,
-                          }}
-                          wrapperStyle={{ zIndex: 50, opacity: 1 }}
-                          labelStyle={{ color: "#94a3b8", fontWeight: 700, marginBottom: 6, fontSize: 11 }}
-                          itemStyle={{ color: "#e2e8f0", padding: "1px 0" }}
-                          formatter={(v, nama) => {
-                            const badge = v > 0.2 ? "✅ Mendukung" : v < -0.2 ? "❌ Menolak" : "➖ Netral";
-                            const sign  = v > 0 ? `+${v}` : `${v}`;
-                            return [`${sign}  ${badge}`, nama];
-                          }}
+                          contentStyle={{ background: "#0D1017", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 10, fontSize: 11, color: "#e2e8f0" }}
+                          formatter={(v, nama) => [
+                            `${v > 0 ? `+${v}` : v}  ${v > 0.2 ? "Mendukung" : v < -0.2 ? "Menolak" : "Netral"}`,
+                            nama
+                          ]}
                         />
-                        <Legend
-                          wrapperStyle={{ fontSize: 10, paddingTop: 8 }}
-                          formatter={nama => <span style={{ color: warnaAgen[nama] ?? "#94a3b8" }}>{nama}</span>}
-                        />
+                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }}
+                          formatter={nama => <span style={{ color: warnaAgen[nama] ?? "#94a3b8" }}>{nama}</span>} />
                         {Object.keys(sentimenAgr).map(nama => (
-                          <Line
-                            key={nama}
-                            type="monotone"
-                            dataKey={nama}
-                            stroke={warnaAgen[nama]}
-                            strokeWidth={2}
-                            dot={{ r: 4, strokeWidth: 0, fill: warnaAgen[nama] }}
-                            activeDot={{ r: 6, strokeWidth: 2, stroke: "#0C0F1D" }}
-                          />
+                          <Line key={nama} type="monotone" dataKey={nama} stroke={warnaAgen[nama]}
+                            strokeWidth={2} dot={{ r: 3.5, strokeWidth: 0, fill: warnaAgen[nama] }}
+                            activeDot={{ r: 5, strokeWidth: 2, stroke: "#0D1017" }} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1865,17 +696,17 @@ export default function VoxSwarmDashboard() {
                 </Kartu>
               ) : (
                 <Kartu>
-                  <JudulSeksi>👥 Siapa Saja Agennya?</JudulSeksi>
-                  <div className="space-y-2.5">
-                    {(rondeIni?.agen ?? []).map((a, i) => (
-                      <div key={i} className="flex items-start gap-3 rounded-xl bg-white/5 p-3">
-                        <div className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: WARNA_SENTIMEN[a.sentimen?.label] }} />
+                  <JudulSeksi>Peserta Simulasi</JudulSeksi>
+                  <div className="space-y-2">
+                    {(rondeTerakhir?.agen ?? []).map((a, i) => (
+                      <div key={i} className="agen-card flex items-start gap-3 px-3 py-2.5">
+                        <div className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: WARNA_SENTIMEN[a.sentimen?.label] ?? "#64748b" }} />
                         <div>
                           <div className="mb-1 flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-200">{a.nama}</span>
+                            <span className="text-xs font-semibold text-slate-200">{a.nama}</span>
                             <BadgeSentimen label={a.sentimen?.label} />
                           </div>
-                          <p className="text-xs leading-relaxed text-slate-400 italic">"{a.pendapat}"</p>
+                          <p className="text-xs leading-relaxed text-slate-400">"{a.pendapat}"</p>
                         </div>
                       </div>
                     ))}
@@ -1884,110 +715,234 @@ export default function VoxSwarmDashboard() {
               )}
             </div>
 
-            {/* ── MEMORI AGEN (baru) ── */}
-            <KartuMemoriAgen rondeDetail={daftarRonde} warnaAgen={warnaAgen} />
-
-            {/* ── Log diskusi ── */}
-            <Kartu>
-              <JudulSeksi>💬 Jalannya Diskusi — Babak {rondeAktif + 1}</JudulSeksi>
-              <p className="mb-4 text-xs text-slate-500">Berikut pendapat masing-masing agen pada putaran ini.</p>
-              <div className="custom-scrollbar max-h-96 space-y-5 overflow-y-auto pr-2">
-                {(rondeIni?.agen ?? []).map((a, i) => {
-                  const warna = WARNA_SENTIMEN[a.sentimen?.label] ?? "#6366f1";
-                  return (
-                    <div key={i} className="flex gap-4">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black"
-                        style={{ backgroundColor: warna + "22", border: `1.5px solid ${warna}`, color: warna }}>
-                        {a.nama.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-bold text-slate-200">{a.nama}</span>
-                          <BadgeSentimen label={a.sentimen?.label} />
+            {/* Prediksi */}
+            {Object.keys(prediksi).length > 0 && (
+              <Kartu>
+                <JudulSeksi>Kemungkinan Hasil</JudulSeksi>
+                <div className="space-y-3">
+                  {Object.entries(prediksi).map(([k, v]) => {
+                    const w = {
+                      "Semua Setuju": "#22c55e",
+                      "Konsensus": "#22c55e",
+                      "Masyarakat Terpecah": "#ef4444",
+                      "Polarisasi": "#ef4444",
+                      "Tidak Ada Perubahan": "#64748b",
+                      "Status Quo": "#64748b",
+                    }[k] ?? "#3B82F6";
+                    return (
+                      <div key={k} className="flex items-center gap-3">
+                        <span className="w-36 shrink-0 text-sm text-slate-300">{k}</span>
+                        <div className="flex-1 h-3 rounded-full bg-white/5 overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, backgroundColor: w }} />
                         </div>
-                        <p className="text-sm leading-7 text-slate-300 print:text-slate-700">{a.pendapat}</p>
+                        <span className="w-9 shrink-0 text-right text-sm font-bold" style={{ color: w }}>{v}%</span>
                       </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-4 text-xs text-slate-500 italic">* Hasil ini bersifat eksploratif, bukan prediksi faktual.</p>
+              </Kartu>
+            )}
+
+            {/* Ringkasan Analisis */}
+            {ringkasan && (
+              <Kartu>
+                <JudulSeksi>Ringkasan Analisis</JudulSeksi>
+                <p className="text-sm leading-7 text-slate-300">{ringkasan || "—"}</p>
+              </Kartu>
+            )}
+
+            {/* Log diskusi lengkap — ronde aktif */}
+            {daftarRonde.length > 0 && daftarRonde[rondeAktif] && (
+              <Kartu>
+                <JudulSeksi>Jalannya Diskusi — Babak {rondeAktif + 1}</JudulSeksi>
+                <div className="max-h-96 space-y-5 overflow-y-auto pr-2">
+                  {(daftarRonde[rondeAktif]?.agen ?? []).map((a, i) => {
+                    const w = WARNA_SENTIMEN[a.sentimen?.label] ?? "#6366f1";
+                    return (
+                      <div key={i} className="flex gap-4">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                          style={{ backgroundColor: w + "1A", border: `1px solid ${w}55`, color: w }}>
+                          {a.nama.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1">
+                          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-200">{a.nama}</span>
+                            <BadgeSentimen label={a.sentimen?.label} />
+                          </div>
+                          <p className="text-sm leading-7 text-slate-300">{a.pendapat}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Kartu>
+            )}
+
+            {/* Aktor Kunci */}
+            {aktorKunci.length > 0 && (
+              <Kartu>
+                <JudulSeksi>Aktor Paling Berpengaruh</JudulSeksi>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {aktorKunci.map((a, i) => {
+                    const w = WARNA_AGEN[i % WARNA_AGEN.length];
+                    const lb = a.sikap_label ?? "Netral";
+                    const lbWarna = lb === "Mendukung" ? "#22c55e" : lb === "Menolak" ? "#ef4444" : "#64748b";
+                    return (
+                      <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:border-white/20 transition-all duration-200">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-black shrink-0"
+                            style={{ backgroundColor: w + "20", border: `1.5px solid ${w}`, color: w }}>
+                            {a.nama.slice(0,2).toUpperCase()}
+                          </div>
+                          <span className="text-sm font-bold text-white flex-1 truncate">{a.nama}</span>
+                          <span className="rounded-full px-3 py-0.5 text-xs font-bold border"
+                            style={{ color: lbWarna, borderColor: lbWarna + "40", backgroundColor: lbWarna + "15" }}>
+                            {lb}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300 leading-relaxed">{a.alasan}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Kartu>
+            )}
+
+            {/* Kelompok Kritis */}
+            {kelompokKritis.length > 0 && (
+              <Kartu>
+                <JudulSeksi>Kelompok yang Perlu Dinetralisir</JudulSeksi>
+                <div className="space-y-3">
+                  {kelompokKritis.map((k, i) => (
+                    <div key={i} className="rounded-xl border border-red-500/15 bg-red-500/5 p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-7 w-7 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center text-xs font-black text-red-300 shrink-0">
+                          {k.nama.slice(0,2).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-bold text-white">{k.nama}</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mb-1"><span className="text-red-300 font-semibold">Kenapa kritis:</span> {k.alasan}</p>
+                      <p className="text-xs text-slate-300"><span className="text-amber-300 font-semibold">Cara pendekatan:</span> {k.cara_pendekatan}</p>
                     </div>
-                  );
-                })}
-              </div>
-            </Kartu>
+                  ))}
+                </div>
+              </Kartu>
+            )}
 
-            {/* ── Graf Pengetahuan Interaktif (GraphRAG) ── */}
-            <GrafKnowledge grafData={grafData} />
-
-            {/* ── Explainability Report ── */}
-            <PanelExplainability hasil={hasil} />
-
-
-
-            {/* ── Perbandingan Skenario ── */}
-            <PanelPerbandingan riwayatSim={riwayatSim} hasil={hasil} />
-
-            {/* ── Crowd Agent ── */}
-            <PanelCrowd crowdData={hasil.crowd_data} />
-
-            {/* ── Mulai ulang ── */}
-            <div className="pb-6 text-center print:hidden">
-              <button
-                onClick={() => { setHasil(null); setTopik(""); setRiwayatSim([]); setAgenCustom([]); setTimeout(() => inputRef.current?.focus(), 100); }}
-                className="text-xs text-slate-600 underline underline-offset-4 hover:text-slate-400 transition"
-              >
-                Mulai analisis baru
+            {/* Ekspor */}
+            <div className="flex flex-wrap gap-3 pt-2">
+              <button onClick={handleSimpanPDF}
+                className="rounded-xl bg-blue-600/20 border border-blue-500/30 px-5 py-2.5 text-sm font-bold text-blue-300 hover:bg-blue-600/40 hover:text-white transition">
+                🖨️ Simpan PDF
+              </button>
+              <button onClick={handleSimpanCSV}
+                className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-semibold text-slate-300 hover:border-blue-500 hover:text-white transition">
+                📊 Unduh CSV
+              </button>
+              <button onClick={handleSimpanWord}
+                className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-semibold text-slate-300 hover:border-blue-500 hover:text-white transition">
+                📄 Unduh Word
               </button>
             </div>
-          </div>
-        )}
-      </div>
 
+          </LaciDetail>
+
+          {/* ── C8: Bar metadata + ekspor ── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-500">{daftarRonde.length} putaran · {agenAkhir.length} peserta</span>
+              <span className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-500">{hasilAkhir.label}</span>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setBukaEkspor(v => !v)}
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#0D1017] px-4 py-2 text-xs font-medium text-slate-400 hover:border-white/20 hover:text-white transition"
+              >
+                📥 Unduh Laporan ▾
+              </button>
+              {bukaEkspor && (
+                <div className="absolute right-0 top-11 z-50 w-52 rounded-2xl border border-white/10 bg-[#0D1017] p-2 shadow-2xl">
+                  {[
+                    { ikon: "🖨️", label: "Cetak / Simpan PDF",  aksi: () => { handleSimpanPDF(); setBukaEkspor(false); } },
+                    { ikon: "📊", label: "Unduh Excel / CSV",    aksi: () => { handleSimpanCSV(); setBukaEkspor(false); } },
+                    { ikon: "📄", label: "Unduh Word (.docx)",   aksi: () => { handleSimpanWord(); setBukaEkspor(false); } },
+                  ].map(({ ikon, label, aksi }) => (
+                    <button key={label} onClick={aksi}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs text-slate-400 hover:bg-white/8 hover:text-slate-200 transition">
+                      <span>{ikon}</span> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── C9: Reset ── */}
+          <div className="pb-6 text-center print:hidden">
+            <button
+              onClick={() => { setHasil(null); setTopik(""); setTimeout(() => { inputRef.current?.focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }, 100); }}
+              className="text-xs text-slate-700 underline underline-offset-4 hover:text-slate-400 transition"
+            >
+              Mulai analisis baru
+            </button>
+          </div>
+
+        </div>
+      )}
+
+      {/* ════════════════ ANIMASI ════════════════ */}
       <style jsx global>{`
         @keyframes lompat {
           0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
           40%            { transform: translateY(-9px); opacity: 1; }
         }
-        .custom-scrollbar::-webkit-scrollbar       { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        .line-clamp-3 {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        /* Teks utama konten lebih mudah dibaca */
+        .text-readable {
+          font-size: 14px;
+          line-height: 1.75;
+          color: #cbd5e1;
+        }
+        /* Teks sekunder yang tidak bersaing dengan konten utama */
+        .text-hint {
+          font-size: 12px;
+          color: #475569;
+          line-height: 1.5;
+        }
+        /* Kartu agen — hover state konsisten */
+        .agen-card {
+          border-radius: 12px;
+          border: 0.5px solid rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.025);
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .agen-card:hover {
+          border-color: rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.04);
+        }
+        /* Pulse border buat loading state */
+        .animate-pulse-border { animation: pulseBorder 2s ease-in-out infinite; }
+        @keyframes pulseBorder {
+          0%, 100% { border-color: rgba(255,255,255,0.08); }
+          50%      { border-color: rgba(59,130,246,0.25); }
+        }
+        /* Scrollbar kustom — minimalis, gelap, ga ganggu */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
         @media print {
           @page { size: A4 portrait; margin: 15mm 18mm; }
-
-          *, *::before, *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-
-          body, main {
-            background: #ffffff !important;
-            color: #1e293b !important;
-          }
-
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          body, main { background: #fff !important; color: #1e293b !important; }
           .print\\:hidden { display: none !important; }
-
           * { color: #1e293b !important; }
-
-          .print-card {
-            background: #ffffff !important;
-            border-color: #e2e8f0 !important;
-          }
-
-          .print-badge-mendukung { background: #dcfce7 !important; border-color: #86efac !important; }
-          .print-badge-mendukung * { color: #166534 !important; }
-          .print-badge-menolak   { background: #fee2e2 !important; border-color: #fca5a5 !important; }
-          .print-badge-menolak * { color: #991b1b !important; }
-          .print-badge-netral    { background: #e0e7ff !important; border-color: #a5b4fc !important; }
-          .print-badge-netral *  { color: #3730a3 !important; }
-
-          .custom-scrollbar {
-            max-height: none !important;
-            overflow: visible !important;
-          }
-
-          .page-break-avoid {
-            page-break-inside: avoid;
-            break-inside: avoid;
-          }
-
-          svg text { fill: #334155 !important; }
         }
       `}</style>
     </main>

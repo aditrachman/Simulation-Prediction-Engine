@@ -65,7 +65,7 @@ MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "600"))  # 600 ≈ 
 MAX_TOKENS_RESPONSE  = int(os.getenv("MAX_TOKENS_RESPONSE",  "400"))
 MAX_TOKENS_ANALYSIS  = int(os.getenv("MAX_TOKENS_ANALYSIS",  "1200"))
 MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
-MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "80"))
+MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "300"))
 
 # ─── RATE LIMIT CONFIG ─────────────────────────────────────────────────────
 RETRY_MAX         = int(os.getenv("RETRY_MAX",         "4"))
@@ -221,6 +221,52 @@ def call_llm(
     return f"[RateLimit] Semua model habis. Error: {last_error[:120]}"
 
 
+def _repair_truncated_json(text: str) -> str | None:
+    """Coba perbaiki JSON yang terpotong di akhir (model 8B sering output incomplete)."""
+    # Cari blok JSON (dengan atau tanpa kurung tutup)
+    m = re.search(r"\{.*", text, re.DOTALL)  # { sampai akhir
+    if not m:
+        return None
+    candidate = m.group()
+
+    # Jika JSON valid, return as-is
+    try:
+        json.loads(candidate)
+        return candidate
+    except json.JSONDecodeError:
+        pass
+
+    # Tutup kurung kurawal jika lupa
+    if candidate.count("{") > candidate.count("}"):
+        candidate += "}"
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Perbaiki angka terpotong di akhir: "skor":-0. → "skor":-0.0
+    # Cari pola ": angka.(tanpa digit setelah titik)"
+    candidate_orig = candidate
+    candidate = re.sub(r':\s*(-?\d+)\.\s*\}$', r':\1.0}', candidate)
+    if candidate != candidate_orig:
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback: jika ada "label" dan "skor", ekstrak pakai regex
+    label_m = re.search(r'"label"\s*:\s*"(positif|netral|negatif)"', candidate, re.IGNORECASE)
+    skor_m = re.search(r'"skor"\s*:\s*(-?[\d.]+)', candidate)
+    if label_m:
+        label = label_m.group(1).lower()
+        skor = float(skor_m.group(1)) if skor_m else 0.0
+        return json.dumps({"label": label, "skor": max(-1.0, min(1.0, skor))})
+
+    return None
+
+
 def call_llm_json(
     system_prompt: str,
     user_prompt: str,
@@ -230,16 +276,23 @@ def call_llm_json(
     """Panggil LLM, parse output JSON. Return {} jika gagal."""
     raw   = call_llm(system_prompt, user_prompt, max_tokens, model=model)
     clean = re.sub(r"```(?:json)?|```", "", raw).strip()
+    # Coba parse langsung
     try:
         return json.loads(clean)
     except json.JSONDecodeError:
-        m = re.search(r"\{.*\}|\[.*\]", clean, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group())
-            except Exception:
-                pass
-        return {}
+        pass
+    # Coba repair JSON truncated
+    repaired = _repair_truncated_json(clean)
+    if repaired is not None:
+        return json.loads(repaired)
+    # Fallback: regex cari {...} terakhir
+    m = re.search(r"\{.*\}", clean, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except Exception:
+            pass
+    return {}
 
 
 # ---------------------------------------------------------------------------

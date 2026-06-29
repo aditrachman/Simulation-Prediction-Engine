@@ -58,7 +58,7 @@ from .core.swarm import CrowdPool
 # Helper: Batasi Output Agen (BUG-20)
 # ---------------------------------------------------------------------------
 
-def _batasi_kalimat(teks: str, max_kalimat: int = 4) -> str:
+def _batasi_kalimat(teks: str, max_kalimat: int = 3) -> str:
     """
     Post-processing pure Python — potong output agen di batas kalimat ke-N.
     Hanya potong kalau melebihi max_kalimat atau hard cap kata.
@@ -68,10 +68,10 @@ def _batasi_kalimat(teks: str, max_kalimat: int = 4) -> str:
     pecahan = re.split(r'(?<=[.!?;])\s+', teks.strip())
     pecahan = [k for k in pecahan if k.strip()]
 
-    # ponytail: hard cap dinaikkan 60→150 agar opini agen tidak terpotong di tengah kalimat
+    # ponytail: hard cap 80 kata ≈ 2-3 kalimat diskusi
     kata_total = teks.split()
-    if len(kata_total) > 150:
-        return " ".join(kata_total[:150]).rstrip(' ,;.-_:') + "."
+    if len(kata_total) > 80:
+        return " ".join(kata_total[:80]).rstrip(' ,;.-_:') + "."
 
     if len(pecahan) <= max_kalimat:
         return teks
@@ -226,7 +226,7 @@ def _qa_check_topic(topik: str, jawaban: str, system_p: str, user_p: str) -> str
         )
         jawaban_retry = call_llm(system_p, retry_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
         jawaban_retry = filter_forbidden_opens(jawaban_retry)
-        jawaban_retry = _batasi_kalimat(jawaban_retry, max_kalimat=4)
+        jawaban_retry = _batasi_kalimat(jawaban_retry, max_kalimat=3)
         if jawaban_retry and not jawaban_retry.startswith("[Error"):
             return jawaban_retry
 
@@ -573,7 +573,7 @@ def run_simulation(
 
         jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
         jawaban = filter_forbidden_opens(jawaban)
-        jawaban = _batasi_kalimat(jawaban, max_kalimat=4)
+        jawaban = _batasi_kalimat(jawaban, max_kalimat=3)
         jawaban = filter_forbidden_opens(jawaban)
 
         # ponytail: QA check — validasi topik sebelum lanjut. 1 LLM call tambahan, prompt 2 baris.
@@ -771,6 +771,13 @@ def run_simulation(
             topik, log_diskusi, agents, sentimen_agregat
         )
     analisis_raw = _strip_emoji(analisis_raw)
+
+    # ponytail: Parse RISIKO UTAMA dari teks analisis — regex, 2 baris
+    risiko_match = re.search(r"RISIKO UTAMA:\s*(.+?)(?:\n\n|\Z)", analisis_raw, re.DOTALL | re.IGNORECASE)
+    risiko_utama = risiko_match.group(1).strip() if risiko_match else ""
+    if risiko_match:
+        analisis_raw = re.sub(r"\n?\s*RISIKO UTAMA:.*?(?:\n\n|\Z)", "", analisis_raw, flags=re.DOTALL | re.IGNORECASE).strip()
+
     prediksi = _parse_prediksi(analisis_raw)
 
     # Phase 2: Rebuild simulation_state
@@ -872,6 +879,7 @@ def run_simulation(
         "topik":            topik,
         "intervensi":       intervensi,
         "aktor_analisis":       aktor_analisis,
+        "risiko_utama":         risiko_utama,
         "prediction_confidence": prediction_confidence,
         "prediction_reasoning":  prediction_reasoning,
         "confidence_summary":    confidence_summary,  # FIX-E: field baru, konsisten
@@ -1006,7 +1014,9 @@ def _analisis_dan_aktor(
         "sikap akhir (positif/negatif/netral), prediksi ke depan, dan kemungkinan berubah.\n"
         "3. Baris terakhir harus persis:\n"
         "   PREDIKSI SKENARIO: Konsensus X%, Polarisasi Y%, Status Quo Z%\n"
-        "   (X+Y+Z = 100)"
+        "   (X+Y+Z = 100)\n"
+        "4. Setelah ringkasan dan prediksi, tambahkan satu paragraf pendek dengan format:\n"
+        "   RISIKO UTAMA: [Identifikasi 1-2 risiko terbesar jika topik/kebijakan ini dilanjutkan, berdasarkan argumen agen yang menolak]"
     )
     analisis_raw = call_llm(
         (
@@ -1026,10 +1036,18 @@ def _analisis_dan_aktor(
     prompt_aktor = (
         f"Topik: {topik}\nAgen: {', '.join(nama_valid)}\n"
         + "\n".join(ringkasan_agen) + "\n\n"
+        "PERHATIAN untuk kelompok_kritis: field cara_pendekatan HARUS:\n"
+        "- Spesifik ke argumen yang mereka kemukakan dalam diskusi\n"
+        "- Berisi tindakan konkret yang bisa dilakukan (bukan saran generik)\n"
+        "- Maksimal 1-2 kalimat\n"
+        "Contoh BURUK: 'Identifikasi kekhawatiran spesifik dan cari titik kompromi'\n"
+        "Contoh BAGUS: 'Berikan kompensasi berupa subsidi silang untuk pelaku UMKM yang terdampak, dan jadwalkan dialog triwulan dengan perwakilan mereka'\n\n"
         "Balas HANYA JSON valid:\n"
         '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
         '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
-        '"aktor_penggerak":"...","rekomendasi":"..."}'
+        '"aktor_penggerak":"...","rekomendasi":"...",'
+        '"rekomendasi_strategis":["Rekomendasi 1 konkret...","Rekomendasi 2 konkret...","Rekomendasi 3 konkret..."],'
+        '"kelompok_kritis":[{"nama":"...","alasan":"...","cara_pendekatan":"..."}]}'
     )
     raw = call_llm_json(
         "Analis diskusi sosial. Balas HANYA JSON valid.",
@@ -1064,9 +1082,38 @@ def _analisis_dan_aktor(
             raw["aktor_penggerak"] = _resolve_nama(pg, pengaruh_map, nama_valid)
 
         aktor_analisis = {
-            k: raw[k] for k in ("aktor_kunci", "swing_voter", "aktor_penggerak", "rekomendasi")
+            k: raw[k] for k in ("aktor_kunci", "swing_voter", "aktor_penggerak", "rekomendasi", "rekomendasi_strategis", "kelompok_kritis")
             if k in raw
         }
+
+        # Fix 1: Retry rekomendasi_strategis dengan separate LLM call jika hasil dari JSON utama gagal
+        rekom_strat = aktor_analisis.get("rekomendasi_strategis", [])
+        if not isinstance(rekom_strat, list) or len(rekom_strat) < 3:
+            prompt_rekom = (
+                f"Topik: {topik}\n\n"
+                "Data agen:\n"
+                + "\n".join(ringkasan_agen) + "\n\n"
+                "Berdasarkan hasil diskusi di atas, berikan 3 rekomendasi strategis yang KONKRET dan ACTIONABLE.\n\n"
+                "Balas HANYA dengan format JSON array berikut, tanpa teks tambahan apapun:\n"
+                '["rekomendasi pertama...", "rekomendasi kedua...", "rekomendasi ketiga..."]\n\n'
+                "Aturan:\n"
+                "- Tiap rekomendasi 1-2 kalimat, langsung ke poin\n"
+                "- Rekomendasi 1: kelompok mana yang perlu didekati duluan dan cara konkretnya\n"
+                "- Rekomendasi 2: narasi atau framing yang paling efektif berdasarkan argumen pendukung\n"
+                "- Rekomendasi 3: cara konkret menetralisir kelompok penolak terkuat\n"
+                "- JANGAN tambahkan penjelasan di luar JSON array\n"
+                "- JANGAN gunakan markdown atau backtick"
+            )
+            raw_rekom_raw = call_llm(
+                "Kamu adalah konsultan strategi. Balas HANYA JSON array.",
+                prompt_rekom,
+                max_tokens=400,
+                model=MODEL_ANALYSIS,
+            )
+            rekom_strat = _parse_rekomendasi(raw_rekom_raw or "")
+            if not rekom_strat:
+                rekom_strat = _fallback_rekomendasi(agents, topik)
+            aktor_analisis["rekomendasi_strategis"] = rekom_strat
 
     if not aktor_analisis:
         aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
@@ -1142,7 +1189,81 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
             f"Waspadai {sv[0][0] if sv else '-'} sebagai swing voter."
             if sp_composite else "Fokus pada aktor paling berpengaruh."
         ),
+        "rekomendasi_strategis": [
+            f"Prioritas utama: dekati {sp_composite[0][0]} — pengaruh tinggi, bisa jadi penggerak opini. Ajukan diskusi personal untuk menyelaraskan perspektif.",
+            f"Framing narasi: Gunakan argumen berbasis data dan manfaat langsung untuk publik — ini yang paling mungkin diterima oleh kelompok pro.",
+            f"Antisipasi penolakan: Pantau pergerakan {sv[0][0] if sv else 'aktor paling volatil'} — kelompok ini paling mungkin berubah arah dan memengaruhi yang lain."
+        ] if sp_composite else [
+            "Belum ada data cukup untuk rekomendasi strategis.",
+        ],
+        "kelompok_kritis": [
+            {
+                "nama": n,
+                "alasan": f"Sentimen akhir {_label_sentimen(sentimen_agregat.get(n, [0])[-1])} ({sentimen_agregat.get(n, [0])[-1]:+.2f}) — termasuk penolak paling konsisten.",
+                "cara_pendekatan": f"Libatkan {n} dalam forum diskusi terbatas untuk menggali akar kekhawatiran mereka, lalu tawarkan solusi spesifik yang menjawab poin keberatan utama mereka."
+            }
+            for n, _ in sorted(
+                [(n, sentimen_agregat.get(n, [0])[-1]) for n in sentimen_agregat],
+                key=lambda x: x[1]
+            )[:2]
+            if sentimen_agregat.get(n, [0])[-1] < -0.2
+        ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: Parse & fallback rekomendasi_strategis — robust, multi-format
+# ---------------------------------------------------------------------------
+
+def _parse_rekomendasi(raw_text: str) -> list:
+    """Parse rekomendasi strategis dari response LLM, dengan multiple fallback."""
+    if not raw_text:
+        return []
+
+    # Coba 1: langsung parse JSON
+    try:
+        result = json.loads(raw_text.strip())
+        if isinstance(result, list) and len(result) > 0:
+            return [str(r) for r in result[:3]]
+    except Exception:
+        pass
+
+    # Coba 2: extract JSON array dari dalam teks
+    try:
+        match = re.search(r'\[.*?\]', raw_text, re.DOTALL)
+        if match:
+            result = json.loads(match.group())
+            if isinstance(result, list) and len(result) > 0:
+                return [str(r) for r in result[:3]]
+    except Exception:
+        pass
+
+    # Coba 3: split by newline kalau model balas dengan numbered list
+    lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+    cleaned = []
+    for line in lines:
+        line = re.sub(r'^[\d]+[.)]\s*', '', line)
+        if len(line) > 20:
+            cleaned.append(line)
+    if len(cleaned) >= 1:
+        return cleaned[:3]
+
+    return []
+
+
+def _fallback_rekomendasi(agents: list[dict], topik: str) -> list:
+    """Generate rekomendasi berbasis data agen kalau LLM gagal total."""
+    penolak = [a for a in agents if a.get('sentimen', {}).get('label') == 'negatif']
+    pendukung = [a for a in agents if a.get('sentimen', {}).get('label') == 'positif']
+
+    nama_penolak = penolak[0]['nama'] if penolak else 'kelompok penolak'
+    nama_pendukung = pendukung[0]['nama'] if pendukung else 'kelompok pendukung'
+
+    return [
+        f"Prioritaskan pendekatan ke {nama_penolak} — kelompok ini memiliki penolakan terkuat dan perlu dilibatkan dalam dialog sebelum kebijakan diimplementasikan.",
+        f"Gunakan argumen dari {nama_pendukung} sebagai basis narasi publik — framing yang menekankan manfaat konkret lebih efektif dari data statistik.",
+        f"Lakukan sosialisasi bertahap dengan melibatkan tokoh lokal yang dipercaya komunitas penolak untuk mengurangi resistensi."
+    ]
 
 
 def _build_simulation_quality(
@@ -1307,7 +1428,9 @@ def analyze_key_actors(
         "Balas HANYA JSON valid:\n"
         '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
         '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
-        '"aktor_penggerak":"...","rekomendasi":"..."}'
+        '"aktor_penggerak":"...","rekomendasi":"...",'
+        '"rekomendasi_strategis":["Rekomendasi 1 konkret...","Rekomendasi 2 konkret...","Rekomendasi 3 konkret..."],'
+        '"kelompok_kritis":[{"nama":"...","alasan":"...","cara_pendekatan":"..."}]}'
     )
     hasil = call_llm_json(
         "Analis diskusi sosial. Balas HANYA JSON valid.",

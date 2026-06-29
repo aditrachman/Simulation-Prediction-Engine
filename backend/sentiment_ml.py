@@ -211,6 +211,44 @@ _POLICY_NEGATIF_TEMPLATES = [
     "bukti empiris menunjukkan {topik} tidak berjalan",
     "statistik membuktikan {topik} masih bermasalah",
     "temuan di lapangan {topik} mengecewakan",
+    # ── pola negatif implisit — kalimat yang kelihatan netral tapi sebenarnya negatif ──
+    # "belum + kata evaluatif"
+    "kebijakan {topik} belum terbukti efektif",
+    "program {topik} belum efektif membantu masyarakat",
+    "dampak {topik} belum merata dirasakan",
+    "manfaat {topik} belum optimal dirasakan",
+    "hasil {topik} belum sesuai yang diharapkan",
+    # "perlu ditinjau/dievaluasi/dipertanyakan"
+    "saya rasa kebijakan {topik} perlu ditinjau ulang",
+    "program {topik} perlu dievaluasi secara menyeluruh",
+    "efektivitas {topik} perlu dipertanyakan lagi",
+    "saya rasa kebijakan ini perlu dikaji ulang",
+    # "masih banyak yang..." + kekurangan
+    "masih banyak yang belum tersentuh program {topik}",
+    "masih banyak masalah dalam implementasi {topik}",
+    "masih banyak kekurangan dari kebijakan {topik}",
+    "masih banyak yang belum dapat menikmati manfaat {topik}",
+    # "sulit/susah dipercaya/diterima"
+    "sulit dipercaya kebijakan {topik} akan berhasil",
+    "sulit diterima kalau {topik} ini solusi tepat",
+    "susah dipercaya program {topik} memberikan manfaat",
+    "saya sulit percaya {topik} akan berjalan baik",
+    # "meragukan", "patut dipertanyakan"
+    "saya meragukan kebijakan {topik} ini tepat sasaran",
+    "patut dipertanyakan efektivitas program {topik}",
+    "ada keraguan besar soal dampak {topik}",
+    "keberhasilan {topik} patut dipertanyakan",
+    # bahasa gaul negatif
+    "kayaknya {topik} gak bakal berhasil deh",
+    "nggak yakin deh kalau {topik} ini bener",
+    "gue rasa {topik} ini kurang tepat sih",
+    "sepertinya {topik} percuma aja",
+    "masa sih {topik} ini beneran berhasil",
+    # "belum/tidak + terbukti/efektif/berhasil/merata/optimal"
+    "kebijakan {topik} tidak terbukti efektif",
+    "program {topik} tidak berhasil mencapai target",
+    "dampak {topik} tidak optimal dirasakan rakyat",
+    "manfaat {topik} tidak merata di semua daerah",
 ]
 
 _POLICY_NETRAL_TEMPLATES = [

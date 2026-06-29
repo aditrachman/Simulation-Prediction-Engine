@@ -331,9 +331,9 @@ def generate_report(hasil: dict) -> dict:
         "keyakinan": keyakinan,
         "prediksi_comparison": prediksi_comparison,
         "disclaimer": (
-            "Ini adalah simulasi eksploratif, bukan prediksi faktual. "
-            "Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. "
-            "Gunakan sebagai bahan pertimbangan, bukan keputusan final."
+            "VoxSwarm adalah alat eksplorasi dan referensi awal, bukan pengganti survei atau "
+            "riset empiris. Hasil simulasi sangat bergantung pada konfigurasi agen dan topik "
+            "yang diberikan. Gunakan sebagai bahan pertimbangan, bukan keputusan final."
         ),
         "phenomenon_summary": phenomenon_summary,
         "group_breakdown": group_breakdown,
@@ -357,7 +357,7 @@ class ExplainabilityReport:
     keyakinan: str = ""
     prediksi_comparison: Dict[str, Any] = field(default_factory=dict)
     disclaimer: str = field(
-        default="Ini adalah simulasi eksploratif, bukan prediksi faktual. Hasil sangat bergantung pada konfigurasi agen dan topik yang diberikan. Gunakan sebagai bahan pertimbangan, bukan keputusan final."
+        default="VoxSwarm adalah alat eksplorasi dan referensi awal, bukan pengganti survei atau riset empiris. Hasil simulasi sangat bergantung pada konfigurasi agen dan topik yang diberikan. Gunakan sebagai bahan pertimbangan, bukan keputusan final."
     )
     # New fields required by tests
     skenario: str = ""

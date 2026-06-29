@@ -312,6 +312,23 @@ def start_sim(payload: SimRequest, request: Request):
     if not topik_bersih:
         raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
     _validate_text(topik_bersih, "Topik")
+
+    # ── Validasi topik pernyataan vs pertanyaan ──
+    topik_warning = ""
+    topik_lower = topik_bersih.lower().strip()
+    first_person_prefixes = ("saya", "aku", "gue", "gw", "kami", "kita")
+    if any(topik_lower.startswith(p) for p in first_person_prefixes) or (
+        "?" not in topik_bersih
+        and len(topik_bersih.split()) > 2
+        and topik_bersih[-1] not in "?"
+    ):
+        topik_warning = (
+            "Topik terdeteksi sebagai pernyataan, bukan pertanyaan diskusi. "
+            "Untuk hasil terbaik, gunakan format pertanyaan. "
+            "Contoh: 'Apakah harga rokok legal yang tinggi mendorong "
+            "pembelian rokok ilegal di kalangan mahasiswa?'"
+        )
+
     if payload.kategori:
         _validate_text(payload.kategori, "Kategori")
 
@@ -456,7 +473,7 @@ def start_sim(payload: SimRequest, request: Request):
     hasil["ml_active"] = ml_result["source"] == "ml"
     # ──────────────────────────────────────────────────────────────────────────
 
-    return {
+    response_data = {
         "status": "success",
         "data":   hasil,
         "konteks_real": {
@@ -466,6 +483,9 @@ def start_sim(payload: SimRequest, request: Request):
             "timestamp":    konteks_real.get("timestamp", ""),
         },
     }
+    if topik_warning:
+        response_data["warning"] = topik_warning
+    return response_data
 
 
 # ---------------------------------------------------------------------------

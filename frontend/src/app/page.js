@@ -2,169 +2,211 @@ import Link from "next/link";
 
 const features = [
   {
-    title: "Predict Collective Reactions",
-    desc: "Model public response from diverse agent archetypes before the real event unfolds.",
+    title: "Simulasi Opini Publik",
+    desc: "Modelkan respons masyarakat dari beragam perspektif agen sebelum kebijakan atau isu diluncurkan ke publik.",
   },
   {
-    title: "Map Sentiment Dynamics",
-    desc: "Track support, resistance, and uncertainty through structured simulation outputs.",
+    title: "Analisis Sentimen Dinamis",
+    desc: "Pantau pergeseran dukungan, penolakan, dan ketidakpastian melalui hasil simulasi yang terstruktur per putaran.",
   },
   {
-    title: "Generate Actionable Insight",
-    desc: "Turn complex narratives into concise risk signals and strategic recommendations.",
+    title: "Rekomendasi Strategis",
+    desc: "Ubah narasi kompleks menjadi sinyal risiko dan rekomendasi yang dapat ditindaklanjuti oleh pengambil keputusan.",
   },
 ];
 
 const docItems = [
   {
-    title: "Quickstart",
-    desc: "Run backend and frontend locally, connect API, and test your first simulation in minutes.",
+    title: "Panduan Cepat",
+    desc: "Jalankan backend dan frontend secara lokal, hubungkan API, dan uji simulasi pertama dalam hitungan menit.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#installation",
   },
   {
-    title: "API Guide",
-    desc: "Learn available endpoints and payload formats to automate simulation and prediction workflows.",
+    title: "Dokumentasi API",
+    desc: "Pelajari endpoint dan format payload yang tersedia untuk mengotomatisasi alur kerja simulasi dan prediksi.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#api-endpoints",
   },
   {
-    title: "Configuration",
-    desc: "Set model, environment variables, and deployment settings for your own use case.",
+    title: "Konfigurasi",
+    desc: "Atur model, variabel lingkungan, dan pengaturan deployment sesuai kebutuhan spesifik Anda.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#configuration",
   },
 ];
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-[#05070F] text-white">
+    <main className="min-h-screen bg-[#0B1120] text-[#F1F5F9]">
+      {/* ─── NAV ─── */}
       <section className="mx-auto flex max-w-6xl flex-col px-6 pt-8 pb-16 md:px-10 md:pt-10 md:pb-20">
-        <div className="mb-10 flex items-center justify-between md:mb-12">
-          <h1 className="text-2xl font-black tracking-widest uppercase">
+        <div className="mb-12 flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
             VoxSwarm
           </h1>
           <Link
             href="/demo"
-            className="rounded-full border border-white/30 px-5 py-2 text-xs font-semibold tracking-widest uppercase transition hover:border-indigo-300 hover:bg-indigo-500/20"
+            className="rounded-lg border border-white/20 px-5 py-2 text-xs font-semibold transition hover:border-blue-400 hover:bg-blue-500/10"
           >
-            Try Live Demo
+            Coba Simulasi
           </Link>
         </div>
 
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+        {/* ─── HERO ─── */}
+        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-4 text-xs tracking-[0.35em] text-indigo-300 uppercase">
-              Predict Anything
+            <p className="mb-3 text-xs font-medium tracking-wider text-blue-300 uppercase">
+              Social Simulation Engine
             </p>
-            <h2 className="mb-6 text-4xl leading-tight font-black tracking-tight md:text-6xl">
-              Social Intelligence
-              <span className="block text-indigo-300">for high-stakes decisions</span>
+            <h2
+              className="mb-5 text-4xl leading-tight font-extrabold tracking-tight md:text-5xl"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Simulasi opini publik
+              <span className="block text-blue-400">untuk keputusan strategis</span>
             </h2>
-            <p className="mb-10 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
-              VoxSwarm helps teams simulate crowd behavior, stress-test policy
-              narratives, and identify potential instability early using
-              multi-agent analysis.
+            <p className="mb-8 max-w-xl text-sm leading-7 text-slate-400 md:text-base">
+              VoxSwarm membantu tim kebijakan, perencana strategis, dan pengambil keputusan untuk
+              menguji respons publik terhadap suatu isu — sebelum isu tersebut menjadi perhatian umum.
             </p>
 
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-3">
               <Link
                 href="/demo"
-                className="rounded-full bg-indigo-500 px-7 py-3 text-sm font-bold tracking-wide uppercase transition hover:bg-indigo-400"
+                className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold transition hover:bg-blue-500"
               >
-                Try Live Demo
+                Coba Simulasi
               </Link>
               <a
                 href="https://mirofish-demo.pages.dev/"
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-white/25 px-7 py-3 text-sm font-bold tracking-wide uppercase transition hover:border-white/60"
+                className="rounded-lg border border-white/20 px-6 py-3 text-sm font-medium text-slate-300 transition hover:border-white/40 hover:text-white"
               >
-                View Reference
+                Lihat Referensi
               </a>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-indigo-500/20 to-transparent p-8">
-            <div className="mb-8 grid grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs text-slate-300 uppercase">Scenario Accuracy</p>
-                <p className="mt-2 text-2xl font-black">91%</p>
+          {/* ─── HERO STATS ─── */}
+          <div className="rounded-2xl border border-white/10 bg-[#132237] p-8">
+            <div className="mb-6 grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-white/10 bg-[#1A2D4A] p-5">
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Akurasi Skenario</p>
+                <p
+                  className="mt-2 text-3xl font-bold text-blue-400"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  91%
+                </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs text-slate-300 uppercase">Agent Nodes</p>
-                <p className="mt-2 text-2xl font-black">24+</p>
+              <div className="rounded-xl border border-white/10 bg-[#1A2D4A] p-5">
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Jumlah Agen</p>
+                <p
+                  className="mt-2 text-3xl font-bold text-blue-400"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  24+
+                </p>
               </div>
             </div>
-            <div className="rounded-2xl border border-indigo-300/20 bg-black/30 p-5">
-              <p className="text-xs tracking-widest text-indigo-300 uppercase">
-                Live Insight
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <p className="text-xs font-medium tracking-wider text-blue-300 uppercase">
+                Contoh Hasil Simulasi
               </p>
               <p className="mt-3 text-sm leading-7 text-slate-300">
-                "Policy X may trigger moderate backlash in urban communities,
-                while rural clusters remain neutral with low escalation risk."
+                &ldquo;Kebijakan X berpotensi memicu penolakan moderat di komunitas perkotaan,
+                sementara klaster pedesaan cenderung netral dengan risiko eskalasi rendah.&rdquo;
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="border-t border-white/10 bg-[#080B16]">
-        <div className="mx-auto grid max-w-6xl gap-4 px-6 py-14 md:grid-cols-3 md:px-10">
-          {features.map((feature) => (
-            <article
-              key={feature.title}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6"
-            >
-              <h3 className="mb-2 text-sm font-bold tracking-wide uppercase">
-                {feature.title}
-              </h3>
-              <p className="text-sm leading-6 text-slate-300">{feature.desc}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-t border-white/10 bg-[#070912]">
-        <div className="mx-auto grid max-w-6xl gap-6 px-6 py-14 md:grid-cols-2 md:px-10">
-          <article className="rounded-2xl border border-indigo-300/20 bg-indigo-400/5 p-7">
-            <p className="mb-3 text-xs font-semibold tracking-[0.24em] text-indigo-300 uppercase">
-              Star The Repository
-            </p>
-            <h3 className="mb-3 text-2xl font-black">Support VoxSwarm on GitHub</h3>
-            <p className="mb-6 text-sm leading-7 text-slate-300">
-              If this project helps you, drop a star to support development and
-              future improvements. Every star helps visibility.
-            </p>
-            <a
-              href="https://github.com/aditrachman/Simulation-Prediction-Engine"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center rounded-full bg-indigo-500 px-6 py-3 text-xs font-bold tracking-widest uppercase transition hover:bg-indigo-400"
-            >
-              Star on GitHub
-            </a>
-          </article>
-
-          <article className="rounded-2xl border border-white/10 bg-white/5 p-7">
-            <p className="mb-3 text-xs font-semibold tracking-[0.24em] text-indigo-300 uppercase">
-              About Me
-            </p>
-            <h3 className="mb-3 text-2xl font-black">Built by Adit Rachman</h3>
-            <p className="text-sm leading-7 text-slate-300">
-              I am building VoxSwarm to turn AI simulation into practical
-              decision intelligence. My focus is creating products that are
-              visually clean, fast to run, and useful in real scenarios.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section className="border-t border-white/10 bg-[#05070F]">
-        <div className="mx-auto max-w-6xl px-6 py-14 md:px-10">
-          <div className="mb-8">
-            <p className="mb-2 text-xs font-semibold tracking-[0.24em] text-indigo-300 uppercase">
-              Documentation
-            </p>
-            <h3 className="text-3xl font-black">Everything You Need to Launch</h3>
+      {/* ─── FEATURES ─── */}
+      <section className="border-t border-white/10 bg-[#0E1929]">
+        <div className="mx-auto max-w-6xl px-6 py-16 md:px-10">
+          <p className="mb-2 text-xs font-medium tracking-wider text-blue-300 uppercase">
+            Kemampuan Utama
+          </p>
+          <h2
+            className="mb-8 text-2xl font-bold md:text-3xl"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Apa yang bisa dilakukan VoxSwarm
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            {features.map((feature) => (
+              <article
+                key={feature.title}
+                className="rounded-xl border border-white/10 bg-[#132237] p-6 transition hover:border-blue-500/30"
+              >
+                <h3 className="mb-2 text-sm font-bold text-white">{feature.title}</h3>
+                <p className="text-sm leading-6 text-slate-400">{feature.desc}</p>
+              </article>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* ─── ABOUT + GITHUB ─── */}
+      <section className="border-t border-white/10 bg-[#0B1120]">
+        <div className="mx-auto max-w-6xl px-6 py-16 md:px-10">
+          <div className="grid gap-6 md:grid-cols-2">
+            <article className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-7">
+              <p className="mb-2 text-xs font-medium tracking-wider text-blue-300 uppercase">
+                Dukung Pengembangan
+              </p>
+              <h3
+                className="mb-3 text-xl font-bold"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Bantu VoxSwarm Berkembang
+              </h3>
+              <p className="mb-5 text-sm leading-7 text-slate-400">
+                Jika proyek ini bermanfaat, berikan bintang di GitHub untuk mendukung pengembangan
+                dan pembaruan di masa mendatang.
+              </p>
+              <a
+                href="https://github.com/aditrachman/Simulation-Prediction-Engine"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold transition hover:bg-blue-500"
+              >
+                Beri Bintang di GitHub
+              </a>
+            </article>
+
+            <article className="rounded-xl border border-white/10 bg-[#132237] p-7">
+              <p className="mb-2 text-xs font-medium tracking-wider text-blue-300 uppercase">
+                Tentang
+              </p>
+              <h3
+                className="mb-3 text-xl font-bold"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Dibuat oleh Adit Rachman
+              </h3>
+              <p className="text-sm leading-7 text-slate-400">
+                VoxSwarm dikembangkan untuk mengubah simulasi AI menjadi inteligensi keputusan
+                yang praktis. Fokus pada produk yang bersih secara visual, cepat dijalankan, dan
+                berguna dalam skenario nyata.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── DOCS ─── */}
+      <section className="border-t border-white/10 bg-[#0E1929]">
+        <div className="mx-auto max-w-6xl px-6 py-16 md:px-10">
+          <p className="mb-2 text-xs font-medium tracking-wider text-blue-300 uppercase">
+            Dokumentasi
+          </p>
+          <h2
+            className="mb-8 text-xl font-bold"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Semua yang Anda perlukan untuk memulai
+          </h2>
           <div className="grid gap-4 md:grid-cols-3">
             {docItems.map((item) => (
               <a
@@ -172,12 +214,10 @@ export default function LandingPage() {
                 href={item.href}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-indigo-300/40 hover:bg-indigo-400/5"
+                className="rounded-xl border border-white/10 bg-[#132237] p-6 transition hover:border-blue-500/30 hover:bg-blue-500/5"
               >
-                <h4 className="mb-2 text-sm font-bold tracking-wide uppercase">
-                  {item.title}
-                </h4>
-                <p className="text-sm leading-6 text-slate-300">{item.desc}</p>
+                <h4 className="mb-2 text-sm font-bold text-white">{item.title}</h4>
+                <p className="text-sm leading-6 text-slate-400">{item.desc}</p>
               </a>
             ))}
           </div>

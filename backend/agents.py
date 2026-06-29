@@ -177,6 +177,9 @@ KATEGORI_MAP = {
     "Sosial":    ["Mahasiswa", "Masyarakat", "Media", "Akademisi", "Pekerja"],
     "Hukum":     ["Pemerintah", "Akademisi", "Media", "Mahasiswa", "Pekerja"],
     "Teknologi": ["Akademisi", "Pengusaha", "Pekerja", "Mahasiswa", "Media"],
+    "Kebijakan": ["Pemerintah", "Akademisi", "Media", "Mahasiswa", "Masyarakat", "Pengusaha"],
+    "RUU":       ["Pemerintah", "Akademisi", "Media", "Mahasiswa", "Pekerja"],
+    "Anggaran":  ["Pengusaha", "Pekerja", "Pemerintah", "Akademisi", "Masyarakat"],
     "Umum":      ["Mahasiswa", "Pengusaha", "Pekerja", "Pemerintah", "Akademisi", "Media"],
 }
 
@@ -187,6 +190,9 @@ COUNTER_MAP = {
     "Sosial":    ["Kontra_Sosial"],
     "Hukum":     ["Kontra_Hukum"],      # ← dulunya Kontra_Politik, sekarang lebih relevan
     "Teknologi": ["Kontra_Teknologi"],  # ← dulunya Kontra_Ekonomi, sekarang lebih relevan
+    "Kebijakan": ["Kontra_Politik"],
+    "RUU":       ["Kontra_Hukum"],
+    "Anggaran":  ["Kontra_Ekonomi"],
     "Umum":      ["Kontra_Politik"],
 }
 

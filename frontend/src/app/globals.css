@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ─── Design Token: Professional Intelligence Theme ─── */
+/* Target: Business & Government officials — clean, readable, trustworthy */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: #132237;
+  --color-surface-alt: #1A2D4A;
+  --color-surface-raised: #1E2F50;
+  --color-border-subtle: rgba(255, 255, 255, 0.07);
+  --color-border: rgba(255, 255, 255, 0.15);
+  --color-accent: #2563EB;
+  --color-accent-light: #3B82F6;
+  --color-accent-subtle: rgba(37, 99, 235, 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ─── Base ─── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #0B1120;
+  color: #F1F5F9;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Custom scrollbar ─── */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #1E2D45; border-radius: 10px; }
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: #1E2D45 transparent; }
+
+/* ─── Animated bounce dots ─── */
+@keyframes bounce-dots {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-9px); opacity: 1; }
+}
+
+/* ─── Print styles for business reports ─── */
+@media print {
+  @page { size: A4 portrait; margin: 15mm 18mm; }
+  *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body, main { background: #ffffff !important; color: #1e293b !important; }
+  .print-hidden { display: none !important; }
+  * { color: #1e293b !important; }
+  .print-card { background: #ffffff !important; border-color: #e2e8f0 !important; }
+  .print-badge-mendukung { background: #dcfce7 !important; border-color: #86efac !important; }
+  .print-badge-mendukung * { color: #166534 !important; }
+  .print-badge-menolak { background: #fee2e2 !important; border-color: #fca5a5 !important; }
+  .print-badge-menolak * { color: #991b1b !important; }
+  .print-badge-netral { background: #e0e7ff !important; border-color: #a5b4fc !important; }
+  .print-badge-netral * { color: #3730a3 !important; }
+  .custom-scrollbar { max-height: none !important; overflow: visible !important; }
+  .page-break-avoid { page-break-inside: avoid; break-inside: avoid; }
+  svg text { fill: #334155 !important; }
 }

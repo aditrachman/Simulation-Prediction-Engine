@@ -82,7 +82,7 @@ ARCHETYPE_POOL = {
         "kepribadian": {"openness": 0.5, "agreeableness": 0.6, "neuroticism": 0.3},
         "pengaruh": 0.75,
         "initial_stance": 0.2,
-        "keywords": ["daerah", "provinsi", "kabupaten", "otonomi", "pilkada", "pembangunan daerah", "apbd"],
+        "keywords": ["daerah", "provinsi", "kabupaten", "otonomi", "pilkada", "pembangunan daerah", "apbd", "ruu", "perda", "regulasi", "kebijakan", "apbn", "legislasi"],
     },
     "Ibu_Rumah_Tangga": {
         "nama": "Ibu Rumah Tangga",
@@ -98,7 +98,7 @@ ARCHETYPE_POOL = {
         "kepribadian": {"openness": 0.8, "agreeableness": 0.25, "neuroticism": 0.4},
         "pengaruh": 0.72,
         "initial_stance": -0.2,
-        "keywords": ["hukum", "korupsi", "kpk", "peradilan", "regulasi", "putusan", "hakim", "uji materi"],
+        "keywords": ["hukum", "korupsi", "kpk", "peradilan", "regulasi", "putusan", "hakim", "uji materi", "ruu", "undang-undang", "legislasi", "peraturan", "mahkamah"],
     },
     "Diaspora": {
         "nama": "Diaspora Indonesia",
