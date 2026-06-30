@@ -1,22 +1,24 @@
-import { DM_Sans, Inter, JetBrains_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
-const dmSans = DM_Sans({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "700", "800"],
-  variable: "--font-display",
+  weight: ["500", "600", "700"],
+  variable: "--font-heading",
 });
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500"],
   variable: "--font-body",
 });
 
-const jetbrains = JetBrains_Mono({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-mono",
+  weight: ["600", "700"],
+  variable: "--font-logo",
 });
 
 export const metadata = {
@@ -27,9 +29,17 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id" className={`${dmSans.variable} ${inter.variable} ${jetbrains.variable}`}>
-      <body style={{ fontFamily: "var(--font-body), Inter, sans-serif" }}>
-        {children}
+    <html lang="id" className={`${jakarta.variable} ${inter.variable} ${spaceGrotesk.variable}`}>
+      <body>
+        <Navbar />
+
+        {/* ─── Grain Texture ─── */}
+        <div className="grain-overlay" aria-hidden="true" />
+
+        {/* ─── Main Content ─── */}
+        <main className="flex min-h-screen flex-col">{children}</main>
+
+        <Footer />
       </body>
     </html>
   );
