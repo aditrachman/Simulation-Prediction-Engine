@@ -10,7 +10,7 @@ export default function Footer() {
             <Link href="/" className="no-underline">
               <span
                 className="text-lg tracking-tight text-[#faf9f5]"
-                className="tracking-tight" style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, letterSpacing: "-0.02em" }}
+                style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, letterSpacing: "-0.02em" }}
               >
                 VoxSwarm
               </span>

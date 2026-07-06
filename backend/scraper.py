@@ -1,7 +1,7 @@
 # backend/scraper.py
 # Data real gratis untuk VoxSwarm:
-#   - RSS feed berita Indonesia (Kompas, Detik, BBC Indonesia, Tempo, Antara)
-#   - Reddit via JSON API publik (tanpa OAuth, gratis)
+#   - RSS feed berita Indonesia (Detik, BBC Indonesia, Tempo, Antara, CNN Indonesia)
+#   - Reddit via JSON API publik (tanpa OAuth, gratis) — DINONAKTIFKAN
 #   - Fallback graceful jika semua sumber gagal
 #   - Disk cache by topic hash (TTL configurable via CONTEXT_CACHE_TTL_MINUTES)
 
@@ -31,13 +31,14 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 RSS_SOURCES = [
-    {"nama": "Kompas",        "url": "https://rss.kompas.com/rss/breakingnews.xml",         "bahasa": "id"},
-    {"nama": "Detik",         "url": "https://feed.detik.com/detikcom-index",                "bahasa": "id"},
-    {"nama": "BBC Indonesia", "url": "https://feeds.bbci.co.uk/indonesian/rss.xml",          "bahasa": "id"},
+    # ponytail: Detik moved from feed.detik.com → news.detik.com/rss (2025)
+    {"nama": "Detik",         "url": "https://news.detik.com/rss",                           "bahasa": "id"},
+    # ponytail: BBC Indonesia URL changed: indonesian → indonesia (no 'n')
+    {"nama": "BBC Indonesia", "url": "https://feeds.bbci.co.uk/indonesia/rss.xml",           "bahasa": "id"},
     {"nama": "Tempo",         "url": "https://rss.tempo.co/nasional",                        "bahasa": "id"},
     {"nama": "Antara",        "url": "https://www.antaranews.com/rss/terkini.xml",           "bahasa": "id"},
     {"nama": "CNN Indonesia", "url": "https://www.cnnindonesia.com/rss",                     "bahasa": "id"},
-    {"nama": "Tirto",         "url": "https://tirto.id/rss",                                 "bahasa": "id"},
+    # ponytail: Kompas & Tirto removed — both dead (Kompas 404 all paths, Tirto 403 blocks all)
 ]
 
 # Reddit — API JSON publik (gratis, tanpa OAuth)
@@ -55,6 +56,177 @@ HEADERS = {
 TIMEOUT = 8  # detik
 
 # ---------------------------------------------------------------------------
+# Similarity threshold for source diversity clustering
+# ---------------------------------------------------------------------------
+
+SIMILARITY_THRESHOLD = 0.15  # ponytail: 0.15 works for short headlines; tune up if too many false clusters
+
+COMMENT_DELAY = 2.0  # seconds between fetch_article_comments calls
+
+# ---------------------------------------------------------------------------
+# Comment Cache — baca hasil batch comment fetcher dari JSONL
+# ---------------------------------------------------------------------------
+
+_COMMENTS_CACHE_FILE = Path(__file__).parent / "data" / "comments_cache.jsonl"
+_COMMENTS_CACHE_TTL  = 86400  # 24 jam
+
+# ---------------------------------------------------------------------------
+# Polling Reference — data survei terverifikasi dari lembaga kredibel
+# ---------------------------------------------------------------------------
+
+_POLLING_FILE = Path(__file__).parent / "data" / "polling_reference.json"
+_POLLING_DATA = None  # lazy load di fungsi pertama kali dipanggil
+_POLLING_DATA_HASH = None  # hash file terakhir — buat deteksi perubahan
+
+
+def _load_polling_data() -> dict:
+    """Load polling_reference.json ke memory — auto-reload kalau file berubah."""
+    global _POLLING_DATA, _POLLING_DATA_HASH
+    current_hash = hashlib.md5(_POLLING_FILE.read_bytes()).hexdigest()[:12] if _POLLING_FILE.exists() else "no-file"
+
+    if _POLLING_DATA is not None and _POLLING_DATA_HASH == current_hash:
+        return _POLLING_DATA
+
+    # File berubah atau belum pernah di-load → reload
+    if not _POLLING_FILE.exists():
+        _POLLING_DATA = {}
+        _POLLING_DATA_HASH = current_hash
+        return _POLLING_DATA
+    try:
+        _POLLING_DATA = json.loads(_POLLING_FILE.read_text(encoding="utf-8"))
+        _POLLING_DATA_HASH = current_hash
+        print(f"[polling] Loaded {len(_POLLING_DATA)} polling entries (hash={current_hash})")
+    except Exception:
+        _POLLING_DATA = {}
+        _POLLING_DATA_HASH = current_hash
+    return _POLLING_DATA
+
+
+def baca_komentar_cache(article_url: str) -> list[str]:
+    """
+    Baca komentar dari cache JSONL untuk satu artikel.
+    Return kosong jika tidak ada / cache expired.
+
+    Format cache (tiap line):
+        {"source":..., "article_url":..., "comment_text":..., "scraped_at":...}
+    """
+    if not _COMMENTS_CACHE_FILE.exists():
+        return []
+    try:
+        now = time.time()
+        comments: list[str] = []
+        for line in _COMMENTS_CACHE_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("article_url") != article_url:
+                continue
+            # Cek TTL
+            ts_str = entry.get("scraped_at", "")
+            try:
+                ts = datetime.fromisoformat(ts_str).timestamp()
+            except (ValueError, TypeError):
+                ts = 0
+            if now - ts > _COMMENTS_CACHE_TTL:
+                continue
+            text = entry.get("comment_text", "").strip()
+            if text and len(text) > 10:
+                comments.append(text)
+        return comments
+    except Exception:
+        return []
+
+# ---------------------------------------------------------------------------
+# Diversity Score — akumulasi window (JSONL)
+#   Artikel dikumpulkan dari waktu ke waktu, bukan per batch.
+# ---------------------------------------------------------------------------
+
+_DIVERSITY_WINDOW_FILE = Path(__file__).parent / "data" / "diversity_window.jsonl"
+_DIVERSITY_WINDOW_MAX  = 500   # max artikel di window
+_DIVERSITY_WINDOW_DAYS = 7     # hapus artikel lebih lama dari ini
+
+
+def append_to_diversity_window(articles: list[dict]) -> None:
+    """Append artikel baru ke window file (JSONL)."""
+    if not articles:
+        return
+    try:
+        _DIVERSITY_WINDOW_FILE.parent.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc).isoformat()
+        with open(_DIVERSITY_WINDOW_FILE, "a", encoding="utf-8") as f:
+            for art in articles:
+                art["_window_ts"] = now
+                f.write(json.dumps(art, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def load_diversity_window() -> list[dict]:
+    """Load semua artikel dari window file, dedup by ID (keep latest)."""
+    if not _DIVERSITY_WINDOW_FILE.exists():
+        return []
+    try:
+        articles = []
+        for line in _DIVERSITY_WINDOW_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    articles.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+        # Dedup by ID — keep latest occurrence
+        seen: dict = {}
+        for art in articles:
+            aid = art.get("id")
+            if aid:
+                seen[aid] = art
+        return list(seen.values()) if seen else articles
+    except Exception:
+        return []
+
+
+def prune_diversity_window() -> int:
+    """Hapus artikel tua/berlebih dari window. Return jumlah dihapus."""
+    articles = load_diversity_window()
+    if not articles:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - (_DIVERSITY_WINDOW_DAYS * 86400)
+    kept = []
+    pruned = 0
+
+    for art in articles:
+        ts = art.get("_window_ts", "")
+        try:
+            t = datetime.fromisoformat(ts).timestamp()
+        except (ValueError, TypeError):
+            t = 0
+        if t >= cutoff:
+            kept.append(art)
+        else:
+            pruned += 1
+
+    # Trim ke max — buang paling tua
+    if len(kept) > _DIVERSITY_WINDOW_MAX:
+        kept.sort(key=lambda a: a.get("_window_ts", ""), reverse=True)
+        pruned += len(kept) - _DIVERSITY_WINDOW_MAX
+        kept = kept[:_DIVERSITY_WINDOW_MAX]
+
+    try:
+        with open(_DIVERSITY_WINDOW_FILE, "w", encoding="utf-8") as f:
+            for art in kept:
+                f.write(json.dumps(art, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+    return pruned
+
+# ---------------------------------------------------------------------------
 # Disk Cache Config
 # ---------------------------------------------------------------------------
 
@@ -65,8 +237,29 @@ _CACHE_FILE = _CACHE_DIR / "context_cache.json"
 _CACHE_TTL  = int(os.getenv("CONTEXT_CACHE_TTL_MINUTES", "30")) * 60   # detik
 _CACHE_MAX  = int(os.getenv("CONTEXT_CACHE_MAX_ENTRIES", "100"))        # maks topik disimpan
 
+# ponytail: bump tiap kali logic relevansi/filter berubah → force refetch cache
+CACHE_SCHEMA_VERSION = "v4-content-overlap"
+
+
+def _get_polling_reference_hash() -> str:
+    """Hash isi polling_reference.json — cache auto-invalidate kalau file berubah."""
+    if not _POLLING_FILE.exists():
+        return "no-file"
+    try:
+        return hashlib.md5(_POLLING_FILE.read_bytes()).hexdigest()[:12]
+    except Exception:
+        return "no-file"
+
+
+def _current_schema() -> str:
+    """Combined schema: kode version + polling_reference.json hash."""
+    return f"{CACHE_SCHEMA_VERSION}_{_get_polling_reference_hash()}"
+
 _cache_lock = threading.Lock()
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Key reserved buat metadata cache (bukan entry topik)
+_META_KEY = "_schema_version"
 
 
 def _topic_key(topik: str) -> str:
@@ -75,17 +268,29 @@ def _topic_key(topik: str) -> str:
 
 
 def _load_cache() -> dict:
-    """Baca cache dari disk. Return {} jika file belum ada atau corrupt."""
+    """
+    Baca cache dari disk. Return {} jika:
+    - file belum ada / corrupt
+    - schema version tidak cocok (force refetch)
+    """
+    expected = _current_schema()
     if not _CACHE_FILE.exists():
         return {}
     try:
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        cache = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        # Schema versioning: jika gak cocok, return {} biar di-refetch
+        if cache.get(_META_KEY) != expected:
+            print(f"[Cache] Schema mismatch (have={cache.get(_META_KEY)!r}, need={expected!r}) — force refetch")
+            return {}
+        return cache
     except Exception:
         return {}
 
 
 def _save_cache(cache: dict) -> None:
     """Tulis cache ke disk. Silent fail jika tidak bisa write."""
+    # Pastikan schema version (kode + polling hash) selalu tersimpan
+    cache[_META_KEY] = _current_schema()
     try:
         _CACHE_FILE.write_text(
             json.dumps(cache, ensure_ascii=False, indent=None),
@@ -95,10 +300,15 @@ def _save_cache(cache: dict) -> None:
         print(f"[Cache] Gagal simpan cache: {e}")
 
 
+def _cache_entries(cache: dict) -> list[tuple]:
+    """Return list of (key, entry) pairs, excluding metadata keys."""
+    return [(k, v) for k, v in cache.items() if not k.startswith("_")]
+
+
 def _get_cached(topik: str) -> Optional[dict]:
     """
     Ambil konteks dari cache jika masih valid (belum expired).
-    Return None jika miss atau TTL terlewat.
+    Return None jika miss, schema mismatch, atau TTL terlewat.
     """
     with _cache_lock:
         cache = _load_cache()
@@ -132,10 +342,11 @@ def _set_cache(topik: str, data: dict) -> None:
             "data":      data,
         }
 
-        # Trim: buang entri terlama jika cache terlalu besar
-        if len(cache) > _CACHE_MAX:
-            sorted_keys = sorted(cache, key=lambda k: cache[k].get("cached_at", 0))
-            for old_key in sorted_keys[:len(cache) - _CACHE_MAX]:
+        # Trim: buang entri terlama jika cache terlalu besar (skip metadata key)
+        entries = _cache_entries(cache)
+        if len(entries) > _CACHE_MAX:
+            sorted_entries = sorted(entries, key=lambda e: e[1].get("cached_at", 0))
+            for old_key, _ in sorted_entries[:len(entries) - _CACHE_MAX]:
                 cache.pop(old_key, None)
 
         _save_cache(cache)
@@ -144,16 +355,20 @@ def _set_cache(topik: str, data: dict) -> None:
 def clear_context_cache(topik: Optional[str] = None) -> int:
     """
     Hapus cache.
-    - topik=None  → hapus semua
+    - topik=None  → hapus semua (metadata tetap)
     - topik=str   → hapus hanya topik itu
 
-    Return: jumlah entri yang dihapus.
+    Return: jumlah entri topik yang dihapus.
     """
     with _cache_lock:
         cache = _load_cache()
         if topik is None:
-            n = len(cache)
-            _save_cache({})
+            n = len(_cache_entries(cache))
+            # Reset: simpan cuma metadata
+            new_cache = {}
+            if _META_KEY in cache:
+                new_cache[_META_KEY] = cache[_META_KEY]
+            _save_cache(new_cache)
             return n
         key = _topic_key(topik)
         if key in cache:
@@ -167,14 +382,16 @@ def get_cache_stats() -> dict:
     """Info ringkas tentang kondisi cache saat ini."""
     with _cache_lock:
         cache = _load_cache()
+        entries = _cache_entries(cache)
         now   = time.time()
-        valid = sum(1 for e in cache.values() if now - e.get("cached_at", 0) <= _CACHE_TTL)
+        valid = sum(1 for _, e in entries if now - e.get("cached_at", 0) <= _CACHE_TTL)
         return {
-            "total_entries": len(cache),
+            "total_entries": len(entries),
             "valid_entries": valid,
-            "expired_entries": len(cache) - valid,
+            "expired_entries": len(entries) - valid,
             "ttl_minutes": _CACHE_TTL // 60,
             "max_entries": _CACHE_MAX,
+            "schema_version": cache.get(_META_KEY),
             "cache_file": str(_CACHE_FILE),
         }
 
@@ -276,6 +493,49 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
 # TF-IDF Relevance Scoring (0 LLM call, lebih akurat dari keyword counting)
 # ---------------------------------------------------------------------------
 
+# Indonesian stopwords — minimal set buat content-word overlap check
+_CONTENT_STOPWORDS = frozenset({
+    "dan", "di", "ke", "dari", "yang", "ini", "itu", "dengan", "untuk",
+    "pada", "adalah", "akan", "telah", "sudah", "bisa", "dapat", "tidak",
+    "ada", "juga", "atau", "karena", "oleh", "sebagai", "serta", "saat",
+    "dalam", "secara", "lebih", "sangat", "antara", "setelah", "seperti",
+    "hanya", "mereka", "kami", "kita", "saya", "dia", "ia", "anda",
+    "bahwa", "namun", "tetapi", "sedangkan", "sementara", "jika", "kalau",
+    "maka", "sehingga", "mengapa", "bagaimana", "apa", "siapa", "mana",
+    "kapan", "banyak", "beberapa", "seluruh", "semua", "para", "si",
+    "sang", "para", "ia", "pun", "pernah", "belum", "agar", "supaya",
+    "sebab", "meski", "walaupun", "biar", "hendak", "mau", "ingin",
+})
+
+_CONTENT_MIN_WORD_LEN = 3  # minimal panjang kata buat dianggap content word
+
+
+def _is_numeric_token(token: str) -> bool:
+    """True kalo token cuma angka (tahun, nominal, dll)."""
+    return token.isdigit()
+
+
+def _extract_content_words(teks: str) -> set:
+    """
+    Ambil kata-kata bermakna (bukan stopword, bukan angka, min length).
+    """
+    words = teks.lower().split()
+    result = set()
+    for w in words:
+        w_clean = w.strip(".,!?;:\"'()[]{}")
+        if (len(w_clean) >= _CONTENT_MIN_WORD_LEN
+                and w_clean not in _CONTENT_STOPWORDS
+                and not _is_numeric_token(w_clean)):
+            result.add(w_clean)
+    return result
+
+
+def _count_content_overlap(topic_content: set, article_teks: str) -> int:
+    """Hitung berapa content word dari topic yg muncul di article."""
+    article_words = _extract_content_words(article_teks)
+    return len(topic_content & article_words)
+
+
 def _bersih_teks(teks: str) -> str:
     """Lowercase, hapus non-alfanumerik, normalize whitespace."""
     return "".join(
@@ -326,7 +586,32 @@ def _hitung_relevansi_tfidf(topik: str, items: list[dict], maks: int = 15) -> li
             item["relevansi"] = round(float(sims[i]), 4)
 
         items.sort(key=lambda x: -x.get("relevansi", 0))
-        return [it for it in items if it.get("relevansi", 0) > 0][:maks]
+
+        # ── Content-word overlap filter ──────────────────────────────────
+        # Prevent false positive where only numeric token (tahun) matches.
+        # Article must share at least 2 content words with topic (if topic
+        # has >= 2 content words), or at least 1 (if topic has 1).
+        # Skip check if topic has 0 content words (all stopwords/numbers).
+        topic_content = _extract_content_words(topik)
+        if len(topic_content) >= 2:
+            min_overlap = 2
+        elif len(topic_content) == 1:
+            min_overlap = 1
+        else:
+            min_overlap = 0  # no content words to match — skip check
+
+        passed = []
+        for it in items:
+            if it.get("relevansi", 0) < SIMILARITY_THRESHOLD:
+                continue
+            if min_overlap > 0:
+                article_text = it.get("judul", "") + " " + it.get("ringkasan", "")
+                overlap = _count_content_overlap(topic_content, article_text)
+                if overlap < min_overlap:
+                    continue
+            passed.append(it)
+
+        return passed[:maks]
 
     except Exception as exc:
         print(f"[scraper] TF-IDF relevance error: {exc}, fallback keyword")
@@ -355,10 +640,16 @@ def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> 
 # Fetch News (RSS)
 # ---------------------------------------------------------------------------
 
-def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
+def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     """
     Ambil berita terkini dari semua RSS source.
     Filter relevan dengan TF-IDF (fallback keyword counting).
+
+    Returns dict:
+        {"articles": list[dict], "total_unik": int, "total_filtered": int}
+          articles         — artikel yg lolos threshold (sorted by relevance desc)
+          total_unik       — total semua kandidat UNIK sebelum filter
+          total_filtered   — jumlah artikel yg lolos threshold
     """
     semua = []
 
@@ -377,53 +668,41 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> list[dict]:
             seen.add(art["id"])
             unik.append(art)
 
-    return _hitung_relevansi_tfidf(topik, unik, maks=15)
+    total_unik = len(unik)
+    if not unik:
+        return {"articles": [], "total_unik": 0, "total_filtered": 0}
+
+    filtered = _hitung_relevansi_tfidf(topik, unik, maks=15)
+    return {
+        "articles": filtered,
+        "total_unik": total_unik,
+        "total_filtered": len(filtered),
+    }
 
 
 # ---------------------------------------------------------------------------
-# Reddit JSON API (tanpa OAuth — read-only publik)
+# Polling Reference Lookup — cari data survei terverifikasi untuk topik
 # ---------------------------------------------------------------------------
 
-def fetch_reddit(topik: str, maks: int = 10) -> list[dict]:
+def cari_polling_reference(topik: str) -> dict | None:
     """
-    DINONAKTIFKAN — Reddit tidak representatif untuk opini publik Indonesia.
-    Fungsinya dipertahankan agar kode yang merefer tetap jalan.
+    Cek apakah topik match salah satu entry di polling_reference.json.
+    Case-insensitive substring match terhadap keywords.
+    Return entry pertama yg match (dengan field 'key'), atau None.
     """
-    return []
+    data = _load_polling_data()
+    if not data:
+        return None
 
+    topik_lower = topik.lower()
 
-def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
-    """Parse response JSON Reddit listing."""
-    posts = []
-    try:
-        data     = json.loads(json_text)
-        children = data.get("data", {}).get("children", [])
-        for child in children:
-            d        = child.get("data", {})
-            post_id  = d.get("id", "")
-            judul    = _clean_html(d.get("title", ""))
-            selftext = _clean_html(d.get("selftext", ""))[:300]
-            upvotes  = d.get("ups", 0)
-            komentar = d.get("num_comments", 0)
-            subreddit = d.get("subreddit_name_prefixed", sumber)
-            url      = "https://reddit.com" + d.get("permalink", "")
-
-            if not judul or post_id in ("", None):
-                continue
-
-            posts.append({
-                "id":        f"reddit_{post_id}",
-                "judul":     judul,
-                "ringkasan": selftext,
-                "link":      url,
-                "sumber":    subreddit,
-                "upvotes":   upvotes,
-                "komentar":  komentar,
-                "tipe":      "reddit",
-            })
-    except (json.JSONDecodeError, KeyError, TypeError):
-        pass
-    return posts
+    for key, entry in data.items():
+        for kw in entry.get("keywords", []):
+            if kw.lower() in topik_lower:
+                result = dict(entry)
+                result["key"] = key
+                return result
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +710,7 @@ def _parse_reddit_json(json_text: str, sumber: str) -> list[dict]:
 # (dengan disk cache — tidak fetch ulang jika topik sama & TTL belum habis)
 # ---------------------------------------------------------------------------
 
-def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
+def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str | None = None) -> dict:
     """
     Ambil data real dari berita RSS, gabungkan jadi briefing
     yang siap dipakai sebagai konteks agen sebelum simulasi dimulai.
@@ -459,14 +738,73 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
         cached = _get_cached(topik)
         if cached:
             cached["from_cache"] = True
+            # ponytail: inject data_transparency if missing (old cache before field existed)
+            if "data_transparency" not in cached:
+                rss_passed = len(cached.get("berita", []))
+                polling_matched = cached.get("polling_reference") is not None
+                if rss_passed == 0 and not polling_matched:
+                    cached["data_transparency"] = {
+                        "rss_articles_found": 0,
+                        "rss_articles_passed_threshold": 0,
+                        "polling_reference_matched": False,
+                        "briefing_status": "empty",
+                        "note": "Tidak ditemukan berita relevan maupun data survei untuk topik ini. Hasil simulasi berdasarkan pengetahuan umum agent, bukan data real-time.",
+                    }
+                elif rss_passed == 0 and polling_matched:
+                    cached["data_transparency"] = {
+                        "rss_articles_found": 0,
+                        "rss_articles_passed_threshold": 0,
+                        "polling_reference_matched": True,
+                        "briefing_status": "limited",
+                        "note": "Tidak ada berita RSS relevan. Briefing menggunakan data survei tervalidasi sebagai gantinya.",
+                    }
+                elif rss_passed < 3:
+                    cached["data_transparency"] = {
+                        "rss_articles_found": 0,
+                        "rss_articles_passed_threshold": rss_passed,
+                        "polling_reference_matched": polling_matched,
+                        "briefing_status": "limited",
+                        "note": f"Hanya {rss_passed} artikel RSS relevan ditemukan. Briefing terbatas.",
+                    }
+                else:
+                    cached["data_transparency"] = {
+                        "rss_articles_found": 0,
+                        "rss_articles_passed_threshold": rss_passed,
+                        "polling_reference_matched": polling_matched,
+                        "briefing_status": "full",
+                        "note": f"{rss_passed} artikel RSS relevan + data survei tersedia.",
+                    }
             return cached
     # ─────────────────────────────────────────────────────────────────────
 
     # Fetch berita dari RSS — 0 biaya, 0 API key
-    berita = fetch_berita(topik)
+    fetch_result = fetch_berita(topik)
+    berita = fetch_result["articles"]
+    total_unik = fetch_result["total_unik"]
+    total_filtered = fetch_result["total_filtered"]
+
+    print(f"[relevance-debug] topik={topik!r} | {total_unik} unik, {total_filtered} lolos threshold (>= {SIMILARITY_THRESHOLD:.2f})")
+    for b in berita[:5]:
+        print(f"  - [{b.get('relevansi', 'N/A')}] {b['judul'][:60]}")
+
+    # Simpan ke diversity window (akumulasi lintas sesi)
+    append_to_diversity_window(berita)
     reddit = []
 
-    # Bangun teks briefing ringkas
+    # Inject komentar dari cache untuk artikel Detik (yang komentar real-nya valid)
+    for art in berita:
+        if art.get("sumber") == "Detik":
+            komentar = baca_komentar_cache(art.get("link", ""))
+            if komentar:
+                art["komentar_cache"] = komentar
+
+    # ── Cari polling reference: match ke topik ASLI (sebelum ekspansi akronim) ──
+    # ponytail: topik_asli dipisah biar match substring gak terganggu ekspansi
+    #           misal "BBM" → "Bahan Bakar Minyak (BBM)", "subsidi bbm" tetap match
+    polling = cari_polling_reference(topik_asli or topik)
+    # ────────────────────────────────────────────────────────────────────────────
+
+    # Bangun teks briefing ringkas — include polling jika ada
     baris = []
 
     if berita:
@@ -474,6 +812,18 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
         for i, art in enumerate(berita[:5], 1):
             ring = f" — {art['ringkasan'][:120]}..." if art["ringkasan"] else ""
             baris.append(f"  {i}. [{art['sumber']}] {art['judul']}{ring}")
+            # Tempel komentar dari cache kalau ada
+            komen = art.get("komentar_cache", [])
+            for k in komen[:3]:
+                baris.append(f"       💬 {k[:100]}")
+
+    # Sisipkan polling reference — data lebih kredibel dari RSS
+    if polling:
+        baris.append("")
+        baris.append("📊 DATA SURVEI TERVERIFIKASI:")
+        baris.append(f"  [{polling['sumber']}] — {polling['tanggal']}")
+        baris.append(f"  {polling['ringkasan']}")
+        baris.append(f"  (kategori: {polling['kategori']})")
 
     briefing = (
         f"=== DATA REAL TERKAIT TOPIK: {topik} ===\n"
@@ -481,13 +831,41 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
         + "\n=== GUNAKAN DATA INI SEBAGAI REFERENSI, BUKAN SATU-SATUNYA FAKTA ==="
     ) if baris else ""
 
+    # ── Transparency field — biar operator tau kondisi briefing ─────────────
+    polling_matched = polling is not None
+    rss_passed = total_filtered
+
+    if rss_passed == 0 and not polling_matched:
+        briefing_status = "empty"
+        note = "Tidak ditemukan berita relevan maupun data survei untuk topik ini. Hasil simulasi berdasarkan pengetahuan umum agent, bukan data real-time."
+    elif rss_passed == 0 and polling_matched:
+        briefing_status = "limited"
+        note = "Tidak ada berita RSS relevan. Briefing menggunakan data survei tervalidasi sebagai gantinya."
+    elif rss_passed < 3:
+        briefing_status = "limited"
+        note = f"Hanya {rss_passed} artikel RSS relevan ditemukan. Briefing terbatas."
+    else:
+        briefing_status = "full"
+        note = f"{rss_passed} artikel RSS relevan + data survei tersedia."
+
+    data_transparency = {
+        "rss_articles_found": total_unik,
+        "rss_articles_passed_threshold": rss_passed,
+        "polling_reference_matched": polling_matched,
+        "briefing_status": briefing_status,
+        "note": note,
+    }
+    # ───────────────────────────────────────────────────────────────────────
+
     result = {
-        "berita":     berita,
-        "reddit":     reddit,
-        "briefing":   briefing,
-        "total":      len(berita) + len(reddit),
-        "timestamp":  datetime.now(timezone.utc).isoformat(),
-        "from_cache": False,
+        "berita":              berita,
+        "reddit":              reddit,
+        "briefing":            briefing,
+        "total":               rss_passed + len(reddit),
+        "timestamp":           datetime.now(timezone.utc).isoformat(),
+        "from_cache":          False,
+        "polling_reference":   polling,
+        "data_transparency":   data_transparency,
     }
 
     # ── Simpan ke cache ───────────────────────────────────────────────────
@@ -495,3 +873,134 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False) -> dict:
     # ─────────────────────────────────────────────────────────────────────
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Source Diversity Score (Fase 1)
+#   Kelompokkan artikel dari berbagai sumber berdasarkan kemiripan topik,
+#   lalu hitung berapa sumber unik yang memberitakan isu yang sama.
+#   Tidak menggunakan LLM — murni TF-IDF + cosine similarity.
+# ---------------------------------------------------------------------------
+
+_SIM_CACHE: dict = {}  # ponytail: memoize pairwise sims dalam 1 batch
+
+
+def _teks_artikel(art: dict) -> str:
+    """Gabung judul + ringkasan jadi satu string untuk dibandingkan."""
+    return f"{art.get('judul', '')} {art.get('ringkasan', '')}"
+
+
+def cluster_articles_by_topic(
+    articles: list[dict],
+    threshold: float = SIMILARITY_THRESHOLD,
+) -> list[list[dict]]:
+    """
+    Kelompokkan artikel yang membahas isu yang mirip.
+
+    Pakai TF-IDF + cosine similarity pairwise.
+    Fallback ke Jaccard word overlap kalau sklearn nggak available.
+    Return list of clusters, tiap cluster = list artikel.
+    """
+    if len(articles) < 2:
+        return [articles] if articles else []
+
+    texts = [_teks_artikel(a) for a in articles]
+
+    if _SKLEARN_OK and len(texts) >= 2:
+        try:
+            vec = TfidfVectorizer(max_features=1000, ngram_range=(1, 2), sublinear_tf=True)
+            matrix = vec.fit_transform(texts)
+            sims = cosine_similarity(matrix)
+        except Exception:
+            sims = _jaccard_similarity_matrix(texts)
+    else:
+        sims = _jaccard_similarity_matrix(texts)
+
+    # Connected components via DFS (gangguan kecil, manual aja)
+    n = len(articles)
+    visited = [False] * n
+    clusters = []
+
+    for i in range(n):
+        if visited[i]:
+            continue
+        cluster = []
+        stack = [i]
+        while stack:
+            idx = stack.pop()
+            if visited[idx]:
+                continue
+            visited[idx] = True
+            cluster.append(articles[idx])
+            for j in range(n):
+                if not visited[j] and sims[idx][j] >= threshold:
+                    stack.append(j)
+        clusters.append(cluster)
+
+    return clusters
+
+
+def _jaccard_similarity_matrix(texts: list[str]) -> list[list[float]]:
+    """Fallback Jaccard similarity — stdlib aja, ga perlu sklearn."""
+    n = len(texts)
+    tokens = [set(t.lower().split()) for t in texts]
+    mat = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        mat[i][i] = 1.0
+        for j in range(i + 1, n):
+            a, b = tokens[i], tokens[j]
+            if not a or not b:
+                continue
+            intersection = len(a & b)
+            union = len(a | b)
+            sim = intersection / union if union else 0.0
+            mat[i][j] = mat[j][i] = sim
+    return mat
+
+
+def compute_source_diversity_scores(
+    articles: Optional[list[dict]] = None,
+    threshold: float = SIMILARITY_THRESHOLD,
+) -> list[dict]:
+    """
+    Hitung source diversity score untuk setiap kluster topik.
+
+    Jika articles=None, pakai window artikel akumulasi dari JSONL.
+    Jika articles=list, hitung dari list tersebut (backward compat).
+
+    Returns:
+        [
+            {
+                "topik_cluster_id": int,
+                "source_count": int,
+                "sources": [str, ...],
+                "score": float,         # source_count / total available sources
+                "articles": [dict, ...], # artikel di kluster ini
+            },
+            ...
+        ]
+    """
+    if articles is None:
+        prune_diversity_window()
+        articles = load_diversity_window()
+
+    clusters = cluster_articles_by_topic(articles, threshold)
+    total_sources = len(RSS_SOURCES)
+    results = []
+
+    for cid, cluster in enumerate(clusters):
+        sources = sorted({a.get("sumber", "Unknown") for a in cluster})
+        sc = len(sources)
+        results.append({
+            "topik_cluster_id": cid,
+            "source_count": sc,
+            "sources": sources,
+            "score": round(sc / total_sources, 4) if total_sources else 0.0,
+            "articles": cluster,
+        })
+
+    # Sort: most diverse first
+    results.sort(key=lambda r: -r["score"])
+    return results
+
+

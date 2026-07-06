@@ -108,7 +108,7 @@ export default function LandingPage() {
               <p
                 style={{
                   fontFamily: "var(--font-body, sans-serif)",
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 500,
                   letterSpacing: "1.5px",
                   textTransform: "uppercase",
@@ -251,7 +251,7 @@ export default function LandingPage() {
                     border: `1px solid ${agent.color}44`,
                     color: agent.color,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 10, fontWeight: 700, flexShrink: 0,
+                    fontSize: 12, fontWeight: 700, flexShrink: 0,
                   }}>
                     {agent.init}
                   </div>
@@ -259,7 +259,7 @@ export default function LandingPage() {
                     <p style={{ fontSize: 12, color: "#faf9f5", margin: 0, fontWeight: 500 }}>{agent.name}</p>
                   </div>
                   <span style={{
-                    fontSize: 10, fontWeight: 500,
+                    fontSize: 12, fontWeight: 500,
                     color: agent.color,
                     background: agent.color + "18",
                     border: `1px solid ${agent.color}33`,
@@ -280,7 +280,7 @@ export default function LandingPage() {
                 display: "flex", alignItems: "center", gap: 8,
               }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#cc785c", flexShrink: 0 }} />
-                <p style={{ fontSize: 11, color: "#cc785c", margin: 0, fontWeight: 500 }}>Simulasi selesai · Polarisasi 65%</p>
+                <p style={{ fontSize: 12, color: "#cc785c", margin: 0, fontWeight: 500 }}>Simulasi selesai · Polarisasi 65%</p>
               </div>
             </div>
 
@@ -345,7 +345,7 @@ export default function LandingPage() {
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <p style={{
               fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 11, fontWeight: 500,
+              fontSize: 12, fontWeight: 500,
               letterSpacing: "1.5px", textTransform: "uppercase",
               color: "#6c6a64", marginBottom: 16,
             }}>
@@ -438,11 +438,11 @@ export default function LandingPage() {
             <div>
               <p style={{
                 fontFamily: "var(--font-body, sans-serif)",
-                fontSize: 11, fontWeight: 500,
-                letterSpacing: "1.5px", textTransform: "uppercase",
-                color: "#a09d96", marginBottom: 16,
-              }}>
-                Tentang Proyek
+              fontSize: 12, fontWeight: 500,
+              letterSpacing: "1.5px", textTransform: "uppercase",
+              color: "#a09d96", marginBottom: 16,
+            }}>
+              Tentang Proyek
               </p>
               <h2
                 style={{
@@ -503,7 +503,7 @@ export default function LandingPage() {
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <p style={{
               fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 11, fontWeight: 500,
+              fontSize: 12, fontWeight: 500,
               letterSpacing: "1.5px", textTransform: "uppercase",
               color: "#6c6a64", marginBottom: 16,
             }}>

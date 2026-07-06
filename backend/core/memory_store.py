@@ -1,12 +1,11 @@
 # backend/core/memory_store.py
 # Phase 5: Structured Memory — memori agen yang tidak hanya list teks.
-# Tracks: stance history, argument uniqueness, relationships antar agen.
+# Tracks: argument uniqueness.
 # Memory summary tanpa LLM — pure rule-based.
 
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 
 def _extract_key_terms(teks: str, max_terms: int = 5) -> list[str]:
@@ -132,74 +131,7 @@ class ArgumentMemory:
 
 
 # ---------------------------------------------------------------------------
-# RelationshipMemory — lacak hubungan antar agen
-# ---------------------------------------------------------------------------
-
-class RelationshipMemory:
-    """Lacak hubungan/trust antar agen berdasarkan sentimen alignment."""
-
-    def __init__(self):
-        # {nama_agen: [{"ronde": int, "alignment": float, "sentimen_self": float, "sentimen_other": float}, ...]}
-        self._relations: dict[str, list[dict]] = {}
-
-    def update(
-        self,
-        ronde: int,
-        target_nama: str,
-        sentimen_self: float,
-        sentimen_other: float,
-    ) -> None:
-        """
-        Update hubungan dengan target_nama berdasarkan perbandingan sentimen.
-        alignment positif = setuju, negatif = tidak setuju.
-        """
-        alignment = 0.0
-        if sentimen_self != 0.0 and sentimen_other != 0.0:
-            # Semakin dekat skor, semakin setuju
-            difference = abs(sentimen_self - sentimen_other)
-            alignment = 1.0 - min(difference, 1.0)
-            # Arah: sama-sama positif atau sama-sama negatif
-            if (sentimen_self > 0) == (sentimen_other > 0):
-                alignment = alignment  # Setuju
-            else:
-                alignment = -alignment  # Tidak setuju
-
-        if target_nama not in self._relations:
-            self._relations[target_nama] = []
-        self._relations[target_nama].append({
-            "ronde": ronde,
-            "alignment": round(alignment, 2),
-            "sentimen_self": round(sentimen_self, 2),
-            "sentimen_other": round(sentimen_other, 2),
-        })
-
-    def get_trust_summary(self) -> str:
-        """
-        Ringkasan hubungan tanpa LLM.
-        """
-        if not self._relations:
-            return ""
-        allies = []
-        rivals = []
-        for target, entries in self._relations.items():
-            if not entries:
-                continue
-            avg_align = sum(e["alignment"] for e in entries) / len(entries)
-            if avg_align > 0.2:
-                allies.append(target)
-            elif avg_align < -0.2:
-                rivals.append(target)
-
-        parts = []
-        if allies:
-            parts.append(f"Kamu sepemikiran dengan: {', '.join(allies)}.")
-        if rivals:
-            parts.append(f"Kamu beda pendapat sama: {', '.join(rivals)}.")
-        return " ".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# AgentMemoryStore — gabungan semua track memori
+# AgentMemoryStore — structured memory untuk satu agen (argument-only)
 # ---------------------------------------------------------------------------
 
 class AgentMemoryStore:
@@ -211,7 +143,6 @@ class AgentMemoryStore:
     def __init__(self, agent_nama: str):
         self.agent_nama = agent_nama
         self.arguments = ArgumentMemory()
-        self.relationships = RelationshipMemory()
 
     def add_round(
         self,
@@ -221,33 +152,12 @@ class AgentMemoryStore:
         all_opinions: list[dict] | None = None,
     ) -> dict:
         """
-        Proses satu ronde: update argument + relationship.
-        
-        Args:
-            ronde: Nomor ronde
-            pendapat: Teks pendapat agen
-            sentimen: {"label": ..., "skor": ...}
-            all_opinions: Semua pendapat di ronde ini (untuk relationship tracking)
-        
+        Proses satu ronde: update argument tracking.
+
         Returns:
             {"is_fresh": bool, "repetition_count": int}
         """
         is_fresh = self.arguments.add(ronde, pendapat)
-
-        # Update relationship dengan agen lain
-        if all_opinions:
-            self_skor = sentimen.get("skor", 0.0) or 0.0
-            for other in all_opinions:
-                other_nama = other.get("nama", "")
-                if other_nama == self.agent_nama:
-                    continue
-                other_skor = other.get("sentimen", {}).get("skor", 0.0) or 0.0
-                self.relationships.update(
-                    ronde=ronde,
-                    target_nama=other_nama,
-                    sentimen_self=self_skor,
-                    sentimen_other=other_skor,
-                )
 
         return {
             "is_fresh": is_fresh,
@@ -283,11 +193,6 @@ class AgentMemoryStore:
             parts.append(
                 "Kamu udah ngomong ini beberapa kali. Coba sudut pandang atau data BARU."
             )
-
-        # Trust summary
-        trust_str = self.relationships.get_trust_summary()
-        if trust_str:
-            parts.append(trust_str)
 
         return " ".join(parts)
 

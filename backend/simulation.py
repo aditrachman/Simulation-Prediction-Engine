@@ -36,7 +36,7 @@ from .sentiment import score_sentiment, filter_forbidden_opens
 from .graph     import extract_entities
 from .core.models import (
     SimulationEvent, simulation_result_to_state,
-    AgentProfile, AgentAction, agent_dict_to_profile, agent_profile_to_dict,
+    AgentProfile, AgentAction,
 )
 from .core.reporting import generate_report
 from .core.event_system import (
@@ -51,7 +51,7 @@ from .core.scheduler import (
     get_strategy_display,
 )
 from .core.prediction import heuristic_predict, compute_confidence
-from .core.swarm import CrowdPool
+# CrowdPool removed 2026-07-05 — unused, over-engineered
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ def _qa_check_topic(topik: str, jawaban: str, system_p: str, user_p: str) -> str
     hasil = call_llm(_QA_SYSTEM, prompt, max_tokens=80, model=MODEL_AGENT)
 
     if "INVALID" in hasil.upper():
-        print(f"[QA] {jawaban[:50]}... → INVALID: {hasil[:80]}")
+        print(f"[QA] {jawaban[:50]}... -> INVALID: {hasil[:80]}")
         # retry 1x dengan feedback
         retry_p = user_p + (
             f"\n\nPERINGATAN QA: Outputmu TIDAK sesuai topik. "
@@ -242,6 +242,7 @@ def run_simulation(
     tier: str = "free",
     scheduler_strategy: str = "influence_aware",
     n_crowd: int = 0,
+    data_transparency: dict | None = None,
 ) -> dict:
     """
     Jalankan simulasi multi-agen multi-ronde.
@@ -270,25 +271,13 @@ def run_simulation(
         + (0 if tier == "free" else 2)
     )
 
-    # ── Phase 8: Inisialisasi CrowdPool ──
-    crowd_pool: CrowdPool | None = None
-    if n_crowd > 0:
-        crowd_pool = CrowdPool(seed=hash(topik) % (2**31))
-        crowd_pool.generate(n=n_crowd)
-
     # ── Phase 2: Normalisasi agents ke AgentProfile ──
-    agent_profiles: list[AgentProfile] = []
+    agent_profiles: list[AgentProfile] = [AgentProfile(**a) for a in agents]
     agent_dicts: list[dict] = []
-    for a in agents:
-        if isinstance(a, AgentProfile):
-            profile = a
-            d = agent_profile_to_dict(profile)
-        else:
-            profile = agent_dict_to_profile(a)
-            d = dict(a)
+    for profile, d in zip(agent_profiles, agents):
+        d = dict(d)  # copy agar tidak mutasi original
         d.setdefault("_role_singkat", d["role"][:250].rstrip())
         _compute_gaya_str(d)
-        agent_profiles.append(profile)
         agent_dicts.append(d)
     agents = agent_dicts  # kode lama tetap pakai dict
 
@@ -536,9 +525,6 @@ def run_simulation(
             if briefing_real:
                 parts.append(f"Info konteks: {briefing_real[:500]}")
             parts.append("Buka diskusi dengan posisimu yang paling kuat tentang topik ini.")
-        elif ronde_ke == 1 and briefing_real:
-            parts.append(f"Info: {briefing_real[:500]}")
-
         # Phase 3: inject event impact note for this agent
         _event_impacts = event_impacts.get(intervensi, {}) if intervensi else {}
         impact_note = get_agent_impact_note(agen["nama"], _event_impacts)
@@ -738,9 +724,7 @@ def run_simulation(
         ronde_detail.append(output_ronde)
         pendapat_ronde_sebelumnya = pendapat_ronde_ini
 
-        if crowd_pool:
-            crowd_pool.update_from_llm_agents(pendapat_ronde_ini, ronde_ke)
-
+        # ponytail: CrowdPool removed — was always no-op for free tier
         if ronde_ke < jumlah_ronde:
             time.sleep(ROUND_DELAY)
 
@@ -765,10 +749,10 @@ def run_simulation(
     if tier == "free":
         analisis_raw = _analisis_fallback_text(topik, sentimen_agregat)
         pengaruh_map, volatilitas, _ = _build_ringkasan_agen(agents, sentimen_agregat)
-        aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
+        aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat, data_transparency)
     else:
         analisis_raw, aktor_analisis = _analisis_dan_aktor(
-            topik, log_diskusi, agents, sentimen_agregat
+            topik, log_diskusi, agents, sentimen_agregat, data_transparency
         )
     analisis_raw = _strip_emoji(analisis_raw)
 
@@ -808,16 +792,8 @@ def run_simulation(
         tier=tier,
     )
 
-    # BUG #4 FIX: wrap dalam try/except agar tidak crash jika to_dict() gagal
+    # ponytail: CrowdPool removed — crowd_data & crowd_distribution are always empty
     crowd_data = None
-    if crowd_pool:
-        try:
-            crowd_data = crowd_pool.to_dict()
-        except Exception as exc:
-            print(f"[Crowd] to_dict() gagal: {exc}")
-    crowd_distribution: dict[str, float] = {}
-    if crowd_data:
-        crowd_distribution = crowd_data.get("distribution", {})
 
     # FIX-C: Heuristic selalu jadi SINGLE SOURCE OF TRUTH untuk prediksi utama.
     # ML hanya eksperimental dan ditampilkan terpisah di explainability report.
@@ -858,9 +834,6 @@ def run_simulation(
             "event_count":        len(events),
             "agent_count":        len(simulation_state.agent_states),
             "crowd_size":         n_crowd,
-            "crowd_mendukung":    crowd_distribution.get("mendukung", 0),
-            "crowd_menolak":      crowd_distribution.get("menolak", 0),
-            "crowd_netral":       crowd_distribution.get("netral", 0),
         },
         "simulation_quality": simulation_quality,
         "runtime_mode": {
@@ -1001,6 +974,7 @@ def _analisis_dan_aktor(
     log_diskusi: str,
     agents: list[dict],
     sentimen_agregat: dict,
+    data_transparency: dict | None = None,
 ) -> tuple[str, dict]:
     nama_valid = list(sentimen_agregat.keys())
     pengaruh_map, volatilitas, ringkasan_agen = _build_ringkasan_agen(agents, sentimen_agregat)
@@ -1042,13 +1016,30 @@ def _analisis_dan_aktor(
         "- Maksimal 1-2 kalimat\n"
         "Contoh BURUK: 'Identifikasi kekhawatiran spesifik dan cari titik kompromi'\n"
         "Contoh BAGUS: 'Berikan kompensasi berupa subsidi silang untuk pelaku UMKM yang terdampak, dan jadwalkan dialog triwulan dengan perwakilan mereka'\n\n"
+        "Untuk aktor_kunci, isi cara_pendekatan dengan saran konkret dan spesifik ke topik untuk mempengaruhi aktor tersebut.\n\n"
         "Balas HANYA JSON valid:\n"
-        '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
+        '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"...","cara_pendekatan":"..."}],'
         '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
         '"aktor_penggerak":"...","rekomendasi":"...",'
         '"rekomendasi_strategis":["Rekomendasi 1 konkret...","Rekomendasi 2 konkret...","Rekomendasi 3 konkret..."],'
         '"kelompok_kritis":[{"nama":"...","alasan":"...","cara_pendekatan":"..."}]}'
     )
+    # ponytail: inject briefing note for empty/limited data
+    dp = data_transparency or {}
+    bs = dp.get("briefing_status", "")
+    if bs == "empty":
+        prompt_aktor += (
+            "\n\nCATATAN: Tidak ada data berita atau survei eksternal untuk topik ini. "
+            "Berikan rekomendasi berdasarkan analisis logis terhadap topik dan hasil diskusi agent, "
+            "TAPI tetap spesifik ke konteks topik — JANGAN generate saran generik yang bisa berlaku untuk topik apapun. "
+            "Jangan mengklaim ada data pendukung yang sebenarnya tidak tersedia."
+        )
+    elif bs == "limited":
+        source = "data survei" if dp.get("polling_reference_matched") else "briefing minim"
+        prompt_aktor += (
+            f"\n\nCATATAN: Data pendukung untuk topik ini terbatas ({source}). "
+            "Pertimbangkan keterbatasan ini dalam rekomendasi."
+        )
     raw = call_llm_json(
         "Analis diskusi sosial. Balas HANYA JSON valid.",
         prompt_aktor,
@@ -1079,7 +1070,12 @@ def _analisis_dan_aktor(
             })
         pg = raw.get("aktor_penggerak", "")
         if pg and pg != "-":
-            raw["aktor_penggerak"] = _resolve_nama(pg, pengaruh_map, nama_valid)
+            resolved = _resolve_nama(pg, pengaruh_map, nama_valid)
+            # ponytail: fallback ke top aktor_kunci kalo LLM hallucinate nama yg gak ada di roster
+            if resolved not in pengaruh_map:
+                kunci_llm = raw.get("aktor_kunci") or [{}]
+                resolved = kunci_llm[0].get("nama", "-") if kunci_llm else "-"
+            raw["aktor_penggerak"] = resolved
 
         aktor_analisis = {
             k: raw[k] for k in ("aktor_kunci", "swing_voter", "aktor_penggerak", "rekomendasi", "rekomendasi_strategis", "kelompok_kritis")
@@ -1104,6 +1100,17 @@ def _analisis_dan_aktor(
                 "- JANGAN tambahkan penjelasan di luar JSON array\n"
                 "- JANGAN gunakan markdown atau backtick"
             )
+            # ponytail: same briefing note for retry prompt
+            if bs == "empty":
+                prompt_rekom += (
+                    "\n\nCATATAN: Tidak ada data eksternal untuk topik ini. "
+                    "Tetap spesifik ke konteks — jangan berpura-pura ada data pendukung."
+                )
+            elif bs == "limited":
+                prompt_rekom += (
+                    "\n\nCATATAN: Data eksternal terbatas untuk topik ini. "
+                    "Pertimbangkan keterbatasan data dalam rekomendasi."
+                )
             raw_rekom_raw = call_llm(
                 "Kamu adalah konsultan strategi. Balas HANYA JSON array.",
                 prompt_rekom,
@@ -1112,16 +1119,16 @@ def _analisis_dan_aktor(
             )
             rekom_strat = _parse_rekomendasi(raw_rekom_raw or "")
             if not rekom_strat:
-                rekom_strat = _fallback_rekomendasi(agents, topik)
+                rekom_strat = _fallback_rekomendasi(agents, topik, data_transparency)
             aktor_analisis["rekomendasi_strategis"] = rekom_strat
 
     if not aktor_analisis:
-        aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
+        aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat, data_transparency)
 
     return analisis_raw, aktor_analisis
 
 
-def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict) -> dict:
+def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict, data_transparency: dict | None = None) -> dict:
     """
     BUG #5 & BUG #6 FIX: Fallback pure-Python tanpa LLM.
     FIX-6: Aktor kunci = INFLUENCE TINGGI + KONSISTENSI TINGGI (bukan volatilitas tinggi).
@@ -1137,6 +1144,145 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
             return round(1.0 - min(var, 1.0), 3)
         except Exception:
             return 1.0
+
+    def _cara_pendekatan_fallback(nama: str, pengaruh: float, konsistensi: float, skor: float) -> str:
+        """Generate cara_pendekatan berbasis data simulasi, dengan variasi per kategori aktor."""
+        sentimen_akhir = sentimen_agregat.get(nama, [0])[-1]
+        var = hash(nama) % 3  # deterministic 0..2
+
+        # Kategorisasi aktor via keyword di nama
+        nl = nama.lower()
+        if any(k in nl for k in ("jurnalis","media","wartawan","pers")):
+            kat = "media"
+        elif any(k in nl for k in ("pengusaha","pekerja","umkm","ekonomi","startup",
+                                   "bisnis","buruh","petani","nelayan","diaspora")):
+            kat = "ekonomi"
+        elif any(k in nl for k in ("pemerintah","tni","kepala daerah","dokter","nakes")):
+            kat = "institusi"
+        elif any(k in nl for k in ("aktivis","advokat","pengacara","akademisi","mahasiswa",
+                                   "ulama","guru","tokoh","hukum","ham","etikawan","minoritas")):
+            kat = "tokoh"
+        else:
+            kat = "umum"
+
+        if sentimen_akhir < -0.2:
+            t = {
+                "media": [
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Ajak diskusi redaksi untuk pahami keberatan mereka.",
+                    f"{nama} negatif (sentimen {sentimen_akhir:+.2f}). Beri akses eksklusif ke data verifikasi.",
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Briefing wartawan khusus dapat menjembatani kesenjangan.",
+                ],
+                "ekonomi": [
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Tekankan dampak bisnis dan insentif yang tersedia.",
+                    f"{nama} negatif (sentimen {sentimen_akhir:+.2f}). Sajikan studi kasus dan simulasi finansial.",
+                    f"{nama} menolak (sentimen {sentimen_akhir:+.2f}). Libatkan asosiasi usaha untuk dialog sektoral.",
+                ],
+                "institusi": [
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Koordinasi lintas sektor untuk identifikasi hambatan.",
+                    f"{nama} negatif (sentimen {sentimen_akhir:+.2f}). Siapkan policy brief dan data dampak institusional.",
+                    f"{nama} menolak (sentimen {sentimen_akhir:+.2f}). Jadwalkan pertemuan bilateral untuk bahas implementasi.",
+                ],
+                "tokoh": [
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Libatkan dalam forum diskusi untuk gali keberatan.",
+                    f"{nama} negatif (sentimen {sentimen_akhir:+.2f}). Ajak sebagai narasumber netral dengan data pendukung.",
+                    f"{nama} menolak (sentimen {sentimen_akhir:+.2f}). Pendekatan personal lewat jaringan kepercayaan diperlukan.",
+                ],
+                "umum": [
+                    f"{nama} resisten (sentimen {sentimen_akhir:+.2f}). Prioritaskan dialog personal untuk gali akar penolakan.",
+                    f"{nama} negatif (sentimen {sentimen_akhir:+.2f}). Sosialisasi bertahap dengan data konkret dapat mengubah persepsi.",
+                    f"{nama} menolak (sentimen {sentimen_akhir:+.2f}). Informasi terstruktur dan diskusi terbatas bisa membantu.",
+                ],
+            }
+            return t[kat][var]
+
+        if skor > 0.7:
+            t = {
+                "media": [
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Jadwalkan wawancara eksklusif untuk bangun hubungan strategis.",
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Libatkan sebagai mitra komunikasi utama di media.",
+                    f"{nama} prioritas utama — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Undang ke forum diskusi redaksi secara proaktif.",
+                ],
+                "ekonomi": [
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Libatkan dalam penyusunan kebijakan insentif.",
+                    f"{nama} prioritas — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Ajak sebagai mitra uji coba program baru.",
+                    f"{nama} pemain kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Jadwalkan forum bisnis untuk selaraskan perspektif.",
+                ],
+                "institusi": [
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Jadwalkan koordinasi lintas sektor untuk pembahasan kebijakan.",
+                    f"{nama} prioritas — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Libatkan dalam perumusan regulasi sejak tahap awal.",
+                    f"{nama} mitra strategis — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Siapkan nota dinas dan data pendukung untuk advokasi.",
+                ],
+                "tokoh": [
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Ajak sebagai mitra diskusi untuk bangun dukungan publik.",
+                    f"{nama} prioritas — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Libatkan sebagai narasumber di forum-forum strategis.",
+                    f"{nama} tokoh kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Dekati melalui jaringan komunitas untuk endors publik.",
+                ],
+                "umum": [
+                    f"{nama} aktor kunci — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Libatkan sejak awal sebagai mitra komunikasi utama.",
+                    f"{nama} prioritas — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Ajak diskusi strategis untuk selaraskan perspektif.",
+                    f"{nama} pemain penting — pengaruh {pengaruh:.0%}, konsisten (skor {skor:.2f}). Jadwalkan pertemuan rutin untuk jaga hubungan.",
+                ],
+            }
+            return t[kat][var]
+
+        if konsistensi < 0.5:
+            t = {
+                "media": [
+                    f"{nama} konsistensi rendah ({konsistensi:.0%}) — sikap masih bisa dibentuk. Undang ke forum diskusi redaksi.",
+                    f"{nama} belum konsisten ({konsistensi:.0%}) — berpotensi berubah. Beri akses data eksklusif untuk edukasi bertahap.",
+                    f"{nama} fluktuatif ({konsistensi:.0%}) — bisa diarahkan. Fasilitasi akses langsung ke pembuat kebijakan.",
+                ],
+                "ekonomi": [
+                    f"{nama} konsistensi rendah ({konsistensi:.0%}) — masih cair. Sajikan proyeksi bisnis jangka panjang yang meyakinkan.",
+                    f"{nama} belum konsisten ({konsistensi:.0%}) — pengaruh bisa dimenangkan. Tawarkan insentif dan kemudahan regulasi.",
+                    f"{nama} fluktuatif ({konsistensi:.0%}) — perlu pendekatan. Libatkan dalam uji kebijakan sebelum implementasi luas.",
+                ],
+                "institusi": [
+                    f"{nama} konsistensi rendah ({konsistensi:.0%}) — sikap bisa berubah. Siapkan data kinerja dan capaian program.",
+                    f"{nama} belum konsisten ({konsistensi:.0%}) — perlu advokasi. Kirim policy brief dan undang ke forum koordinasi.",
+                    f"{nama} fluktuatif ({konsistensi:.0%}) — potensi didapatkan. Jadwalkan rapat teknis untuk bahas implementasi.",
+                ],
+                "tokoh": [
+                    f"{nama} konsistensi rendah ({konsistensi:.0%}) — masih bisa diyakinkan. Ajak sebagai panelis diskusi publik.",
+                    f"{nama} belum konsisten ({konsistensi:.0%}) — terbuka untuk diajak. Beri platform untuk sampaikan pendapat.",
+                    f"{nama} fluktuatif ({konsistensi:.0%}) — potensial didukung. Libatkan dalam kegiatan komunitas dan sosialisasi.",
+                ],
+                "umum": [
+                    f"{nama} konsistensi rendah ({konsistensi:.0%}) — sikap masih bisa dibentuk. Beri informasi terstruktur dan libatkan diskusi.",
+                    f"{nama} belum konsisten ({konsistensi:.0%}) — terbuka untuk pendekatan. Sajikan argumen berbasis data relevan.",
+                    f"{nama} fluktuatif ({konsistensi:.0%}) — perlu perhatian. Beri info bertahap dengan contoh konkret.",
+                ],
+            }
+            return t[kat][var]
+
+        t = {
+            "media": [
+                f"Pantau {nama} secara berkala — pengaruh {pengaruh:.0%}, relevansi perlu diuji. Siapkan briefing jika diperlukan.",
+                f"{nama} perlu diobservasi (pengaruh {pengaruh:.0%}). Uji sentimen mereka secara periodik untuk deteksi pergeseran opini.",
+                f"Monitoring {nama} lanjutan — pengaruh {pengaruh:.0%} belum optimal. Info bertahap bisa uji keterlibatan mereka.",
+            ],
+            "ekonomi": [
+                f"Pantau {nama} secara berkala — pengaruh {pengaruh:.0%}. Siapkan data insentif jika mereka mulai tertarik.",
+                f"{nama} perlu diobservasi (pengaruh {pengaruh:.0%}). Kirim berkala laporan dampak ekonomi kebijakan.",
+                f"Monitoring {nama} — pengaruh {pengaruh:.0%}. Uji ketertarikan lewat undangan forum bisnis terbatas.",
+            ],
+            "institusi": [
+                f"Pantau {nama} secara berkala — pengaruh {pengaruh:.0%}. Kirimkan laporan capaian program secara periodik.",
+                f"{nama} perlu diobservasi (pengaruh {pengaruh:.0%}). Siapkan notula rapat koordinasi untuk informasi terkini.",
+                f"Monitoring {nama} — pengaruh {pengaruh:.0%}. Undang ke forum koordinasi rutin untuk jaga engagement.",
+            ],
+            "tokoh": [
+                f"Pantau {nama} secara berkala — pengaruh {pengaruh:.0%}. Ajak diskusi santai untuk jaga hubungan.",
+                f"{nama} perlu diobservasi (pengaruh {pengaruh:.0%}). Kirim undangan forum diskusi untuk ukur minat.",
+                f"Monitoring {nama} — pengaruh {pengaruh:.0%}. Beri ruang partisipasi di kegiatan publik.",
+            ],
+            "umum": [
+                f"Pantau {nama} secara berkala — pengaruh {pengaruh:.0%}. Relevansinya perlu diuji lebih lanjut.",
+                f"{nama} perlu diobservasi (pengaruh {pengaruh:.0%}). Beri informasi bertahap dan ukur respons.",
+                f"Monitoring {nama} — pengaruh {pengaruh:.0%}. Siapkan materi engagement jika sentimen berubah.",
+            ],
+        }
+        return t[kat][var]
 
     # Composite score: pengaruh × (0.7 + 0.3 × konsistensi)
     # FIX-6: Agen dengan pengaruh tinggi DAN konsisten = aktor kunci
@@ -1154,6 +1300,20 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
         key=lambda x: -x[1]
     )
 
+    # Build rekomendasi_strategis with optional data note
+    rekom_strat = [
+        f"Prioritas utama: dekati {sp_composite[0][0]} — pengaruh tinggi, bisa jadi penggerak opini. Ajukan diskusi personal untuk menyelaraskan perspektif.",
+        f"Framing narasi: Gunakan argumen berbasis data dan manfaat langsung untuk publik — ini yang paling mungkin diterima oleh kelompok pro.",
+        f"Antisipasi penolakan: Pantau pergerakan {sv[0][0] if sv else 'aktor paling volatil'} — kelompok ini paling mungkin berubah arah dan memengaruhi yang lain."
+    ] if sp_composite else [
+        "Belum ada data cukup untuk rekomendasi strategis.",
+    ]
+    if (data_transparency or {}).get("briefing_status") in ("empty", "limited"):
+        rekom_strat.append(
+            "Catatan: Rekomendasi ini disusun tanpa data eksternal (berita/survei) yang memadai untuk topik ini — "
+            "pertimbangkan riset tambahan sebelum mengambil keputusan."
+        )
+
     return {
         "aktor_kunci": [
             {
@@ -1169,6 +1329,12 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
                 "composite_score": composite_scores.get(n, 0),
                 "sikap_akhir":   sentimen_agregat.get(n, [0])[-1],
                 "sikap_label":   _label_sentimen(sentimen_agregat.get(n, [0])[-1]),
+                "cara_pendekatan": _cara_pendekatan_fallback(
+                    n,
+                    pengaruh_map.get(n, 0.5),
+                    _konsistensi(n),
+                    composite_scores.get(n, 0),
+                ),
             }
             for n, _ in sp_composite[:3]
         ],
@@ -1189,13 +1355,7 @@ def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dic
             f"Waspadai {sv[0][0] if sv else '-'} sebagai swing voter."
             if sp_composite else "Fokus pada aktor paling berpengaruh."
         ),
-        "rekomendasi_strategis": [
-            f"Prioritas utama: dekati {sp_composite[0][0]} — pengaruh tinggi, bisa jadi penggerak opini. Ajukan diskusi personal untuk menyelaraskan perspektif.",
-            f"Framing narasi: Gunakan argumen berbasis data dan manfaat langsung untuk publik — ini yang paling mungkin diterima oleh kelompok pro.",
-            f"Antisipasi penolakan: Pantau pergerakan {sv[0][0] if sv else 'aktor paling volatil'} — kelompok ini paling mungkin berubah arah dan memengaruhi yang lain."
-        ] if sp_composite else [
-            "Belum ada data cukup untuk rekomendasi strategis.",
-        ],
+        "rekomendasi_strategis": rekom_strat,
         "kelompok_kritis": [
             {
                 "nama": n,
@@ -1251,7 +1411,7 @@ def _parse_rekomendasi(raw_text: str) -> list:
     return []
 
 
-def _fallback_rekomendasi(agents: list[dict], topik: str) -> list:
+def _fallback_rekomendasi(agents: list[dict], topik: str, data_transparency: dict | None = None) -> list:
     """Generate rekomendasi berbasis data agen kalau LLM gagal total."""
     penolak = [a for a in agents if a.get('sentimen', {}).get('label') == 'negatif']
     pendukung = [a for a in agents if a.get('sentimen', {}).get('label') == 'positif']
@@ -1259,11 +1419,18 @@ def _fallback_rekomendasi(agents: list[dict], topik: str) -> list:
     nama_penolak = penolak[0]['nama'] if penolak else 'kelompok penolak'
     nama_pendukung = pendukung[0]['nama'] if pendukung else 'kelompok pendukung'
 
-    return [
+    result = [
         f"Prioritaskan pendekatan ke {nama_penolak} — kelompok ini memiliki penolakan terkuat dan perlu dilibatkan dalam dialog sebelum kebijakan diimplementasikan.",
         f"Gunakan argumen dari {nama_pendukung} sebagai basis narasi publik — framing yang menekankan manfaat konkret lebih efektif dari data statistik.",
         f"Lakukan sosialisasi bertahap dengan melibatkan tokoh lokal yang dipercaya komunitas penolak untuk mengurangi resistensi."
     ]
+    dp = data_transparency or {}
+    if dp.get("briefing_status") in ("empty", "limited"):
+        result.append(
+            "Catatan: Rekomendasi ini disusun tanpa data eksternal (berita/survei) yang memadai untuk topik ini — "
+            "pertimbangkan riset tambahan sebelum mengambil keputusan."
+        )
+    return result
 
 
 def _build_simulation_quality(
@@ -1411,57 +1578,6 @@ def _analisis_fallback_text(topik: str, sentimen_agregat: dict) -> str:
         f"Ringkasan posisi akhir: {', '.join(ringkas_agen)}.\n"
         f"PREDIKSI SKENARIO: Konsensus {prediksi[0]}%, Polarisasi {prediksi[1]}%, Status Quo {prediksi[2]}%"
     )
-
-
-def analyze_key_actors(
-    topik: str,
-    agents: list[dict],
-    ronde_detail: list[dict],
-    sentimen_agregat: dict,
-) -> dict:
-    pengaruh_map, volatilitas, ringkasan_agen = _build_ringkasan_agen(agents, sentimen_agregat)
-    nama_valid = list(sentimen_agregat.keys())
-
-    prompt = (
-        f"Topik: {topik}\nAgen: {', '.join(nama_valid)}\n"
-        + "\n".join(ringkasan_agen) + "\n\n"
-        "Balas HANYA JSON valid:\n"
-        '{"aktor_kunci":[{"nama":"...","alasan":"...","dampak_jika_berubah":"..."}],'
-        '"swing_voter":[{"nama":"...","alasan_volatil":"...","potensi_arah":"positif|negatif"}],'
-        '"aktor_penggerak":"...","rekomendasi":"...",'
-        '"rekomendasi_strategis":["Rekomendasi 1 konkret...","Rekomendasi 2 konkret...","Rekomendasi 3 konkret..."],'
-        '"kelompok_kritis":[{"nama":"...","alasan":"...","cara_pendekatan":"..."}]}'
-    )
-    hasil = call_llm_json(
-        "Analis diskusi sosial. Balas HANYA JSON valid.",
-        prompt, max_tokens=500, model=MODEL_ANALYSIS
-    )
-
-    if isinstance(hasil, dict) and hasil:
-        for item in hasil.get("aktor_kunci", []):
-            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
-            item["nama"] = nama
-            tren = sentimen_agregat.get(nama, [])
-            item.update({
-                "pengaruh_skor": pengaruh_map.get(nama, 0.5),
-                "sikap_akhir":   tren[-1] if tren else 0.0,
-                "sikap_label":   _label_sentimen(tren[-1] if tren else 0.0),
-            })
-        for item in hasil.get("swing_voter", []):
-            nama = _resolve_nama(item.get("nama", ""), pengaruh_map, nama_valid)
-            item["nama"] = nama
-            tren = sentimen_agregat.get(nama, [])
-            item.update({
-                "volatilitas": volatilitas.get(nama, 0.0),
-                "sikap_awal":  tren[0]  if tren else 0.0,
-                "sikap_akhir": tren[-1] if tren else 0.0,
-            })
-        pg = hasil.get("aktor_penggerak", "")
-        if pg and pg != "-":
-            hasil["aktor_penggerak"] = _resolve_nama(pg, pengaruh_map, nama_valid)
-        return hasil
-
-    return _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat)
 
 
 def _parse_prediksi(teks: str) -> dict:

@@ -420,7 +420,7 @@ Input (scenario) → Agent Registry → Real Context (scraper) → Simulation Lo
 | Component | Function | When | Tokens (est.) | Cost |
 |-----------|----------|------|---------------|------|
 | `simulation.py` | `generate_response()` | Per agent × round | ~500 | HIGH |
-| `simulation.py` | `generate_qa_check()` | Per round (Normal) | ~200 | MEDIUM |
+| `simulation.py` | `_qa_check_topic()` | Per agent statement | ~200 | MEDIUM |
 | `simulation.py` | `analyze_scenario()` | Per simulation (Normal) | ~300 | LOW |
 | `simulation.py` | `identify_key_actors()` | Per simulation (Normal) | ~200 | LOW |
 | `sentiment.py` | `analyze_sentiment(mode="llm")` | Per agent (if LLM mode) | ~100 | LOW |

@@ -1,7 +1,7 @@
 "use client";
 import { eksporPDF } from "../utils/eksporpdf";
 import { eksporCSV, eksporWord } from "../utils/eksporlainnya";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 
 // ─── Sentiment Helpers ──────────────────────────────────────────
@@ -30,19 +30,22 @@ const DESKRIPSI_SKENARIO = {
 };
 
 const INSIGHT_SKENARIO = {
-  "Semua Setuju": "Topik ini berpotensi membangun konsensus luas di masyarakat —",
-  "Konsensus": "Topik ini berpotensi membangun konsensus luas di masyarakat —",
-  "Masyarakat Terpecah": "Topik ini berpotensi memecah belah masyarakat —",
-  "Polarisasi": "Topik ini berpotensi memecah belah masyarakat —",
-  "Tidak Ada Perubahan": "Topik ini cenderung tidak mengubah opini publik secara signifikan —",
-  "Status Quo": "Topik ini cenderung tidak mengubah opini publik secara signifikan —",
+  "Semua Setuju": "Konsensus luas tercapai —",
+  "Konsensus": "Konsensus luas tercapai —",
+  "Masyarakat Terpecah": "Masyarakat terpecah —",
+  "Polarisasi": "Masyarakat terpecah —",
+  "Tidak Ada Perubahan": "Opini publik stagnan —",
+  "Status Quo": "Opini publik stagnan —",
 };
 const WARNA_AGEN = ["#cc785c","#5db872","#e8a55a","#c64545","#5db8a6","#a09d96","#6c6a64","#252523"];
 
 function bacaData(payload, pesan = "Data tidak ditemukan.") {
   if (!payload || typeof payload !== "object" || !payload.data)
     throw new Error(payload?.detail || payload?.message || pesan);
-  return payload.data;
+  const hasil = payload.data;
+  if (payload.konteks_real?.data_transparency)
+    hasil.data_transparency = payload.konteks_real.data_transparency;
+  return hasil;
 }
 
 // ─── Badge Sentimen ──────────────────────────────────────────────
@@ -97,6 +100,13 @@ const getAlasanKritis = (nama, adalahPendukung = false) => {
   return "Menolak keras berdasarkan pengalaman langsung dan kekhawatiran yang belum terjawab oleh pembuat kebijakan.";
 };
 
+const truncateAtWord = (teks, maxChars) => {
+  if (!teks || teks.length <= maxChars) return teks;
+  const truncated = teks.slice(0, maxChars);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return (lastSpace > maxChars * 0.5 ? truncated.slice(0, lastSpace) : truncated) + '…';
+};
+
 const beresinTeksAkhir = (teks) => {
   if (!teks) return teks;
   return teks
@@ -117,11 +127,18 @@ const InsightHero = ({ prediksi, statusSimulasi, topik }) => {
   if (!sorted.length) return null;
   const [skenario, prob] = sorted[0];
   const intro = INSIGHT_SKENARIO[skenario] ?? `Skenario "${skenario}" menjadi yang paling mungkin —`;
-  const kalimat = `${intro} ${prob}% probabilitas.`;
+  const listOthers = sorted.slice(1).map(([s, p]) => `${s} (${p}%)`);
+  // ponytail: natural Indonesian — "dan" before last item
+  const others = listOthers.length > 1
+    ? listOthers.slice(0, -1).join(', ') + ' dan ' + listOthers[listOthers.length - 1]
+    : listOthers[0] ?? '';
+  const kalimat = others
+    ? `${intro} ${prob}%, mengungguli ${others}.`
+    : `${intro} ${prob}% probabilitas.`;
   return (
     <div className="rounded-[12px] border border-[#cc785c]/20 bg-[#cc785c]/5 px-6 py-5">
       <p className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#6c6a64] mb-2">Kesimpulan</p>
-      <p className="text-lg leading-relaxed text-[#141413]" style={{ fontFamily: "var(--font-heading, sans-serif" }}>
+      <p className="text-lg leading-relaxed text-[#141413]" style={{ fontFamily: "var(--font-heading, sans-serif)" }}>
         &ldquo;{kalimat}&rdquo;
       </p>
     </div>
@@ -139,10 +156,10 @@ const HeaderRonde = ({ ronde, total }) => (
 );
 
 const TranskripRisalah = ({ daftarRonde, rondeAktif, setRondeAktif }) => {
-  if (!daftarRonde?.length) return null;
   const [risalahTerbuka, setRisalahTerbuka] = useState(false);
+  if (!daftarRonde?.length) return null;
   const agenPertama = daftarRonde[0]?.agen?.[0];
-  const previewTeks = agenPertama?.pendapat ? agenPertama.pendapat.slice(0, 200) + '…' : '';
+  const previewTeks = truncateAtWord(agenPertama?.pendapat, 200) ?? '';
   return (
     <section>
       <div className="flex items-center justify-between mb-6">
@@ -150,7 +167,7 @@ const TranskripRisalah = ({ daftarRonde, rondeAktif, setRondeAktif }) => {
         {daftarRonde.length > 1 && (
           <div className="flex items-center gap-1.5">
             {daftarRonde.map((_, i) => (
-              <button key={i} onClick={() => setRondeAktif(i)}
+              <button key={`round-${i}`} onClick={() => setRondeAktif(i)}
                 className={`h-7 min-w-[32px] rounded-[6px] px-2 text-[11px] font-medium transition ${
                   rondeAktif === i ? "bg-[#cc785c] text-white" : "bg-[#efe9de] text-[#6c6a64] hover:bg-[#e8e0d2]"
                 }`}>
@@ -353,7 +370,7 @@ const SectionRisiko = ({ risikoUtama }) => {
   );
 };
 
-const SectionRekomendasi = ({ rekomendasi, rekomendasiStrategis, aktorKunci, sentimenAgr }) => {
+const SectionRekomendasi = ({ rekomendasi, rekomendasiStrategis, aktorKunci, sentimenAgr, tier }) => {
   const ada = rekomendasi || rekomendasiStrategis?.length > 0 || aktorKunci?.length > 0;
   if (!ada) return null;
   const prioritas = aktorKunci?.[0] ?? null;
@@ -369,16 +386,20 @@ const SectionRekomendasi = ({ rekomendasi, rekomendasiStrategis, aktorKunci, sen
   const swing = cariSwing();
   return (
     <section>
-      <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Rekomendasi Strategis</h2>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <h2 className="display-sm" style={{ fontWeight: 400 }}>Rekomendasi Strategis</h2>
+        {tier === "free" && (
+          <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-[#efe9de] text-[#6c6a64] font-medium">
+            ⚡ Mode Cepat — rekomendasi umum berbasis statistik
+          </span>
+        )}
+      </div>
       <div className="card space-y-5">
         {prioritas && (
           <div>
             <p className="text-[13px] font-bold text-[#141413] uppercase tracking-[0.5px] mb-3">🎯 Prioritas Utama</p>
             <div className="rounded-[12px] border border-[#cc785c]/20 bg-[#cc785c]/5 p-4">
-              <p className="text-sm font-semibold text-[#141413] mb-1">
-                Aktor paling berpengaruh: {prioritas.nama}{prioritas.sikap_label ? ` (${prioritas.sikap_label})` : ""}
-              </p>
-              <p className="text-sm leading-relaxed text-[#3d3d3a]">→ {getPendekatan(prioritas.nama)}</p>
+              <p className="text-sm leading-relaxed text-[#3d3d3a]">→ {prioritas.cara_pendekatan || getPendekatan(prioritas.nama)}</p>
             </div>
           </div>
         )}
@@ -398,7 +419,7 @@ const SectionRekomendasi = ({ rekomendasi, rekomendasiStrategis, aktorKunci, sen
             <p className="text-[13px] font-medium text-[#6c6a64] uppercase tracking-[0.5px] mb-3">Langkah tambahan:</p>
             <div className="space-y-3">
               {rekomendasiStrategis.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
+                <div key={`rec-${i}`} className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-[#cc785c]/10 border border-[#cc785c]/25 flex items-center justify-center text-xs font-bold text-[#cc785c] shrink-0 mt-0.5">
                     {i + 1}
                   </div>
@@ -421,18 +442,18 @@ const SectionKelompokKritis = ({ kelompokKritis }) => {
         <span className="text-sm">⚠️</span>
         <p className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#141413]">Perlu Perhatian</p>
       </div>
-      <h2 className="display-sm mb-6" style={{ fontWeight: 400 }}>Kelompok yang Perlu Dinetralisir</h2>
+      <h2 className="display-sm mb-6" style={{ fontWeight: 400 }}>Kelompok Resisten</h2>
       <div className="space-y-3">
-        {kelompokKritis.map((k, i) => (
-          <div key={i} className="rounded-[12px] border border-[#c64545]/25 bg-[#c64545]/5 p-4">
+        {kelompokKritis.map((k) => (
+          <div key={k.nama} className="rounded-[12px] border border-[#c64545]/25 bg-[#c64545]/5 p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="h-7 w-7 rounded-full bg-[#c64545]/10 border border-[#c64545]/20 flex items-center justify-center text-xs font-bold text-[#c64545] shrink-0">
                 {k.nama.slice(0, 2).toUpperCase()}
               </div>
               <span className="text-sm font-semibold text-[#141413]">{k.nama}</span>
             </div>
-            <p className="text-xs text-[#6c6a64] mb-1"><span className="text-[#c64545] font-medium">Kenapa kritis:</span> {getAlasanKritis(k.nama)}</p>
-            <p className="text-xs text-[#3d3d3a]"><span className="text-[#d4a017] font-medium">Cara pendekatan:</span> {getPendekatan(k.nama)}</p>
+            <p className="text-xs text-[#6c6a64] mb-1"><span className="text-[#c64545] font-medium">Kenapa kritis:</span> {k.alasan || getAlasanKritis(k.nama)}</p>
+            <p className="text-xs text-[#3d3d3a]"><span className="text-[#d4a017] font-medium">Cara pendekatan:</span> {k.cara_pendekatan || getPendekatan(k.nama)}</p>
           </div>
         ))}
       </div>
@@ -452,7 +473,7 @@ const SectionAktorKunci = ({ aktorKunci, penggerak }) => {
             const lb = a.sikap_label ?? "Netral";
             const lbWarna = lb === "Mendukung" ? "#5db872" : lb === "Menolak" ? "#c64545" : "#6c6a64";
             return (
-              <div key={i} className="rounded-[12px] border border-[#e6dfd8] bg-[#faf9f5] p-4">
+              <div key={a.nama} className="rounded-[12px] border border-[#e6dfd8] bg-[#faf9f5] p-4">
                 <div className="flex items-center gap-2 mb-1.5">
                   <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-black shrink-0"
                     style={{ backgroundColor: w + "20", border: `1.5px solid ${w}`, color: w }}>
@@ -487,7 +508,7 @@ const SectionAktorKunci = ({ aktorKunci, penggerak }) => {
 //  MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════
 export default function HalamanSimulasi() {
-  const [terpasang,       setTerpasang]       = useState(false);
+  const [terpasang]       = useState(true);
   const [topik,           setTopik]           = useState("");
   const [kategori,        setKategori]        = useState("Umum");
   const [jumlahRonde,     setJumlahRonde]     = useState(3);
@@ -501,8 +522,6 @@ export default function HalamanSimulasi() {
   const inputRef = useRef(null);
   const hasilRef = useRef(null);
   const apiBase  = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-  useEffect(() => { setTerpasang(true); }, []);
 
   const mulaiAnalisis = async () => {
     if (!topik.trim()) { inputRef.current?.focus(); return; }
@@ -519,7 +538,9 @@ export default function HalamanSimulasi() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Permintaan gagal.");
+        alert("❌ " + (err.detail || "Permintaan gagal."));
+        setMemuat(false);
+        return;
       }
       const data = await res.json();
       setHasil(bacaData(data, "Respons tidak berisi data."));
@@ -559,7 +580,7 @@ export default function HalamanSimulasi() {
     })
     .join(" ")
     .replace(/\*{1,2}/g, "");
-  const ringkasan = ringkasanPenuh ? ringkasanFull : ringkasanFull.slice(0, 400);
+  const ringkasan = ringkasanPenuh ? ringkasanFull : truncateAtWord(ringkasanFull, 400);
   const ringkasanTerpotong = ringkasanFull.length > 400;
 
   const jmlMendukung = agenAkhir.filter(a => a.sentimen?.label === "positif").length;
@@ -594,25 +615,6 @@ export default function HalamanSimulasi() {
 
   return (
     <div className="flex flex-col bg-[#faf9f5] min-h-screen">
-
-      {/* ════════ HEADER ════════ */}
-      <div className="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-sm text-[#6c6a64] hover:text-[#141413] transition">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Beranda
-          </Link>
-          <div className="flex items-center gap-2">
-            <span className="text-lg tracking-tight font-[400] text-[#141413]"
-              style={{ fontFamily: "var(--font-heading, sans-serif" }}>
-              VoxSwarm
-            </span>
-            <span className="badge-pill text-[10px]">Simulasi</span>
-          </div>
-        </div>
-      </div>
 
       {/* ════════ HERO + FORM — satu wrapper agar lebar selalu sama ════════ */}
       <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
@@ -674,13 +676,15 @@ export default function HalamanSimulasi() {
                 <button onClick={() => setTier("free")}
                   className={`rounded-[9999px] px-3 py-1.5 text-xs font-medium transition ${
                     tier === "free" ? "bg-[#cc785c] text-white" : "bg-[#efe9de] text-[#6c6a64] hover:bg-[#e8e0d2]"
-                  }`}>
+                  }`}
+                  title="Rekomendasi disusun otomatis dari data statistik (bukan analisis LLM). Pilih Lengkap untuk rekomendasi yang digali lebih dalam dari diskusi.">
                   Cepat
                 </button>
                 <button onClick={() => setTier("normal")}
                   className={`rounded-[9999px] px-3 py-1.5 text-xs font-medium transition ${
                     tier === "normal" ? "bg-[#cc785c] text-white" : "bg-[#efe9de] text-[#6c6a64] hover:bg-[#e8e0d2]"
-                  }`}>
+                  }`}
+                  title="Rekomendasi dianalisis LLM berdasarkan hasil diskusi & data konteks.">
                   Lengkap
                 </button>
               </div>
@@ -774,6 +778,23 @@ export default function HalamanSimulasi() {
                 ⚠ {warningTopik}
               </span>
             )}
+            {(() => {
+              const dt = hasil?.data_transparency;
+              if (!dt || dt.briefing_status === "full") return null;
+              const isEmpty = dt.briefing_status === "empty";
+              const label = isEmpty
+                ? "Briefing Kosong"
+                : dt.polling_reference_matched
+                  ? "Briefing dari Data Survei"
+                  : "Briefing Terbatas";
+              const bg = isEmpty ? "bg-red-100 text-red-700 border-red-200" : "bg-amber-100 text-amber-700 border-amber-200";
+              return (
+                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-3 py-1 border ${bg}`}
+                      title={dt.note}>
+                  {isEmpty ? "⚠" : "📋"} {label}
+                </span>
+              );
+            })()}
           </div>
 
           {ringkasan && (
@@ -790,7 +811,7 @@ export default function HalamanSimulasi() {
 
           <InsightHero prediksi={prediksi} statusSimulasi={statusSimulasi} topik={topik} />
           <SectionRisiko risikoUtama={risikoUtama} />
-          <SectionRekomendasi rekomendasi={rekomendasi} rekomendasiStrategis={rekomendasiStrategis} aktorKunci={aktorKunci} sentimenAgr={sentimenAgr} />
+          <SectionRekomendasi rekomendasi={rekomendasi} rekomendasiStrategis={rekomendasiStrategis} aktorKunci={aktorKunci} sentimenAgr={sentimenAgr} tier={tier} />
           <SectionAktorKunci aktorKunci={aktorKunci} penggerak={penggerak} />
           <SectionKelompokKritis kelompokKritis={kelompokKritis} />
 
@@ -886,14 +907,7 @@ export default function HalamanSimulasi() {
         </div>
       )}
 
-      <style jsx global>{`
-        @media print {
-          @page { size: A4 portrait; margin: 15mm 18mm; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body, main { background: #fff !important; color: #141413 !important; }
-          .print-hidden { display: none !important; }
-        }
-      `}</style>
+
     </div>
   );
 }

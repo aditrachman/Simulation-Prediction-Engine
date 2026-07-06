@@ -10,8 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any
+
 
 from .metrics import (
     compute_polarization,
@@ -345,62 +344,6 @@ def generate_report(hasil: dict) -> dict:
         "limitations": limitations,
     }
 
-# Dataclass for explainability report (backward compatibility)
-@dataclass
-class ExplainabilityReport:
-    # Core legacy fields with defaults for flexible init
-    ringkasan: str = ""
-    penyebab: List[str] = field(default_factory=list)
-    konflik: str = ""
-    aktor: List[str] = field(default_factory=list)
-    events: List[str] = field(default_factory=list)
-    keyakinan: str = ""
-    prediksi_comparison: Dict[str, Any] = field(default_factory=dict)
-    disclaimer: str = field(
-        default="VoxSwarm adalah alat eksplorasi dan referensi awal, bukan pengganti survei atau riset empiris. Hasil simulasi sangat bergantung pada konfigurasi agen dan topik yang diberikan. Gunakan sebagai bahan pertimbangan, bukan keputusan final."
-    )
-    # New fields required by tests
-    skenario: str = ""
-    skenario_probability: Dict[str, int] = field(default_factory=dict)
-    skenario_definition: str = ""
-    phenomenon_summary: str = ""
-    group_breakdown: List[Dict[str, Any]] = field(default_factory=list)
-    key_driver: str = ""
-    key_driver_impact: Any = None
-    swing_voters: List[str] = field(default_factory=list)
-    main_conflict: str = ""
-    confidence: Dict[str, Any] = field(default_factory=dict)
-    limitations: List[str] = field(default_factory=list)
 
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Return a dictionary with legacy and new keys expected by tests."""
-        base = {
-            "ringkasan": self.ringkasan,
-            "penyebab": self.penyebab,
-            "konflik": self.konflik,
-            "aktor": self.aktor,
-            "events": self.events,
-            "keyakinan": self.keyakinan,
-            "prediksi_comparison": self.prediksi_comparison,
-            "disclaimer": self.disclaimer,
-        }
-        # Add new fields
-        base.update(
-            {
-                "skenario": self.skenario,
-                "skenario_probability": self.skenario_probability,
-                "skenario_definition": self.skenario_definition,
-                "phenomenon_summary": self.phenomenon_summary,
-                "group_breakdown": self.group_breakdown,
-                "key_driver": self.key_driver,
-                "key_driver_impact": self.key_driver_impact,
-                "swing_voters": self.swing_voters,
-                "main_conflict": self.main_conflict,
-                "confidence": self.confidence,
-                "limitations": self.limitations,
-            }
-        )
-        return base
 
 

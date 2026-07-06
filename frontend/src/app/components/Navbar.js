@@ -17,7 +17,7 @@ export default function Navbar() {
         <Link href="/" className="flex items-center gap-2 no-underline">
           <span
             className="text-lg tracking-tight"
-            className="tracking-tight" style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, color: "#141413", letterSpacing: "-0.02em" }}
+            style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, color: "#141413", letterSpacing: "-0.02em" }}
           >
             VoxSwarm
           </span>
@@ -53,7 +53,7 @@ export default function Navbar() {
           Mulai Simulasi
         </Link>
 
-        <button className="flex h-10 w-10 items-center justify-center md:hidden" aria-label="Menu">
+        <button type="button" className="flex h-10 w-10 items-center justify-center md:hidden" aria-label="Menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#141413" strokeWidth="1.5" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="12" x2="21" y2="12" />

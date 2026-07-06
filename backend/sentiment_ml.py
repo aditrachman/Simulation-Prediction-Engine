@@ -493,6 +493,36 @@ def _load_model() -> Optional[Pipeline]:
     return None
 
 
+# ── Opsi B: implicit negative keyword patterns ────────────────────────────
+# ponytail: pattern-based, bukan rule-based keyword exact match.
+# Cocok buat kalimat skeptis implisit yang model TF-IDF sering miss.
+
+_IMPLICIT_NEG_PATTERNS = [
+    # "belum" + kata evaluatif
+    r'\bbelum\s+(terbukti|efektif|berhasil|merata|optimal|tercapai|terpenuhi)',
+    r'\bbelum\s+(bisa|dapat)\s+(dibilang|dikatakan|dianggap)',
+    # "perlu" + evaluasi ulang
+    r'\bperlu\s+(ditinjau|dievaluasi|dikaji|dipertanyakan|direvisi|dipertimbangkan)\s+(ulang|kembali)?',
+    # "masih" + masalah
+    r'\bmasih\s+(banyak|jauh|kurang|belum|minim|rendah)',
+    # keraguan eksplisit
+    r'\b(meragukan|dipertanyakan|skeptis|pesimis)\b',
+    r'\bsulit\s+(dipercaya|diterima|dibayangkan|direalisasikan)',
+    r'\bsusah\s+(dipercaya|diterima|dibayangkan)',
+    # "tidak" + kata positif
+    r'\btidak\s+(efektif|berhasil|tepat|sesuai|optimal|jelas|transparan)',
+    # pertanyaan retoris tentang efektivitas
+    r'\b(apakah|seberapa)\s+(efektif|tepat|berhasil|siap)',
+    r'\bbukannya\s+(membantu|mempermudah|memperbaiki).*justru',
+]
+_IMPLICIT_NEG_COMPILED = [re.compile(p, re.IGNORECASE) for p in _IMPLICIT_NEG_PATTERNS]
+
+
+def _has_implicit_negative(teks: str) -> bool:
+    """Cek apakah teks mengandung pola skeptis implisit (tanpa kata negatif eksplisit)."""
+    return any(p.search(teks) for p in _IMPLICIT_NEG_COMPILED)
+
+
 def predict(text: str) -> Optional[dict]:
     """
     Prediksi sentimen teks.
@@ -525,11 +555,29 @@ def predict(text: str) -> Optional[dict]:
         elif label == "negatif":
             skor = -(confidence * 0.8 + 0.2)
         else:
-            skor = 0.0
+            # ponytail: distribusi prob untuk reflect keraguan model
+            # Sebelumnya: skor 0.0 selalu → buang info confidence.
+            # Sekarang: condong*(1-confidence) agar keraguan model tercermin.
+            # Contoh: 51% netral, 30% positif, 19% negatif → condong=0.11, (1-0.51)=0.49 → skor=0.054
+            # Contoh: 95% netral, 3% positif, 2% negatif → condong=0.01, (1-0.95)=0.05 → skor≈0.0
+            prob_pos = float(probs[list(classes).index('positif')]) if 'positif' in classes else 0.0
+            prob_neg = float(probs[list(classes).index('negatif')]) if 'negatif' in classes else 0.0
+            condong = prob_pos - prob_neg
+            skor = round(condong * (1.0 - confidence), 4)
 
         skor = max(-1.0, min(1.0, round(skor, 2)))
+        skor_final = skor
 
-        return {"label": label, "skor": skor, "confidence": round(confidence, 3)}
+        # Opsi B: threshold adjustment — netral tipis + sinyal negatif implisit
+        if label == "netral" and confidence < 0.6:
+            if _has_implicit_negative(cleaned):
+                # Confidence rendah + ada sinyal negatif → override ke negatif ringan
+                # skor berdasarkan confidence (makin yakin netral = makin lemah override)
+                skor_neg = -(confidence * 0.3 + 0.1)  # -0.1 sd -0.28
+                skor_final = round(max(-1.0, min(1.0, skor_neg)), 2)
+                label = "negatif"
+
+        return {"label": label, "skor": skor_final, "confidence": round(confidence, 3)}
 
     except Exception as exc:
         print(f"[sentiment_ml] Predict error: {exc}")

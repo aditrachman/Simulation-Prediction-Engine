@@ -3,6 +3,13 @@
 # data graf untuk visualisasi frontend, dukungan agen custom dari frontend,
 # ML Prediction Layer (v3.1), dan Feedback Loop / Ground Truth (v3.2).
 
+import sys
+import io
+# Fix Unicode di Windows — stdout encoding jangan CP1252
+# mencegah crash print() dengan karakter non-ASCII (→, —, •, dll)
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import os
 import threading
 import time
@@ -13,14 +20,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
+import re
+
 from backend.agents import get_agents, get_all_categories
-from backend.agent_factory import get_contextual_agents
+from backend.agent_factory import get_contextual_agents, propose_llm_agents, _is_semantic_duplicate
 from backend.simulation import run_simulation
 from backend.llm import call_llm, call_llm_json, MODEL_AGENT, MODEL_ANALYSIS
 from backend.sentiment import score_sentiment
 from backend import sentiment_ml
 from backend.llm import clear_llm_cache, _llm_cache, _llm_cache_lock, CACHE_TTL
-from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache
+from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_cache, compute_source_diversity_scores
 from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model
 from backend.feedback import submit_feedback, submit_feedback_by_hash, get_feedback_stats, delete_feedback_by_hash, FeedbackValidationError
 from backend.core.comparison import generate_comparison_report
@@ -110,6 +119,50 @@ def _validate_text(text: str, field_name: str = "Input"):
             status_code=400,
             detail=f"{field_name} mengandung karakter tidak valid.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Ekspansi singkatan pemerintah — biar LLM ngerti konteks lebih baik
+# ---------------------------------------------------------------------------
+
+_GOV_ABBREVIATIONS = {
+    r"\bMBG\b": "Makan Bergizi Gratis (MBG)",
+    r"\bBBM\b": "Bahan Bakar Minyak (BBM)",
+    r"\bPPN\b": "Pajak Pertambahan Nilai (PPN)",
+    r"\bIKN\b": "Ibu Kota Nusantara (IKN)",
+    r"\bKPK\b": "Komisi Pemberantasan Korupsi (KPK)",
+    r"\bTNI\b": "Tentara Nasional Indonesia (TNI)",
+    r"\bPOLRI\b": "Kepolisian Negara Republik Indonesia (Polri)",
+    r"\bPNS\b": "Pegawai Negeri Sipil (PNS)",
+    r"\bBUMN\b": "Badan Usaha Milik Negara (BUMN)",
+    r"\bAPBN\b": "Anggaran Pendapatan dan Belanja Negara (APBN)",
+    r"\bAPBD\b": "Anggaran Pendapatan dan Belanja Daerah (APBD)",
+    r"\bPILKADA\b": "Pemilihan Kepala Daerah (Pilkada)",
+    r"\bKPU\b": "Komisi Pemilihan Umum (KPU)",
+    r"\bRUU\b": "Rancangan Undang-Undang (RUU)",
+    r"\bUU\b": "Undang-Undang (UU)",
+    r"\bPILPRES\b": "Pemilihan Presiden (Pilpres)",
+    r"\bTHR\b": "Tunjangan Hari Raya (THR)",
+    r"\bUMR\b": "Upah Minimum Regional (UMR)",
+    r"\bUMK\b": "Upah Minimum Kabupaten/Kota (UMK)",
+    r"\bUMP\b": "Upah Minimum Provinsi (UMP)",
+    r"\bBPJS\b": "Badan Penyelenggara Jaminan Sosial (BPJS)",
+    r"\bPHK\b": "Pemutusan Hubungan Kerja (PHK)",
+    r"\bPDN\b": "Produk Dalam Negeri (PDN)",
+    r"\bHGBT\b": "Harga Gas Bumi Tertentu (HGBT)",
+    r"\bPAD\b": "Pendapatan Asli Daerah (PAD)",
+    r"\bBEI\b": "Bursa Efek Indonesia (BEI)",
+    r"\bPPDB\b": "Penerimaan Peserta Didik Baru (PPDB)",
+    r"\bUNBK\b": "Ujian Nasional Berbasis Komputer (UNBK)",
+}
+
+
+def _expand_gov_abbreviations(teks: str) -> str:
+    """Ekspansi singkatan pemerintah ke bentuk lengkap + singkatan (biar LLM paham konteks)."""
+    hasil = teks
+    for pola, ganti in _GOV_ABBREVIATIONS.items():
+        hasil = re.sub(pola, ganti, hasil, flags=re.IGNORECASE)
+    return hasil
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +365,7 @@ def start_sim(payload: SimRequest, request: Request):
     if not topik_bersih:
         raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
     _validate_text(topik_bersih, "Topik")
+    topik_diperluas = _expand_gov_abbreviations(topik_bersih)
 
     # ── Validasi topik pernyataan vs pertanyaan ──
     topik_warning = ""
@@ -355,11 +409,25 @@ def start_sim(payload: SimRequest, request: Request):
             })
 
     daftar_agen = get_agents(payload.kategori, agen_custom=agen_custom_dict)
-    # Inject agen kontekstual berdasarkan keyword topik
-    agen_kontekstual = get_contextual_agents(topik_bersih)
+    # Inject agen kontekstual berdasarkan keyword topik (expanded biar cocok sama pola keyword)
+    agen_kontekstual = get_contextual_agents(topik_diperluas, kategori=payload.kategori)
     for ak in agen_kontekstual:
         if not any(a["nama"] == ak["nama"] for a in daftar_agen):
             daftar_agen.append(ak)
+    # ── LLM-based agent proposal (hanya tier normal/Lengkap) ──
+    if payload.tier == "normal":
+        existing_names = [a["nama"] for a in daftar_agen]
+        agen_llm = propose_llm_agents(topik_diperluas, existing_names=existing_names)
+        for ak in agen_llm:
+            # Exact match dedup
+            if any(a["nama"] == ak["nama"] for a in daftar_agen):
+                continue
+            # Semantic dedup: overlap kata kunci antar nama
+            if _is_semantic_duplicate(ak["nama"], existing_names):
+                continue
+            daftar_agen.append(ak)
+            existing_names.append(ak["nama"])
+
     if not daftar_agen:
         raise HTTPException(
             status_code=400,
@@ -415,16 +483,18 @@ def start_sim(payload: SimRequest, request: Request):
         jumlah_ronde_efektif = min(payload.jumlah_ronde, 2)
         tier_mode = "free"
 
-    konteks_real = ambil_konteks_real(topik_bersih)
+    konteks_real = ambil_konteks_real(topik_diperluas, topik_asli=topik_bersih)
+    source_diversity = compute_source_diversity_scores()
 
     hasil = run_simulation(
-        topik=topik_bersih,
+        topik=topik_diperluas,
         agents=daftar_agen,
         jumlah_ronde=jumlah_ronde_efektif,
         intervensi=intervensi_bersih,
         briefing_real=konteks_real.get("briefing", ""),
         tier=tier_mode,
         n_crowd=payload.n_crowd,
+        data_transparency=konteks_real.get("data_transparency", {}),
     )
     _apply_context_quality(hasil, konteks_real)
     hasil["runtime_limits"] = {
@@ -481,7 +551,9 @@ def start_sim(payload: SimRequest, request: Request):
             "berita":       konteks_real.get("berita", [])[:5],
             "reddit":       konteks_real.get("reddit", [])[:5],
             "timestamp":    konteks_real.get("timestamp", ""),
+            "data_transparency": konteks_real.get("data_transparency", {}),
         },
+        "source_diversity": source_diversity,
     }
     if topik_warning:
         response_data["warning"] = topik_warning
@@ -584,6 +656,7 @@ def compare_scenarios(payload: CompareRequest, request: Request):
     for i, sc in enumerate(payload.scenarios):
         topik_bersih = sc.topik.strip()
         _validate_text(topik_bersih, f"Topik skenario {i+1}")
+        topik_diperluas = _expand_gov_abbreviations(topik_bersih)
         _validate_text(sc.label, f"Label skenario {i+1}")
         _validate_text(sc.kategori, f"Kategori skenario {i+1}")
         intervensi_bersih = sc.intervensi.strip() if sc.intervensi else None
@@ -592,7 +665,7 @@ def compare_scenarios(payload: CompareRequest, request: Request):
 
         daftar_agen = get_agents(sc.kategori)
         # Inject agen kontekstual berdasarkan keyword topik
-        agen_kontekstual = get_contextual_agents(topik_bersih)
+        agen_kontekstual = get_contextual_agents(topik_diperluas, kategori=sc.kategori)
         for ak in agen_kontekstual:
             if not any(a["nama"] == ak["nama"] for a in daftar_agen):
                 daftar_agen.append(ak)
@@ -607,15 +680,16 @@ def compare_scenarios(payload: CompareRequest, request: Request):
             jml_ronde = min(sc.jumlah_ronde, 2)
             tier_mode = "free"
 
-        konteks_real = ambil_konteks_real(topik_bersih)
+        konteks_real = ambil_konteks_real(topik_diperluas, topik_asli=topik_bersih)
         hasil = run_simulation(
-            topik=topik_bersih,
+            topik=topik_diperluas,
             agents=daftar_agen,
             jumlah_ronde=jml_ronde,
             intervensi=intervensi_bersih,
             briefing_real=konteks_real.get("briefing", ""),
             tier=tier_mode,
             n_crowd=sc.n_crowd,
+            data_transparency=konteks_real.get("data_transparency", {}),
         )
         # BUG #1 FIX: JANGAN timpa prediksi heuristic dengan ML — simpan sebagai experimental
         # BUG #5 FIX: wrap load_or_predict dalam try/except
@@ -675,8 +749,9 @@ def fetch_context(topik: str, request: Request):
     if not topik_bersih:
         raise HTTPException(status_code=400, detail="Topik tidak boleh kosong.")
     _validate_text(topik_bersih, "Topik")
+    topik_diperluas = _expand_gov_abbreviations(topik_bersih)
 
-    konteks = ambil_konteks_real(topik_bersih)
+    konteks = ambil_konteks_real(topik_diperluas, topik_asli=topik_bersih)
     return {
         "status":    "success",
         "topik":     topik_bersih,
