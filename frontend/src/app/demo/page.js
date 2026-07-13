@@ -2,6 +2,7 @@
 import { eksporPDF } from "../utils/eksporpdf";
 import { eksporCSV, eksporWord } from "../utils/eksporlainnya";
 import { useState, useRef } from "react";
+import WordCloud from "../components/WordCloud";
 import Link from "next/link";
 
 // ─── Sentiment Helpers ──────────────────────────────────────────
@@ -854,6 +855,10 @@ export default function HalamanSimulasi() {
 
           {Object.keys(sentimenAgr).length > 0 && (
             <MeteranSikap sentimenAgr={sentimenAgr} daftarRonde={daftarRonde} />
+          )}
+
+          {hasil?.wordcloud && (
+            <WordCloud data={hasil.wordcloud} />
           )}
 
           <TranskripRisalah daftarRonde={daftarRonde} rondeAktif={rondeAktif} setRondeAktif={setRondeAktif} />

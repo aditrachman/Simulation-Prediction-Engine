@@ -33,6 +33,7 @@ from backend.scraper import ambil_konteks_real, get_cache_stats, clear_context_c
 from backend.ml_pipeline import load_or_predict, get_ml_status, get_ml_metrics, train_model
 from backend.feedback import submit_feedback, submit_feedback_by_hash, get_feedback_stats, delete_feedback_by_hash, FeedbackValidationError
 from backend.core.comparison import generate_comparison_report
+from backend.wordcloud import extract_word_frequencies
 
 # MAX_AGENTS_PER_SIM / MAX_ROUNDS_PER_SIM dihapus — digantikan oleh field `tier`
 
@@ -538,6 +539,13 @@ def start_sim(payload: SimRequest, request: Request):
 
     # ── Expose topik_hash agar frontend bisa kirim langsung ke POST /feedback ─
     hasil["topik_hash"] = ml_result.get("topik_hash", "")
+    # ── Word Cloud data dari opini agen ───────────────────────────────────────
+    try:
+        hasil["wordcloud"] = extract_word_frequencies(hasil.get("ronde_detail", []))
+    except Exception as exc:
+        print(f"[wordcloud] Gagal generate: {exc}")
+        hasil["wordcloud"] = None
+
     # ── Prediction source label — BUG #10 FIX: flat field, bukan dict ──
     hasil["prediction_source"] = "heuristic"
     hasil["ml_active"] = ml_result["source"] == "ml"
@@ -789,6 +797,59 @@ def extract_graph(payload: SimRequest, request: Request):
         "status":    "success",
         "topik":     topik_bersih,
         "graf_data": graf,
+    }
+
+
+class WordCloudRequest(BaseModel):
+    teks: str = Field(
+        ...,
+        min_length=3,
+        max_length=2000,
+        description="Teks yang ingin di-frequency analysis (bisa dari opini agen).",
+    )
+    top_n: int = Field(
+        default=50,
+        ge=10,
+        le=200,
+        description="Jumlah kata teratas yang ditampilkan per sentimen.",
+    )
+
+
+@app.post("/wordcloud", tags=["Simulation"])
+def generate_wordcloud(payload: WordCloudRequest, request: Request):
+    """
+    Generate data word cloud dari teks opini agen (atau kumpulan teks apapun).
+
+    Tokenize teks, filter stopword Bahasa Indonesia, hitung frekuensi per label
+    sentimen (positif/netral/negatif).
+
+    Returns kata + frekuensi + berat relatif untuk visualisasi word cloud.
+    """
+    _enforce_rate_limit(request)
+    _validate_text(payload.teks, "Teks")
+
+    from backend.wordcloud import extract_word_frequencies_from_texts
+
+    # Gunakan sentiment ML untuk label tiap baris teks
+    lines = [l.strip() for l in payload.teks.split("\n") if l.strip()]
+    texts_by_label: dict[str, list[str]] = {"positif": [], "netral": [], "negatif": []}
+
+    for line in lines:
+        if sentiment_ml.is_available():
+            pred = sentiment_ml.predict(line)
+            label = pred.get("label", "netral") if pred else "netral"
+        else:
+            label = "netral"
+        if label in texts_by_label:
+            texts_by_label[label].append(line)
+        else:
+            texts_by_label["netral"].append(line)
+
+    result = extract_word_frequencies_from_texts(texts_by_label, top_n=payload.top_n)
+
+    return {
+        "status": "success",
+        "data": result,
     }
 
 

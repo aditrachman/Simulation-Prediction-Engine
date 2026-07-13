@@ -1,0 +1,60 @@
+{
+  "mbg": {
+    "keywords": [
+      "makan bergizi gratis",
+      "mbg"
+    ],
+    "kategori": "Sosial",
+    "sumber": "Indikator Politik Indonesia",
+    "tanggal": "2026-02",
+    "ringkasan": "72.8% masyarakat menyatakan puas terhadap program MBG"
+  },
+  "subsidi bbm": {
+    "keywords": [
+      "subsidi bbm",
+      "harga bbm",
+      "bbm bersubsidi"
+    ],
+    "kategori": "Ekonomi",
+    "sumber": "Adidaya Institute",
+    "tanggal": "2026-05",
+    "ringkasan": "63.2% publik tidak setuju kenaikan harga BBM di tengah lonjakan harga minyak dunia (survei 1.240 responden, 38 provinsi)"
+  },
+  "danantara": {
+    "keywords": [
+      "danantara",
+      "danantara bond",
+      "obligasi danantara"
+    ],
+    "kategori": "Ekonomi",
+    "sumber": "Petromindo Survey",
+    "tanggal": "2026-02",
+    "ringkasan": "47.2% publik menilai Danantara sudah sesuai mandat, tapi 59% menilai strategi investasinya masih tertinggal dibanding SWF global (Temasek, GIC)"
+  },
+  "pembatasan medsos anak": {
+    "keywords": [
+      "pembatasan media sosial anak",
+      "pembatasan media sosial",
+      "medsos anak",
+      "pp tunas",
+      "medsos di bawah 16",
+      "media sosial anak"
+    ],
+    "kategori": "Sosial",
+    "sumber": "Poltracking Indonesia",
+    "tanggal": "2026-05",
+    "ringkasan": "77.4% publik setuju pembatasan medsos untuk anak di bawah 16 tahun, 13.6% tidak setuju (survei 1.220 responden, 38 provinsi)"
+  },
+  "kinerja pemerintah": {
+    "keywords": [
+      "kinerja pemerintah",
+      "kinerja prabowo",
+      "evaluasi pemerintahan",
+      "prabowo gibran"
+    ],
+    "kategori": "Politik",
+    "sumber": "Poltracking Indonesia",
+    "tanggal": "2026-05",
+    "ringkasan": "72.2% publik puas dengan kinerja pemerintahan Prabowo-Gibran, alasan utama: bantuan tepat sasaran (14%), program MBG (13.8%), kepemimpinan tegas (10.6%)"
+  }
+}
