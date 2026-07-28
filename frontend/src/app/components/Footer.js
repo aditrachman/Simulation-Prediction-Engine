@@ -12,11 +12,11 @@ export default function Footer() {
                 className="text-lg tracking-tight text-[#faf9f5]"
                 style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, letterSpacing: "-0.02em" }}
               >
-                VoxSwarm
+                Simulasi Opini
               </span>
             </Link>
             <p className="mt-3 text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>
-              Multi-agent opinion simulation untuk skenario kebijakan publik Indonesia.
+              Alat simulasi reaksi publik terhadap kebijakan atau isu — dikembangkan buat tugas akhir.
             </p>
           </div>
 
@@ -25,32 +25,32 @@ export default function Footer() {
             <p className="mb-4 text-[12px] font-medium uppercase tracking-[1.5px] text-[#a09d96]">Halaman</p>
             <ul className="space-y-3">
               <li><Link href="/" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>Beranda</Link></li>
-              <li><Link href="/demo" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>Simulasi</Link></li>
+              <li><Link href="/demo" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>Coba Simulasi</Link></li>
             </ul>
           </div>
 
           {/* Dokumentasi */}
           <div>
-            <p className="mb-4 text-[12px] font-medium uppercase tracking-[1.5px] text-[#a09d96]">Dokumentasi</p>
+            <p className="mb-4 text-[12px] font-medium uppercase tracking-[1.5px] text-[#a09d96]">Panduan</p>
             <ul className="space-y-3">
               <li><a href="https://github.com/aditrachman/Simulation-Prediction-Engine" target="_blank" rel="noreferrer" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>GitHub</a></li>
-              <li><a href="https://github.com/aditrachman/Simulation-Prediction-Engine/blob/main/README.md" target="_blank" rel="noreferrer" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>README</a></li>
+              <li><a href="https://github.com/aditrachman/Simulation-Prediction-Engine/blob/main/README.md" target="_blank" rel="noreferrer" className="text-[14px] leading-[1.55] text-[#a09d96] no-underline transition-opacity hover:text-[#faf9f5]" style={{ letterSpacing: "0.15px" }}>Cara Pakai</a></li>
             </ul>
           </div>
 
           {/* Tech Stack */}
           <div>
-            <p className="mb-4 text-[12px] font-medium uppercase tracking-[1.5px] text-[#a09d96]">Tech Stack</p>
+            <p className="mb-4 text-[12px] font-medium uppercase tracking-[1.5px] text-[#a09d96]">Teknologi</p>
             <ul className="space-y-3">
-              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>Next.js 15 + FastAPI</li>
-              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>Groq LLM (llama-3.3)</li>
-              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>scikit-learn + RSS</li>
+              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>Next.js 15 + FastAPI (alat bikin web)</li>
+              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>Groq (kecerdasan buatan)</li>
+              <li className="text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>Data statistik + sumber berita</li>
             </ul>
           </div>
         </div>
 
         <div className="mt-16 border-t border-[#252320] pt-8 text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>
-          <p>© 2026 VoxSwarm — Tugas Akhir.</p>
+          <p>© 2026 Simulasi Opini — Tugas Akhir.</p>
         </div>
       </div>
     </footer>

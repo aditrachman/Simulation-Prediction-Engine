@@ -15,6 +15,7 @@
 #   FIX-E: confidence reporting — satu angka konsisten, dengan label dan alasan.
 #           Sebelumnya "80%" dan "0%" muncul bersamaan membingungkan user.
 
+import os
 import re
 import time
 import statistics
@@ -146,6 +147,7 @@ def _validate_and_enforce_change_justification(
     user_p: str,
     sentiment_mode: str,
     topik_ronde: str,
+    skip_regenerate: bool = False,
 ) -> tuple[str, dict]:
     """
     FIX-B: HARD ENFORCEMENT change justification.
@@ -163,6 +165,17 @@ def _validate_and_enforce_change_justification(
         return jawaban, sentimen_current
 
     if _has_change_marker(jawaban):
+        return jawaban, sentimen_current
+
+    # FAST MODE: skip regenerate, cuma log warning — hemat 1 LLM call
+    if skip_regenerate:
+        arah_lalu = "mendukung" if skor_lalu > 0.2 else ("menolak" if skor_lalu < -0.2 else "netral")
+        arah_baru = "mendukung" if skor_baru > 0.2 else ("menolak" if skor_baru < -0.2 else "netral")
+        print(
+            f"[CHANGE_JUSTIFICATION] {nama_agen} R{ronde_ke}: "
+            f"berubah {skor_lalu:+.2f}({arah_lalu}) → {skor_baru:+.2f}({arah_baru}), "
+            f"tidak ada change marker. FAST MODE — skip regenerate."
+        )
         return jawaban, sentimen_current
 
     # Tidak ada change marker — regenerate
@@ -257,6 +270,10 @@ def run_simulation(
     • Sentiment mode inline = 0 token tambahan per agen
     ─────────────────────────────────────────────────
     """
+    FAST_MODE = os.getenv("SIMULATION_FAST", "false").lower() in {"1", "true", "yes", "on"}
+    if FAST_MODE:
+        print("[SIMULATION] FAST MODE aktif — delay=0, QA/justify skip, max_tokens dipangkas.")
+
     ronde_detail              = []
     log_diskusi               = f"TOPIK: {topik}\n"
     pendapat_ronde_sebelumnya: list[dict] = []
@@ -264,12 +281,16 @@ def run_simulation(
     n_agents = len(agents)
     sentiment_mode = SENTIMENT_MODE if tier != "free" else "inline"
     llm_for_sentiment = int(sentiment_mode not in ("inline", "ml"))
-    estimated_llm_calls = (
-        n_agents * jumlah_ronde
-        + (llm_for_sentiment * n_agents * jumlah_ronde)
-        + (0 if tier == "free" else 1)
-        + (0 if tier == "free" else 2)
-    )
+    # Di FAST_MODE kita skip QA (1 call per agen) dan regenerate justification (~20% agen)
+    if FAST_MODE:
+        estimated_llm_calls = n_agents * jumlah_ronde + (0 if tier == "free" else 2)
+    else:
+        estimated_llm_calls = (
+            n_agents * jumlah_ronde
+            + (llm_for_sentiment * n_agents * jumlah_ronde)
+            + (0 if tier == "free" else 1)
+            + (0 if tier == "free" else 2)
+        )
 
     # ── Phase 2: Normalisasi agents ke AgentProfile ──
     agent_profiles: list[AgentProfile] = [AgentProfile(**a) for a in agents]
@@ -563,7 +584,9 @@ def run_simulation(
         jawaban = filter_forbidden_opens(jawaban)
 
         # ponytail: QA check — validasi topik sebelum lanjut. 1 LLM call tambahan, prompt 2 baris.
-        jawaban = _qa_check_topic(topik_ronde, jawaban, system_p, user_p)
+        # FAST MODE: skip QA check (hemat 1 call per agen)
+        if not FAST_MODE:
+            jawaban = _qa_check_topic(topik_ronde, jawaban, system_p, user_p)
 
         sentimen = score_sentiment(jawaban, topik=topik_ronde, sentiment_mode=sentiment_mode)
 
@@ -581,6 +604,7 @@ def run_simulation(
             sentimen = {"label": label_capped, "skor": skor_capped}
 
         # FIX-B: HARD ENFORCEMENT change justification (regenerate jika perlu)
+        # FAST MODE: skip regenerate, cuma clamp skor — hemat 1 call LLM per agen yg berubah drastis
         jawaban, sentimen = _validate_and_enforce_change_justification(
             nama_agen=agen["nama"],
             ronde_ke=ronde_ke,
@@ -591,6 +615,7 @@ def run_simulation(
             user_p=user_p,
             sentiment_mode=sentiment_mode,
             topik_ronde=topik_ronde,
+            skip_regenerate=FAST_MODE,
         )
 
         # Re-apply delta cap setelah regenerate (kalau skor berubah lagi)
@@ -606,7 +631,8 @@ def run_simulation(
             sentimen = {"label": label_final, "skor": skor_final}
 
         # Prompt-level conviction_rule sering diabaikan LLM → retry dengan instruksi lebih keras
-        if ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
+        # FAST MODE: skip retry LLM, langsung fallback ke forced_skor
+        if not FAST_MODE and ("akademisi" in agen.get("nama", "").lower() or "dosen" in agen.get("role", "").lower()):
             if sentimen["label"] == "netral":
                 memori_skor = [m.get("skor", 0.0) for m in agen.get("memori", []) if "skor" in m]
                 if len(memori_skor) >= 1 and abs(memori_skor[-1]) < 0.2:
@@ -718,14 +744,14 @@ def run_simulation(
             pendapat_dalam_ronde_ini.append(entry)
 
             bukan_akhir = not (idx == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)
-            if bukan_akhir:
+            if not FAST_MODE and bukan_akhir:
                 time.sleep(AGENT_CALL_DELAY)
 
         ronde_detail.append(output_ronde)
         pendapat_ronde_sebelumnya = pendapat_ronde_ini
 
         # ponytail: CrowdPool removed — was always no-op for free tier
-        if ronde_ke < jumlah_ronde:
+        if not FAST_MODE and ronde_ke < jumlah_ronde:
             time.sleep(ROUND_DELAY)
 
     # ── GraphRAG extraction ──
@@ -846,6 +872,7 @@ def run_simulation(
             "scheduler_strategy": scheduler_strategy,
             "scheduler_label": get_strategy_display(scheduler_strategy),
             "n_crowd": n_crowd,
+            "fast_mode": FAST_MODE,
         },
         "events":           simulation_state_payload.get("events", []),
         "jumlah_ronde":     jumlah_ronde,

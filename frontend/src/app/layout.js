@@ -22,9 +22,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata = {
-  title: "VoxSwarm — Social Simulation Engine",
+  title: "Simulasi Opini — Cobain reaksi publik sebelum kebijakan diluncurkan",
   description:
-    "VoxSwarm is a social simulation and prediction engine for decision-makers. Simulate public opinion, assess policy reception, and identify key actors before issues go public.",
+    "Simulasi opini publik: cobain gimana reaksi berbagai kelompok masyarakat terhadap suatu isu sebelum diluncurkan. Buat tugas akhir - alat simulasi opini.",
 };
 
 export default function RootLayout({ children }) {

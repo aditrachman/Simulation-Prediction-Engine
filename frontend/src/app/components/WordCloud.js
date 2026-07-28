@@ -78,9 +78,9 @@ export default function WordCloud({ data, className = "" }) {
   if (!data) {
     return (
       <section className={className}>
-        <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Word Cloud — Frekuensi Kata</h2>
+        <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>☁️ Kata yang Paling Sering Muncul</h2>
         <div className="card text-center py-8 text-sm text-[#6c6a64] italic">
-          Belum ada data opini untuk ditampilkan.
+          Belum ada data buat ditampilin.
         </div>
       </section>
     );
@@ -89,7 +89,7 @@ export default function WordCloud({ data, className = "" }) {
   return (
     <section className={className}>
       <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>
-        Word Cloud — Frekuensi Kata
+        ☁️ Kata yang Paling Sering Muncul
       </h2>
 
       {/* Tab sentimen */}
@@ -160,10 +160,10 @@ export default function WordCloud({ data, className = "" }) {
         {/* Info footer */}
         <div className="border-t border-[#e6dfd8] bg-white/60 backdrop-blur-sm px-4 py-2 flex flex-wrap justify-between text-[10px] text-[#6c6a64]">
           <span>
-            {total.all ?? 0} total kata tersaring · {activeWords.length} kata teratas
+            {total.all ?? 0} total kata yang dipilih · {activeWords.length} kata teratas
           </span>
           <span className="italic">
-            Stopword & kata pendek dihapus
+            Kata umum & pendek udah disaring
           </span>
         </div>
       </div>

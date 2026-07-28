@@ -245,6 +245,15 @@ def _score_llm(teks: str, topik: str = "") -> dict:
         "    yang mempertanyakan efektivitas/efisiensi/keberhasilan/kebutuhan suatu kebijakan\n"
         "    = NEGATIF atau NETRAL (skeptis), BUKAN positif — terlepas dari siapa yang bertanya.\n"
         "  • Contoh: 'mengapa pemerintah harus membelanjakan dana untuk ini?' → NEGATIF.\n"
+        # BUG-20 FIX: Balance — tambah instruksi positif biar gak bias ke negatif
+        "BUG-20 FIX — KATA POSITIF EKSPLISIT = POSITIF (meski kalimat pendek):\n"
+        "  • Kata seperti 'tepat', 'setuju', 'mendukung', 'bermanfaat', 'baik', 'bagus',\n"
+        "    'membantu', 'solusi', 'efektif', 'tepat sasaran' → sinyal POSITIF kuat,\n"
+        "    APALAGI kalo di kalimat pendek (<10 kata) tanpa bantahan setelahnya.\n"
+        "  • Contoh: 'program MBG sangat tepat ke masyarakat' → {\"label\":\"positif\",\"skor\":0.65}\n"
+        "  • Contoh: 'kebijakan ini sangat membantu' → {\"label\":\"positif\",\"skor\":0.6}\n"
+        "  • Contoh: 'saya setuju dengan program ini' → {\"label\":\"positif\",\"skor\":0.7}\n"
+        "  • Contoh: 'efektif dan tepat sasaran' → {\"label\":\"positif\",\"skor\":0.6}\n"
         'Balas HANYA JSON: {"label":"positif|netral|negatif","skor":<-1.0..1.0>}'
     )
     user = f'Isu: "{topik[:60]}"\nPendapat: "{teks[:200]}"'

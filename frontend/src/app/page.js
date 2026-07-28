@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import InfoTip from "./components/InfoTip";
 
 // ─── Feature Icons ────────────────────────────────────────────
 const IconNetwork = () => (
@@ -42,43 +43,43 @@ const IconArrow = () => (
 
 const featureIcons = [IconNetwork, IconChart, IconTarget];
 
-// ─── Data ─────────────────────────────────────────────────────
+// ─── Data — semuanya udah pake bahasa sederhana ──────────────────
 const features = [
   {
-    title: "Simulasi Opini Publik",
-    desc: "Modelkan respons masyarakat dari beragam perspektif agen sebelum kebijakan atau isu diluncurkan ke publik.",
+    title: "Simulasi Opini Kelompok",
+    desc: "Coba kita lihat gimana reaksi berbagai kelompok masyarakat sebelum suatu kebijakan atau isu diluncurkan ke publik. Kayak latihan drama — kita lihat dulu reaksi penonton sebelum pentas beneran.",
   },
   {
-    title: "Analisis Sentimen Dinamis",
-    desc: "Pantau pergeseran dukungan, penolakan, dan ketidakpastian melalui hasil simulasi yang terstruktur per putaran.",
+    title: "Peta Sikap yang Berubah",
+    desc: "Pantaulah perubahan pendapat tiap kelompok dari awal sampai akhir diskusi. Siapa yang mendukung, siapa yang menolak, dan siapa yang masih bimbang — semuanya keliatan.",
   },
   {
-    title: "Rekomendasi Strategis",
-    desc: "Ubah narasi kompleks menjadi sinyal risiko dan rekomendasi yang dapat ditindaklanjuti oleh pengambil keputusan.",
+    title: "Saran Strategis",
+    desc: "Dari hasil simulasi, kita bisa lihat risiko apa yang perlu diwaspadai dan langkah apa yang bisa diambil. Kayak navigasi GPS — kita tau jalan mana yang mulus dan mana yang macet.",
   },
 ];
 
 const metrics = [
-  { value: "91%", label: "Akurasi Skenario" },
-  { value: "24+", label: "Jumlah Agen" },
-  { value: "5",   label: "Kategori Isu" },
-  { value: "<30s", label: "Waktu Simulasi" },
+  { value: "91%", label: "Ketepatan simulasi" },
+  { value: "24+", label: "Jumlah peserta diskusi" },
+  { value: "5",   label: "Jenis topik yang didukung" },
+  { value: "<30d", label: "Waktu simulasi (detik)" },
 ];
 
 const docs = [
   {
     title: "Panduan Cepat",
-    desc: "Jalankan backend dan frontend secara lokal, hubungkan API, dan uji simulasi pertama dalam hitungan menit.",
+    desc: "Cara jalanin backend dan frontend sendiri di komputer, hubungkan API, dan coba simulasi pertama dalam hitungan menit.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#installation",
   },
   {
     title: "Dokumentasi API",
-    desc: "Pelajari endpoint dan format payload yang tersedia untuk mengotomatisasi alur kerja simulasi dan prediksi.",
+    desc: "Pelajari cara otomatisasi alur kerja simulasi lewat kode — buat yang pengen ngoprek lebih dalam.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#api-endpoints",
   },
   {
-    title: "Konfigurasi",
-    desc: "Atur model, variabel lingkungan, dan pengaturan deployment sesuai kebutuhan spesifik Anda.",
+    title: "Pengaturan",
+    desc: "Sesuaiin model, variabel lingkungan, dan pengaturan sesuai kebutuhan kamu.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#configuration",
   },
 ];
@@ -116,7 +117,7 @@ export default function LandingPage() {
                   marginBottom: 20,
                 }}
               >
-                Social Simulation Engine
+                Simulasi Opini Publik
               </p>
 
               <h1
@@ -130,9 +131,9 @@ export default function LandingPage() {
                   marginBottom: 24,
                 }}
               >
-                Simulasi opini publik<br />
-                <span style={{ color: "#141413" }}>untuk keputusan</span>{" "}
-                <span style={{ color: "#cc785c" }}>strategis</span>
+                Cobain reaksi publik<br />
+                <span style={{ color: "#141413" }}>sebelum kebijakan</span>{" "}
+                <span style={{ color: "#cc785c" }}>diluncurkan</span>
               </h1>
 
               <p
@@ -145,9 +146,9 @@ export default function LandingPage() {
                   maxWidth: 480,
                 }}
               >
-                VoxSwarm membantu tim kebijakan, perencana strategis, dan pengambil
-                keputusan untuk menguji respons publik terhadap suatu isu — sebelum
-                isu tersebut menjadi perhatian umum.
+                Mau tau gimana reaksi masyarakat kalau suatu kebijakan dikeluarkan?
+                Tinggal masukin topiknya — alat ini bakal simulasiin gimana berbagai
+                kelompok masyarakat bakal nanggapapi dan berdebat.
               </p>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -227,7 +228,7 @@ export default function LandingPage() {
                 </p>
               </div>
 
-              {/* Simulated agents */}
+              {/* Simulated agents — pake label sederhana */}
               {[
                 { init: "JU", name: "Jurnalis/Media", sentiment: "Netral", color: "#6c6a64" },
                 { init: "BU", name: "Buruh/Pekerja", sentiment: "Setuju", color: "#5db872" },
@@ -270,7 +271,7 @@ export default function LandingPage() {
                 </div>
               ))}
 
-              {/* Status bar */}
+              {/* Status bar — pake bahasa sederhana */}
               <div style={{
                 marginTop: 16,
                 background: "#cc785c18",
@@ -280,7 +281,7 @@ export default function LandingPage() {
                 display: "flex", alignItems: "center", gap: 8,
               }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#cc785c", flexShrink: 0 }} />
-                <p style={{ fontSize: 12, color: "#cc785c", margin: 0, fontWeight: 500 }}>Simulasi selesai · Polarisasi 65%</p>
+                <p style={{ fontSize: 12, color: "#cc785c", margin: 0, fontWeight: 500 }}>Simulasi selesai · Masyarakat Terbelah (65%)</p>
               </div>
             </div>
 
@@ -349,7 +350,7 @@ export default function LandingPage() {
               letterSpacing: "1.5px", textTransform: "uppercase",
               color: "#6c6a64", marginBottom: 16,
             }}>
-              Kemampuan Inti
+              Kemampuan Utama
             </p>
             <h2
               style={{
@@ -360,14 +361,14 @@ export default function LandingPage() {
                 maxWidth: 480,
               }}
             >
-              Apa yang bisa dilakukan VoxSwarm
+              Apa yang bisa dilakukan alat ini
             </h2>
             <p style={{
               fontFamily: "var(--font-body, sans-serif)",
               fontSize: 15, lineHeight: 1.7,
               color: "#3d3d3a", maxWidth: 440, margin: "0 auto",
             }}>
-              Tiga kemampuan inti yang mengubah simulasi AI menjadi inteligensi keputusan.
+              Tiga hal utama yang bisa kamu lakukan buat simulasi opini publik pake AI.
             </p>
           </div>
 
@@ -459,9 +460,9 @@ export default function LandingPage() {
                 fontSize: 15, lineHeight: 1.75,
                 color: "#a09d96", maxWidth: 560,
               }}>
-                VoxSwarm dikembangkan untuk mengubah simulasi AI menjadi inteligensi keputusan
-                yang praktis. Fokus pada produk yang bersih secara visual, cepat dijalankan, dan
-                berguna dalam skenario nyata.
+                Alat ini dikembangkan buat ngebantu siapa aja yang pengen tau gimana reaksi
+                masyarakat terhadap suatu isu — sebelum isu itu jadi besar. Fokusnya: bersih,
+                cepat, dan beneran berguna.
               </p>
             </div>
 
@@ -469,8 +470,8 @@ export default function LandingPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 40, borderTop: "1px solid #333", paddingTop: 32 }}>
               {[
                 { value: "3",   label: "Kategori simulasi" },
-                { value: "∞",   label: "Skenario possible" },
-                { value: "OSS", label: "Open source" },
+                { value: "∞",   label: "Skenario bisa dicoba" },
+                { value: "OSS", label: "Open source (gratis)" },
               ].map((stat) => (
                 <div key={stat.label}>
                   <p style={{
@@ -507,7 +508,7 @@ export default function LandingPage() {
               letterSpacing: "1.5px", textTransform: "uppercase",
               color: "#6c6a64", marginBottom: 16,
             }}>
-              Dokumentasi
+              Panduan
             </p>
             <h2
               style={{
@@ -517,7 +518,7 @@ export default function LandingPage() {
                   color: "#141413", margin: 0,
                 }}
               >
-                Semua yang Anda perlukan untuk memulai
+                Semua yang kamu butuhin buat mulai
             </h2>
           </div>
 
@@ -561,7 +562,7 @@ export default function LandingPage() {
                   display: "inline-flex", alignItems: "center", gap: 6,
                   fontSize: 13, fontWeight: 500, color: "#cc785c",
                 }}>
-                  Baca dokumentasi
+                  Baca panduan
                   <IconArrow />
                 </span>
               </a>
@@ -590,7 +591,7 @@ export default function LandingPage() {
                   color: "#ffffff", marginBottom: 16,
                 }}
               >
-                Siap mencoba simulasi?
+                Siap nyoba simulasi?
             </h2>
             <p style={{
               fontFamily: "var(--font-body, sans-serif)",
@@ -598,7 +599,7 @@ export default function LandingPage() {
               color: "rgba(255,255,255,0.8)",
               marginBottom: 36,
             }}>
-              Uji respons publik terhadap isu Anda sekarang — gratis, tanpa perlu registrasi.
+              Tinggal masukin topik, lihat reaksi — gratis, tanpa perlu daftar.
             </p>
             <Link
               href="/demo"

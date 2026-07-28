@@ -4,8 +4,8 @@ import { usePathname } from "next/navigation";
 
 const navLinks = [
   { label: "Beranda", href: "/" },
-  { label: "Simulasi", href: "/demo" },
-  { label: "Dokumentasi", href: "https://github.com/aditrachman/Simulation-Prediction-Engine", external: true },
+  { label: "Coba Simulasi", href: "/demo" },
+  { label: "Panduan", href: "https://github.com/aditrachman/Simulation-Prediction-Engine", external: true },
 ];
 
 export default function Navbar() {
@@ -19,7 +19,7 @@ export default function Navbar() {
             className="text-lg tracking-tight"
             style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, color: "#141413", letterSpacing: "-0.02em" }}
           >
-            VoxSwarm
+            Simulasi Opini
           </span>
         </Link>
 
@@ -50,7 +50,7 @@ export default function Navbar() {
           className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#cc785c] px-5 text-[14px] font-medium text-white no-underline transition-all hover:bg-[#a9583e]"
           style={{ fontFamily: "var(--font-body), sans-serif", lineHeight: 1 }}
         >
-          Mulai Simulasi
+          Coba Simulasi
         </Link>
 
         <button type="button" className="flex h-10 w-10 items-center justify-center md:hidden" aria-label="Menu">

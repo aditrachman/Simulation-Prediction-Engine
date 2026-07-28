@@ -161,6 +161,22 @@ _POLICY_POSITIF_TEMPLATES = [
     "angka statistik menunjukkan {topik} {manfaat}",
     "penelitian membuktikan {topik} berdampak positif",
     "data empiris menunjukkan {topik} berjalan baik",
+    # ── BUG-20 FIX: variasi "tepat/tepat sasaran" untuk short positive ──
+    "ini tepat untuk rakyat",
+    "sangat tepat untuk masyarakat",
+    "sudah tepat sasaran",
+    "kebijakan yang tepat",
+    "saya rasa ini sudah tepat",
+    "tepat sekali kebijakan ini",
+    "saya setuju ini tepat",
+    "pilihan yang tepat",
+    "cukup tepat untuk kondisi saat ini",
+    "langkah yang tepat",
+    "program ini sangat tepat",
+    "target tercapai tepat sasaran",
+    "sasaran yang tepat",
+    "kebijakan tepat dan efisien",
+    "sudah pada jalur yang tepat",
 ]
 
 _POLICY_NEGATIF_TEMPLATES = [
@@ -549,6 +565,10 @@ def predict(text: str) -> Optional[dict]:
         if label not in _VALID_LABELS:
             label = "netral"
 
+        # Hitung prob_pos/prob_neg duluan (dibutuhkan di override)
+        prob_pos = float(probs[list(classes).index('positif')]) if 'positif' in classes else 0.0
+        prob_neg = float(probs[list(classes).index('negatif')]) if 'negatif' in classes else 0.0
+
         # Konversi confidence ke skor sentimen (-1..1)
         if label == "positif":
             skor = confidence * 0.8 + 0.2
@@ -556,26 +576,25 @@ def predict(text: str) -> Optional[dict]:
             skor = -(confidence * 0.8 + 0.2)
         else:
             # ponytail: distribusi prob untuk reflect keraguan model
-            # Sebelumnya: skor 0.0 selalu → buang info confidence.
-            # Sekarang: condong*(1-confidence) agar keraguan model tercermin.
-            # Contoh: 51% netral, 30% positif, 19% negatif → condong=0.11, (1-0.51)=0.49 → skor=0.054
-            # Contoh: 95% netral, 3% positif, 2% negatif → condong=0.01, (1-0.95)=0.05 → skor≈0.0
-            prob_pos = float(probs[list(classes).index('positif')]) if 'positif' in classes else 0.0
-            prob_neg = float(probs[list(classes).index('negatif')]) if 'negatif' in classes else 0.0
             condong = prob_pos - prob_neg
             skor = round(condong * (1.0 - confidence), 4)
 
         skor = max(-1.0, min(1.0, round(skor, 2)))
         skor_final = skor
 
-        # Opsi B: threshold adjustment — netral tipis + sinyal negatif implisit
+        # threshold adjustment: override netral tipis ke positif/negatif
         if label == "netral" and confidence < 0.6:
             if _has_implicit_negative(cleaned):
-                # Confidence rendah + ada sinyal negatif → override ke negatif ringan
-                # skor berdasarkan confidence (makin yakin netral = makin lemah override)
+                # ponytail: netral + sinyal negatif implisit → override negatif ringan
                 skor_neg = -(confidence * 0.3 + 0.1)  # -0.1 sd -0.28
                 skor_final = round(max(-1.0, min(1.0, skor_neg)), 2)
                 label = "negatif"
+            elif prob_pos > prob_neg + 0.1:
+                # ponytail: netral tapi jelas condong positif → override positif ringan
+                # Margin 0.1 biar gak asal override kalo prob-nya seimbang.
+                skor_pos = confidence * 0.3 + 0.1  # +0.1 sd +0.28
+                skor_final = round(min(1.0, skor_pos), 2)
+                label = "positif"
 
         return {"label": label, "skor": skor_final, "confidence": round(confidence, 3)}
 
