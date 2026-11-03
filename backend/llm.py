@@ -49,16 +49,63 @@ def _get_client() -> Groq | None:
             print(f"[LLM] Gagal inisialisasi Groq client: {exc}")
             return None
 
+_INVALID_KEY_MSG = (
+    "API key Groq tidak valid atau sudah kedaluwarsa. "
+    "Perbarui GROQ_API_KEY di file .env, lalu restart server."
+)
+
+# Cache hasil pengecekan koneksi — hindari ping API di setiap request.
+_check_cache: dict = {"ts": 0.0, "ok": None, "msg": ""}
+_check_lock = threading.Lock()
+CHECK_TTL = 60  # detik
+
+
+def check_llm_connection(force: bool = False) -> tuple[bool, str]:
+    """
+    Cek apakah Groq API bisa dipakai. Return (ok, pesan_error).
+
+    Dipakai endpoint sebelum simulasi supaya request dengan API key invalid
+    gagal cepat, bukan menghasilkan transkrip penuh teks error.
+    Hasil di-cache CHECK_TTL detik agar tidak ping API tiap request.
+    """
+    global _check_cache
+
+    with _check_lock:
+        cache = _check_cache
+        if (
+            not force
+            and cache["ok"] is not None
+            and time.time() - cache["ts"] < CHECK_TTL
+        ):
+            return cache["ok"], cache["msg"]
+
+    client = _get_client()
+    if client is None:
+        result = (False, "GROQ_API_KEY belum diisi. Tambahkan key Groq yang valid di .env, lalu restart server.")
+    else:
+        try:
+            client.models.list()
+            result = (True, "")
+        except Exception as exc:
+            err = str(exc)
+            if "401" in err or "invalid_api_key" in err or "Invalid API Key" in err:
+                result = (False, _INVALID_KEY_MSG)
+            elif "429" in err or "rate_limit" in err.lower():
+                # Key valid, cuma sedang kena limit — biarkan call_llm yang retry.
+                result = (True, "")
+            else:
+                result = (False, f"Tidak dapat terhubung ke Groq API: {err[:160]}")
+
+    with _check_lock:
+        _check_cache = {"ts": time.time(), "ok": result[0], "msg": result[1]}
+    return result
+
+
 # ─── MODEL CONFIG ──────────────────────────────────────────────────────────
 MODEL_AGENT    = os.getenv("MODEL_AGENT",    "llama-3.1-8b-instant")
 MODEL_ANALYSIS = os.getenv("MODEL_ANALYSIS", "llama-3.3-70b-versatile")
 
-# Fallback chain: jika 429 dan retry habis, coba model berikutnya
-AGENT_FALLBACK_CHAIN = [
-    "llama-3.1-8b-instant",
-    "gemma2-9b-it",
-    "llama-3.2-3b-preview",
-]
+# Fallback chain dipindahkan ke llm_guard.py (MODEL_CHAIN_AGENT, MODEL_CHAIN_ANALYSIS)
 
 # ─── TOKEN BUDGET ──────────────────────────────────────────────────────────
 MAX_TOKENS_AGENT     = int(os.getenv("MAX_TOKENS_AGENT",     "600"))  # 600 ≈ 400-450 kata BI = 5-6 kalimat penuh
@@ -68,8 +115,8 @@ MAX_TOKENS_SUMMARY   = int(os.getenv("MAX_TOKENS_SUMMARY",   "100"))
 MAX_TOKENS_SENTIMENT = int(os.getenv("MAX_TOKENS_SENTIMENT", "300"))
 
 # ─── RATE LIMIT CONFIG ─────────────────────────────────────────────────────
-RETRY_MAX         = int(os.getenv("RETRY_MAX",         "4"))
-RETRY_BASE_DELAY  = float(os.getenv("RETRY_BASE_DELAY",  "5.0"))
+# (Dipindahkan ke llm_guard.py: TPM_LIMIT, MODEL_CHAIN_AGENT, MODEL_CHAIN_ANALYSIS)
+# AGENT_FALLBACK_CHAIN, RETRY_MAX, RETRY_BASE_DELAY tidak dipakai lagi.
 AGENT_CALL_DELAY  = float(os.getenv("AGENT_CALL_DELAY",  "3.0"))   # dinaikkan dari 2.0 → kompensasi token lebih besar
 ROUND_DELAY       = float(os.getenv("ROUND_DELAY",       "3.0"))
 SENTIMENT_MODE    = os.getenv("SENTIMENT_MODE", "llm")             # "ml" (deterministik), "llm" (akurat), atau "inline" (hemat token)
@@ -97,9 +144,9 @@ _llm_cache: dict[str, dict] = {}
 _llm_cache_lock = threading.Lock()
 
 
-def _cache_key(system_prompt: str, user_prompt: str, max_tokens: int, model: str) -> str:
+def _cache_key(system_prompt: str, user_prompt: str, max_tokens: int, model: str, use_analysis_chain: bool = False) -> str:
     """Buat cache key dari hash SHA-256 parameter request."""
-    raw = f"{model}|{max_tokens}|{system_prompt}|{user_prompt}"
+    raw = f"{model}|{max_tokens}|{use_analysis_chain}|{system_prompt}|{user_prompt}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -116,109 +163,77 @@ def clear_llm_cache() -> int:
 
 
 # ---------------------------------------------------------------------------
-# call_llm: Retry Exponential Backoff + Model Fallback
+# call_llm: Thin wrapper ke llm_guard.chat() dengan cache in-memory
 # ---------------------------------------------------------------------------
-
-def _parse_retry_after(err_str: str) -> float | None:
-    """Parse waktu tunggu dari pesan error Groq: 'try again in 4.44s'"""
-    m = re.search(r"try again in ([\d.]+)s", err_str)
-    if m:
-        try:
-            return float(m.group(1)) + 0.5  # buffer 0.5s
-        except ValueError:
-            pass
-    return None
-
 
 def call_llm(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = MAX_TOKENS_RESPONSE,
     model: str = MODEL_ANALYSIS,
+    use_analysis_chain: bool = False,
+    use_cache: bool = True,
 ) -> str:
     """
-    Panggil LLM dengan retry otomatis saat 429.
+    Panggil LLM via llm_guard (token budget, retry, model chain fallback).
+    Hasil di-cache in-memory berdasarkan hash parameter.
 
-    - Retry hingga RETRY_MAX kali, jeda eksponensial: 5s, 10s, 20s, 40s
-    - Jika model ada di AGENT_FALLBACK_CHAIN dan semua retry habis,
-      coba model berikutnya dalam chain
-    - Jitter random +0-2s untuk hindari thundering herd
-    - Hasil di-cache in-memory berdasarkan hash parameter
+    Args:
+        system_prompt: System prompt
+        user_prompt: User prompt
+        max_tokens: Max completion tokens
+        model: Model preference (used for cache key; actual model from chain)
+        use_analysis_chain: Jika True, pakai analysis chain (MODEL_CHAIN_ANALYSIS)
+        use_cache: Jika False, skip cache (untuk opini agen agar tidak identik)
     """
     # ── Cache lookup (dengan TTL check) ──────────────────────────────────
-    key = _cache_key(system_prompt, user_prompt, max_tokens, model)
-    with _llm_cache_lock:
-        entry = _llm_cache.get(key)
-        if entry is not None:
-            expired = CACHE_TTL > 0 and (time.time() - entry["ts"]) > CACHE_TTL
-            if expired:
-                del _llm_cache[key]   # hapus entry stale, lanjut ke LLM call
-            else:
-                return entry["value"]
-    # ─────────────────────────────────────────────────────────────────────
-
-    if model in AGENT_FALLBACK_CHAIN:
-        idx   = AGENT_FALLBACK_CHAIN.index(model)
-        chain = AGENT_FALLBACK_CHAIN[idx:]
-    else:
-        chain = [model]
-
-    # BUG #5 FIX: Cek ketersediaan client sebelum request
-    groq_client = _get_client()
-    if groq_client is None:
-        return "[Offline] Groq API tidak tersedia (GROQ_API_KEY tidak dikonfigurasi). Gunakan mode free_tier atau SENTIMENT_MODE=inline."
-
-    last_error = ""
-
-    for current_model in chain:
-        for attempt in range(RETRY_MAX):
-            try:
-                resp = groq_client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user",   "content": user_prompt},
-                    ],
-                    model=current_model,
-                    temperature=0.5,
-                    max_tokens=max_tokens,
-                )
-                result = resp.choices[0].message.content.strip()
-                # Auto-complete kalimat terpotong: potong di kalimat terakhir yang lengkap
-                if result and result[-1] not in ".!?\"'":
-                    last_punct = max(
-                        result.rfind("."), result.rfind("!"), result.rfind("?")
-                    )
-                    if last_punct > len(result) * 0.5:  # ada kalimat lengkap di >50% teks
-                        result = result[:last_punct + 1]
-                with _llm_cache_lock:
-                    _llm_cache[key] = {"value": result, "ts": time.time()}
-                return result
-
-            except Exception as e:
-                err_str    = str(e)
-                last_error = err_str
-
-                is_rate_limit = (
-                    "429"                in err_str or
-                    "rate_limit_exceeded" in err_str or
-                    "Rate limit"         in err_str
-                )
-
-                if is_rate_limit:
-                    wait = _parse_retry_after(err_str) or (RETRY_BASE_DELAY * (2 ** attempt))
-                    wait += random.uniform(0, 2)
-
-                    if attempt < RETRY_MAX - 1:
-                        print(f"[RateLimit] {current_model} — retry {attempt+1}/{RETRY_MAX}, tunggu {wait:.1f}s...")
-                        time.sleep(wait)
-                    else:
-                        print(f"[RateLimit] {current_model} — semua retry habis, coba fallback...")
-                        break  # ke model berikutnya
+    if use_cache:
+        key = _cache_key(system_prompt, user_prompt, max_tokens, model, use_analysis_chain)
+        with _llm_cache_lock:
+            entry = _llm_cache.get(key)
+            if entry is not None:
+                expired = CACHE_TTL > 0 and (time.time() - entry["ts"]) > CACHE_TTL
+                if expired:
+                    del _llm_cache[key]
                 else:
-                    # Bukan rate limit — langsung return error
-                    return f"[Error: {err_str[:120]}]"
+                    return entry["value"]
+    else:
+        key = None
 
-    return f"[RateLimit] Semua model habis. Error: {last_error[:120]}"
+    # ── Delegate ke llm_guard ────────────────────────────────────────────
+    try:
+        from .llm_guard import chat, chat_analysis
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        if use_analysis_chain:
+            text, used_model = chat_analysis(messages, max_tokens)
+        else:
+            text, used_model = chat(messages, max_tokens)
+
+        # Auto-complete kalimat terpotong
+        if text and text[-1] not in ".!?\"'":
+            last_punct = max(
+                text.rfind("."), text.rfind("!"), text.rfind("?")
+            )
+            if last_punct > len(text) * 0.5:
+                text = text[:last_punct + 1]
+
+        if use_cache and key is not None:
+            with _llm_cache_lock:
+                _llm_cache[key] = {"value": text, "ts": time.time()}
+        return text
+
+    except RuntimeError as e:
+        err_str = str(e)
+        if "401" in err_str or "invalid_api_key" in err_str:
+            return f"[Error: {_INVALID_KEY_MSG}]"
+        return f"[Error: {err_str[:120]}]"
+    except Exception as e:
+        return f"[Error: {str(e)[:120]}]"
 
 
 def _repair_truncated_json(text: str) -> str | None:
@@ -272,9 +287,10 @@ def call_llm_json(
     user_prompt: str,
     max_tokens: int = 600,
     model: str = MODEL_ANALYSIS,
+    use_analysis_chain: bool = False,
 ) -> dict | list:
     """Panggil LLM, parse output JSON. Return {} jika gagal."""
-    raw   = call_llm(system_prompt, user_prompt, max_tokens, model=model)
+    raw   = call_llm(system_prompt, user_prompt, max_tokens, model=model, use_analysis_chain=use_analysis_chain)
     clean = re.sub(r"```(?:json)?|```", "", raw).strip()
     # Coba parse langsung
     try:
