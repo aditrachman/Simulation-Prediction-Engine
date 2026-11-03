@@ -712,40 +712,54 @@ def run_simulation(
             )
             try:
                 res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini, idx_agen=idx)
+                res_failed = False
             except Exception as e:
                 import traceback
                 error_type = type(e).__name__
                 error_msg  = str(e)
                 print(f"[Error] {agen['nama']} ronde {ronde_ke}: {error_type}: {error_msg}")
-                print(f"[Traceback] {traceback.format_exc()}")
+                # print(f"[Traceback] {traceback.format_exc()}")  # verbose, skip
                 res = {
                     "nama":     agen["nama"],
-                    "pendapat": f"(tidak dapat merespons saat ini — {error_type})",
-                    "sentimen": {"label": "netral", "skor": 0.0},
+                    "pendapat": f"(gagal: {error_msg[:200]})",
+                    "sentimen": None,  # tidak ada sentimen untuk giliran gagal
                     "pengaruh": agen.get("pengaruh", 0.5),
+                    "status":   "gagal",
+                    "alasan_gagal": error_msg[:500],
                 }
+                res_failed = True
 
-            agent_actions.append(AgentAction(
-                agent_nama=agen["nama"],
-                ronde=ronde_ke,
-                tipe_aksi="berpendapat",
-                pendapat=res["pendapat"],
-                sentimen=res["sentimen"],
-            ))
-
-            update_agent_memory(agen, ronde_ke, res["pendapat"], res["sentimen"],
-                                all_opinions=pendapat_ronde_ini)
-            log_diskusi += f"\n[R{ronde_ke}] {agen['nama']}: {res['pendapat']}\n"
-
+            # Hanya catat ke output ronde (untuk transparansi), TAMBAHKAN status
             output_ronde["agen"].append({
-                "nama": res["nama"], "pendapat": res["pendapat"], "sentimen": res["sentimen"],
+                "nama": res["nama"],
+                "pendapat": res["pendapat"],
+                "sentimen": res["sentimen"],
+                "status":   res.get("status", "sukses"),
+                "alasan_gagal": res.get("alasan_gagal"),
             })
-            entry = {
-                "nama": res["nama"], "pendapat": res["pendapat"],
-                "sentimen": res["sentimen"], "pengaruh": res["pengaruh"],
-            }
-            pendapat_ronde_ini.append(entry)
-            pendapat_dalam_ronde_ini.append(entry)
+
+            if not res_failed:
+                # Giliran sukses: update memory, log, aggregator structures
+                agent_actions.append(AgentAction(
+                    agent_nama=agen["nama"],
+                    ronde=ronde_ke,
+                    tipe_aksi="berpendapat",
+                    pendapat=res["pendapat"],
+                    sentimen=res["sentimen"],
+                ))
+
+                update_agent_memory(agen, ronde_ke, res["pendapat"], res["sentimen"],
+                                    all_opinions=pendapat_ronde_ini)
+                log_diskusi += f"\n[R{ronde_ke}] {agen['nama']}: {res['pendapat']}\n"
+
+                entry = {
+                    "nama": res["nama"], "pendapat": res["pendapat"],
+                    "sentimen": res["sentimen"], "pengaruh": res["pengaruh"],
+                }
+                pendapat_ronde_ini.append(entry)
+                pendapat_dalam_ronde_ini.append(entry)
+            else:
+                print(f"[GiliranGagal] {agen['nama']} R{ronde_ke}: {res['alasan_gagal'][:120]}")
 
             bukan_akhir = not (idx == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)
             if not FAST_MODE and bukan_akhir:
@@ -764,14 +778,14 @@ def run_simulation(
         if tier == "free" else extract_entities(topik, log_diskusi)
     )
 
-    # ── Sentimen agregat ──
+    # ── Sentimen agregat (hanya giliran sukses) ──
     sentimen_agregat = {}
     for agen in agents:
         tren = [
             a["sentimen"]["skor"]
             for ronde in ronde_detail
             for a in ronde["agen"]
-            if a["nama"] == agen["nama"]
+            if a["nama"] == agen["nama"] and a.get("status") == "sukses" and a.get("sentimen") is not None
         ]
         sentimen_agregat[agen["nama"]] = tren
 
@@ -889,6 +903,7 @@ def run_simulation(
         "confidence_summary":    confidence_summary,  # FIX-E: field baru, konsisten
         # BUG #10 FIX: prediction_source sebagai flat field, bukan dict — hindari bentrok dengan main.py
         "prediction_source": "heuristic",
+        "giliran_gagal": _build_giliran_gagal_summary(ronde_detail),
         "model_info": {
             "agen":           MODEL_AGENT,
             "analisis":       MODEL_ANALYSIS,
@@ -899,6 +914,40 @@ def run_simulation(
     hasil_dict["explainability_report"] = generate_report(hasil_dict)
 
     return hasil_dict
+
+
+# ---------------------------------------------------------------------------
+# Ringkasan Giliran Gagal
+# ---------------------------------------------------------------------------
+
+def _build_giliran_gagal_summary(ronde_detail: list[dict]) -> dict:
+    """
+    Bangun ringkasan giliran sukses vs gagal per agen per ronde.
+    Digunakan untuk transparansi: user bisa lihat data mana yang bolong.
+    """
+    summary = {}
+    for ronde in ronde_detail:
+        r = ronde["ronde"]
+        summary[f"ronde_{r}"] = {}
+        for a in ronde["agen"]:
+            nama = a["nama"]
+            status = a.get("status", "sukses")
+            if nama not in summary[f"ronde_{r}"]:
+                summary[f"ronde_{r}"][nama] = {"sukses": 0, "gagal": 0}
+            if status == "gagal":
+                summary[f"ronde_{r}"][nama]["gagal"] += 1
+                summary[f"ronde_{r}"][nama]["alasan"] = a.get("alasan_gagal")
+            else:
+                summary[f"ronde_{r}"][nama]["sukses"] += 1
+    # Total keseluruhan
+    total_sukses = sum(
+        v["sukses"] for r in summary.values() for v in r.values()
+    )
+    total_gagal = sum(
+        v["gagal"] for r in summary.values() for v in r.values()
+    )
+    summary["total"] = {"sukses": total_sukses, "gagal": total_gagal}
+    return summary
 
 
 # ---------------------------------------------------------------------------
