@@ -197,7 +197,7 @@ def _validate_and_enforce_change_justification(
         f"Tanpa penjelasan perubahan, output tidak valid."
     )
 
-    jawaban_retry = call_llm(system_p, user_p_enforce, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+    jawaban_retry = call_llm(system_p, user_p_enforce, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
     jawaban_retry = filter_forbidden_opens(jawaban_retry)
     jawaban_retry = _batasi_kalimat(jawaban_retry, max_kalimat=3)
     jawaban_retry = filter_forbidden_opens(jawaban_retry)
@@ -227,7 +227,7 @@ def _qa_check_topic(topik: str, jawaban: str, system_p: str, user_p: str) -> str
     topik_bersih = topik.split("\n")[0][:150]  # ambil judul utama doang
     prompt = f"Topik: {topik_bersih}\nOutput: {jawaban[:300]}\n\nApakah output ini bahas topik di atas? BALAS: VALID atau INVALID + alasan 1 kalimat."
 
-    hasil = call_llm(_QA_SYSTEM, prompt, max_tokens=80, model=MODEL_AGENT)
+    hasil = call_llm(_QA_SYSTEM, prompt, max_tokens=80, model=MODEL_AGENT, use_cache=False)
 
     if "INVALID" in hasil.upper():
         print(f"[QA] {jawaban[:50]}... -> INVALID: {hasil[:80]}")
@@ -237,7 +237,7 @@ def _qa_check_topic(topik: str, jawaban: str, system_p: str, user_p: str) -> str
             f"Topik diskusi: {topik_bersih}. "
             f"Fokus ke topik ini. Jangan bahas isu lain."
         )
-        jawaban_retry = call_llm(system_p, retry_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+        jawaban_retry = call_llm(system_p, retry_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
         jawaban_retry = filter_forbidden_opens(jawaban_retry)
         jawaban_retry = _batasi_kalimat(jawaban_retry, max_kalimat=3)
         if jawaban_retry and not jawaban_retry.startswith("[Error"):
@@ -578,7 +578,11 @@ def run_simulation(
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
             user_p = "\n".join(parts_trimmed)
 
-        jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+        jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
+        if jawaban.startswith(("[Error", "[RateLimit", "[Offline")):
+            # Jangan simpan teks error sebagai opini agen — outer handler
+            # akan mencatat placeholder netral untuk agen ini.
+            raise RuntimeError(jawaban[:200])
         jawaban = filter_forbidden_opens(jawaban)
         jawaban = _batasi_kalimat(jawaban, max_kalimat=3)
         jawaban = filter_forbidden_opens(jawaban)
@@ -642,7 +646,7 @@ def run_simulation(
                         "Tulis argumen yang bikin kamu condong ke satu arah. "
                         "JANGAN KEMBALIKAN NETRAL."
                     )
-                    _retry_jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT)
+                    _retry_jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
                     _retry_jawaban = filter_forbidden_opens(_retry_jawaban)
                     _retry_jawaban = _batasi_kalimat(_retry_jawaban, max_kalimat=3)
                     _retry_jawaban = filter_forbidden_opens(_retry_jawaban)
@@ -1029,6 +1033,7 @@ def _analisis_dan_aktor(
         prompt_analisis,
         max_tokens=MAX_TOKENS_ANALYSIS,
         model=MODEL_ANALYSIS,
+        use_analysis_chain=True,
     )
     analisis_raw = _strip_emoji(analisis_raw or "")
     if not analisis_raw or analisis_raw.startswith("[Error") or analisis_raw.startswith("[RateLimit"):
@@ -1072,6 +1077,7 @@ def _analisis_dan_aktor(
         prompt_aktor,
         max_tokens=500,
         model=MODEL_ANALYSIS,
+        use_analysis_chain=True,
     )
 
     aktor_analisis: dict = {}
@@ -1143,6 +1149,7 @@ def _analisis_dan_aktor(
                 prompt_rekom,
                 max_tokens=400,
                 model=MODEL_ANALYSIS,
+                use_analysis_chain=True,
             )
             rekom_strat = _parse_rekomendasi(raw_rekom_raw or "")
             if not rekom_strat:
