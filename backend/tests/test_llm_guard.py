@@ -11,10 +11,13 @@ from backend.llm_guard import (
     chat,
     chat_analysis,
     TokenBudget,
+    RateLimiter,
     MockGroq,
     _install_mock_client,
     _restore_real_client,
     _budgets,
+    metrics,
+    reset_metrics,
 )
 
 
@@ -206,6 +209,52 @@ def test_chat_analysis_uses_analysis_chain(mock_client):
         assert model == "openai/gpt-oss-120b"
     finally:
         lg.ANALYSIS_CHAIN = original_chain
+
+
+def test_metrics_mencatat_panggilan_dan_token(mock_client):
+    """Metrik per run: jumlah call, token masuk/keluar, hitungan 429."""
+    reset_metrics()
+    _install_mock_client(MockGroq({"openai/gpt-oss-20b": [("OK", None)]}))
+
+    chat(messages=[{"role": "user", "content": "Test"}], max_tokens=100,
+         chain=["openai/gpt-oss-20b"])
+
+    m = metrics()
+    assert m["calls"] == 1
+    assert m["prompt_tokens"] == 100
+    assert m["completion_tokens"] == 50
+    assert m["rate_limited_429"] == 0
+
+    reset_metrics()
+    assert metrics()["calls"] == 0
+
+
+def test_metrics_menghitung_429(mock_client):
+    reset_metrics()
+    _install_mock_client(MockGroq({
+        "openai/gpt-oss-20b": [
+            (None, _make_rate_limit_error("Rate limit exceeded. Daily limit reached.")),
+        ],
+        "qwen/qwen3.8-27b": [("OK", None)],
+    }))
+
+    chat(messages=[{"role": "user", "content": "Test"}], max_tokens=100,
+         chain=["openai/gpt-oss-20b", "qwen/qwen3.8-27b"])
+    assert metrics()["rate_limited_429"] == 1
+
+
+def test_rate_limiter_membatasi_jendela():
+    """rpm kecil: slot kedua menunggu, slot setelah jendela lewat langsung lolos."""
+    import time
+
+    limiter = RateLimiter(rpm=2)
+    assert limiter.acquire() == 0.0
+    assert limiter.acquire() == 0.0
+
+    # Paksa dua timestamp lama keluar jendela → tidak menunggu.
+    with limiter.lock:
+        limiter.calls = type(limiter.calls)(time.time() - 61 for _ in range(2))
+    assert limiter.acquire() == 0.0
 
 
 def test_token_budget_window_expiry():

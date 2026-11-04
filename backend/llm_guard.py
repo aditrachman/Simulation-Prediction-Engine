@@ -30,6 +30,9 @@ ANALYSIS_CHAIN = [m.strip() for m in os.getenv(
 
 TPM_LIMIT = int(os.getenv("TPM_LIMIT", "7000"))  # margin di bawah 8K free tier
 
+# Batas request per menit, dibagi semua panggilan di proses ini.
+RPM_LIMIT = int(os.getenv("RPM_LIMIT", "30"))
+
 
 def _get_client() -> Groq:
     """Lazy Groq client initialization (thread-safe)."""
@@ -54,6 +57,7 @@ class TokenBudget:
         self.tpm = tpm
         self.events: deque[tuple[float, int]] = deque()  # (timestamp, tokens)
         self.lock = threading.Lock()
+        self.waited = 0.0  # total detik menunggu budget (dibaca untuk metrik)
 
     def acquire(self, estimated_tokens: int) -> list:
         """Block sampai budget cukup. Return entry [ts, est] untuk di-settle nanti."""
@@ -69,7 +73,10 @@ class TokenBudget:
                     self.events.append(entry)
                     return entry
                 wait = 60 - (now - self.events[0][0]) + 0.2
-            time.sleep(max(wait, 0.5))
+            tidur = max(wait, 0.5)
+            time.sleep(tidur)
+            with self.lock:
+                self.waited += tidur
 
     def settle(self, entry: list, actual_tokens: int) -> None:
         """Ganti estimasi dengan actual usage."""
@@ -78,10 +85,71 @@ class TokenBudget:
 
 
 _budgets: dict[str, TokenBudget] = {}
+_budgets_lock = threading.Lock()
 
 
 def _budget(model: str) -> TokenBudget:
-    return _budgets.setdefault(model, TokenBudget(TPM_LIMIT))
+    # Lock agar dua thread tidak membuat dua budget terpisah untuk model yang sama.
+    with _budgets_lock:
+        return _budgets.setdefault(model, TokenBudget(TPM_LIMIT))
+
+
+# ── Rate limiter RPM (jendela 60 detik, dibagi semua panggilan) ──────────────
+class RateLimiter:
+    """Batas jumlah request per 60 detik. Thread-safe."""
+
+    def __init__(self, rpm: int):
+        self.rpm = max(1, rpm)
+        self.calls: deque[float] = deque()
+        self.lock = threading.Lock()
+
+    def acquire(self) -> float:
+        """Block sampai ada slot. Return detik yang dihabiskan menunggu."""
+        total = 0.0
+        while True:
+            with self.lock:
+                now = time.time()
+                while self.calls and now - self.calls[0] > 60:
+                    self.calls.popleft()
+                if len(self.calls) < self.rpm:
+                    self.calls.append(now)
+                    return total
+                wait = 60 - (now - self.calls[0]) + 0.05
+            tidur = max(wait, 0.05)
+            time.sleep(tidur)
+            total += tidur
+
+
+_limiter = RateLimiter(RPM_LIMIT)
+
+
+# ── Metrik per run (dibaca simulation.py sebelum/sesudah run) ────────────────
+_metrics_lock = threading.Lock()
+_metrics = {
+    "calls": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "rate_limited_429": 0,
+    "budget_wait": 0.0,
+    "rpm_wait": 0.0,
+}
+
+
+def metrics() -> dict:
+    """Snapshot metrik pemanggilan LLM sejak reset terakhir."""
+    with _metrics_lock:
+        return dict(_metrics)
+
+
+def reset_metrics() -> None:
+    with _metrics_lock:
+        for k in _metrics:
+            _metrics[k] = 0 if isinstance(_metrics[k], int) else 0.0
+
+
+def _tambah(nama: str, nilai) -> None:
+    with _metrics_lock:
+        _metrics[nama] += nilai
 
 
 # ── Fungsi utama: chat() ────────────────────────────────────────────────────
@@ -108,7 +176,14 @@ def chat(
 
     for model in chain:
         for attempt in range(3):
-            entry = _budget(model).acquire(est_in + max_tokens)
+            tambah = _limiter.acquire()
+            if tambah:
+                _tambah("rpm_wait", tambah)
+            budget = _budget(model)
+            menunggu = budget.waited
+            entry = budget.acquire(est_in + max_tokens)
+            _tambah("budget_wait", budget.waited - menunggu)
+            _tambah("calls", 1)
             start = time.time()
             try:
                 kw = dict(
@@ -125,6 +200,8 @@ def chat(
                 resp = _get_client().chat.completions.create(**kw)
                 actual = resp.usage.total_tokens
                 _budget(model).settle(entry, actual)
+                _tambah("prompt_tokens", getattr(resp.usage, "prompt_tokens", 0) or 0)
+                _tambah("completion_tokens", getattr(resp.usage, "completion_tokens", 0) or 0)
 
                 text = (resp.choices[0].message.content or "").strip()
                 dur = time.time() - start
@@ -144,6 +221,7 @@ def chat(
 
             except RateLimitError as e:
                 last_err = e
+                _tambah("rate_limited_429", 1)
                 err_str = str(e)
                 # TPD / daily limit → langsung ganti model, jangan retry
                 if "per day" in err_str or "TPD" in err_str or "daily" in err_str.lower():
@@ -210,6 +288,8 @@ class MockGroq:
             choices = [Choice()]
 
             class Usage:
+                prompt_tokens = max_completion_tokens
+                completion_tokens = 50
                 total_tokens = max_completion_tokens + 50
             usage = Usage()
 

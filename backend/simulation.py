@@ -20,6 +20,8 @@ import re
 import time
 import statistics
 
+from concurrent.futures import ThreadPoolExecutor
+
 from .llm      import (
     call_llm, call_llm_json,
     MODEL_AGENT, MODEL_ANALYSIS,
@@ -68,6 +70,12 @@ USE_LEGACY_PIPELINE = os.getenv("USE_LEGACY_PIPELINE", "false").lower() in {"1",
 # Ambang pemangkasan prompt jalur JSON. Lebih longgar dari legacy karena posisi agen,
 # aturan berubah_karena, dan ringkasan pihak lain wajib utuh.
 BATAS_TRIM_JSON = 1200
+
+# Paralel antaragen dalam satu ronde (khusus jalur JSON). Ronde 1 independen dan
+# Ronde 2+ hanya membaca ringkasan ronde sebelumnya, jadi tidak ada dependensi
+# antaragen dalam satu ronde. Pacing dipegang TokenBudget + rate limiter RPM.
+PARALLEL_AGENTS = os.getenv("PARALLEL_AGENTS", "true").lower() in {"1", "true", "yes", "on"}
+PARALLEL_AGENTS_MAX = int(os.getenv("PARALLEL_AGENTS_MAX", "4"))
 
 _STANCE_KE_LABEL = {"menolak": "negatif", "netral": "netral", "mendukung": "positif"}
 
@@ -323,9 +331,9 @@ def run_simulation(
 
     RATE LIMIT STRATEGY:
     ─────────────────────────────────────────────────
-    • Agen diproses SEQUENTIAL, satu per satu
-    • Jeda AGENT_CALL_DELAY detik antar setiap agen
-    • Jeda ROUND_DELAY detik antar setiap ronde
+    • Jalur JSON: agen dalam satu ronde paralel (PARALLEL_AGENTS, maks
+      PARALLEL_AGENTS_MAX), tanpa jeda tetap; pacing via TokenBudget + RPM
+    • Jalur legacy: SEQUENTIAL dengan AGENT_CALL_DELAY / ROUND_DELAY
     • Token prompt dipangkas: role max 250 char, briefing max 200 char
     • Retry otomatis via call_llm() jika 429
     • Sentiment mode inline = 0 token tambahan per agen
@@ -334,6 +342,11 @@ def run_simulation(
     FAST_MODE = os.getenv("SIMULATION_FAST", "false").lower() in {"1", "true", "yes", "on"}
     if FAST_MODE:
         print("[SIMULATION] FAST MODE aktif — delay=0, QA/justify skip, max_tokens dipangkas.")
+
+    from .llm_guard import metrics as _llm_metrics, reset_metrics as _reset_metrics
+
+    _reset_metrics()
+    waktu_mulai = time.time()
 
     ronde_detail              = []
     log_diskusi               = f"TOPIK: {topik}\n"
@@ -380,7 +393,6 @@ def run_simulation(
         agen: dict,
         ronde_ke: int,
         topik_ronde: str,
-        pendapat_dalam_ronde_ini: list[dict],
     ) -> dict:
         konteks_memori = build_memory_context(agen)
 
@@ -657,7 +669,6 @@ def run_simulation(
             # Aturan realisme: score dibatasi agar tidak loncat > _DELTA_CAP per ronde.
             # Ini clamp Python, bukan hasil model. Stance tetap seperti yang ditulis agen.
             turn["score"] = _apply_delta_cap(turn["score"], skor_ronde_lalu, agen["nama"], ronde_ke)
-            stance_terakhir[agen["nama"]] = turn["stance"]
 
             # Post-check angka: klaim di luar briefing/topik ditandai, bukan diubah.
             asing = angka_klaim(turn["alasan"], sumber_angka)
@@ -778,6 +789,24 @@ def run_simulation(
     # Phase 3: track event impacts per-agent
     event_impacts: dict[str, dict[str, float]] = {}
 
+    def _jalan_giliran(agen: dict, ronde_ke: int, topik_ronde: str) -> tuple[dict, bool]:
+        """Satu giliran agen, termasuk penanganan gagal. Aman dipanggil paralel:
+        hanya membaca state ronde sebelumnya dan menulis ke dict agennya sendiri."""
+        try:
+            return _proses_satu_agen(agen, ronde_ke, topik_ronde), False
+        except Exception as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            print(f"[Error] {agen['nama']} ronde {ronde_ke}: {error_type}: {error_msg}")
+            return {
+                "nama":     agen["nama"],
+                "pendapat": f"(gagal: {error_msg[:200]})",
+                "sentimen": None,  # tidak ada sentimen untuk giliran gagal
+                "pengaruh": agen.get("pengaruh", 0.5),
+                "status":   "gagal",
+                "alasan_gagal": error_msg[:500],
+            }, True
+
     for ronde_ke in range(1, jumlah_ronde + 1):
         topik_ronde = topik
         active_event_impacts: dict[str, float] = {}
@@ -799,31 +828,30 @@ def run_simulation(
 
         output_ronde       = {"ronde": ronde_ke, "agen": []}
         pendapat_ronde_ini = []
-        pendapat_dalam_ronde_ini: list[dict] = []
 
         order = get_speaking_order(agents, ronde_ke, strategy=scheduler_strategy)
         urutan_agen = [agents[i] for i in order]
 
-        for idx, agen in enumerate(urutan_agen):
-            try:
-                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini)
-                res_failed = False
-            except Exception as e:
-                import traceback
-                error_type = type(e).__name__
-                error_msg  = str(e)
-                print(f"[Error] {agen['nama']} ronde {ronde_ke}: {error_type}: {error_msg}")
-                # print(f"[Traceback] {traceback.format_exc()}")  # verbose, skip
-                res = {
-                    "nama":     agen["nama"],
-                    "pendapat": f"(gagal: {error_msg[:200]})",
-                    "sentimen": None,  # tidak ada sentimen untuk giliran gagal
-                    "pengaruh": agen.get("pengaruh", 0.5),
-                    "status":   "gagal",
-                    "alasan_gagal": error_msg[:500],
-                }
-                res_failed = True
+        # Baris A: jalankan semua agen ronde ini. pool.map menjaga urutan roster,
+        # jadi hasilnya deterministik walau selesai tidak berurutan.
+        if not USE_LEGACY_PIPELINE and PARALLEL_AGENTS and len(urutan_agen) > 1:
+            with ThreadPoolExecutor(
+                max_workers=min(PARALLEL_AGENTS_MAX, len(urutan_agen))
+            ) as pool:
+                hasil_agen = list(pool.map(
+                    lambda a: _jalan_giliran(a, ronde_ke, topik_ronde), urutan_agen
+                ))
+        else:
+            hasil_agen = []
+            for i, a in enumerate(urutan_agen):
+                hasil_agen.append(_jalan_giliran(a, ronde_ke, topik_ronde))
+                bukan_akhir = not (i == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)
+                if USE_LEGACY_PIPELINE and not FAST_MODE and bukan_akhir:
+                    time.sleep(AGENT_CALL_DELAY)
 
+        # Barrier: memory, stance_terakhir, dan daftar pendapat baru diperbarui
+        # setelah semua agen ronde ini selesai.
+        for agen, (res, res_failed) in zip(urutan_agen, hasil_agen):
             # Hanya catat ke output ronde (untuk transparansi), TAMBAHKAN status
             output_ronde["agen"].append({
                 "nama": res["nama"],
@@ -843,6 +871,8 @@ def run_simulation(
                 "klaim_agen":      res.get("klaim_agen", False),
                 "angka_klaim":     res.get("angka_klaim", []),
             })
+            if res.get("stance"):
+                stance_terakhir[res["nama"]] = res["stance"]
 
             if not res_failed:
                 # Giliran sukses: update memory, log, aggregator structures
@@ -863,19 +893,14 @@ def run_simulation(
                     "sentimen": res["sentimen"], "pengaruh": res["pengaruh"],
                 }
                 pendapat_ronde_ini.append(entry)
-                pendapat_dalam_ronde_ini.append(entry)
             else:
                 print(f"[GiliranGagal] {agen['nama']} R{ronde_ke}: {res['alasan_gagal'][:120]}")
-
-            bukan_akhir = not (idx == len(urutan_agen) - 1 and ronde_ke == jumlah_ronde)
-            if not FAST_MODE and bukan_akhir:
-                time.sleep(AGENT_CALL_DELAY)
 
         ronde_detail.append(output_ronde)
         pendapat_ronde_sebelumnya = pendapat_ronde_ini
 
-        # ponytail: CrowdPool removed — was always no-op for free tier
-        if not FAST_MODE and ronde_ke < jumlah_ronde:
+        # Jeda hanya di jalur legacy; jalur JSON dipacing TokenBudget + rate limiter.
+        if USE_LEGACY_PIPELINE and not FAST_MODE and ronde_ke < jumlah_ronde:
             time.sleep(ROUND_DELAY)
 
     # ── GraphRAG extraction ──
@@ -1023,6 +1048,22 @@ def run_simulation(
     kualitas = _hitung_kualitas(ronde_detail)
     hasil_dict["kualitas"] = kualitas
     hasil_dict["klaim_angka"] = _hitung_klaim(ronde_detail)
+
+    # Statistik run (dari metrik llm_guard): untuk mengukur efek paralel & pacing.
+    _stat = _llm_metrics()
+    hasil_dict["statistik_run"] = {
+        "pipeline": "legacy" if USE_LEGACY_PIPELINE else "json",
+        "parallel": bool(PARALLEL_AGENTS and not USE_LEGACY_PIPELINE),
+        "parallel_max": PARALLEL_AGENTS_MAX,
+        "durasi_detik": round(time.time() - waktu_mulai, 2),
+        "panggilan_llm": _stat["calls"],
+        "token_prompt": _stat["prompt_tokens"],
+        "token_completion": _stat["completion_tokens"],
+        "token_total": _stat["prompt_tokens"] + _stat["completion_tokens"],
+        "rate_limited_429": _stat["rate_limited_429"],
+        "tunggu_token_budget_detik": round(_stat["budget_wait"], 2),
+        "tunggu_rpm_detik": round(_stat["rpm_wait"], 2),
+    }
     if kualitas["status"] != "ok":
         print(
             f"[KUALITAS] status={kualitas['status']} — "
