@@ -140,5 +140,53 @@ class TestBuildComputed:
         assert out == expected
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestFallbackVariant:
+    """Test builder dengan fixture varian yang punya fallback."""
+    
+    @pytest.fixture
+    def run_fallback(self):
+        import json
+        from pathlib import Path
+        with open(Path("backend/tests/fixtures/run_mbg_synthetic_fallback.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_fallback_count_benar(self, run_fallback):
+        # kualitas ada di run data, bukan di builder output
+        assert run_fallback["kualitas"]["fallback_count"] == 1
+
+    def test_keterbatasan_mengandung_fallback(self, run_fallback):
+        out = build_computed(run_fallback)
+        k = out["keterbatasan"]
+        assert "1 dari 36 giliran memakai nilai cadangan" in k
+
+    def test_kutipan_tidak_dari_fallback(self, run_fallback):
+        out = build_computed(run_fallback)
+        for ronde_out in out["ronde"]:
+            if ronde_out["kutipan"]:
+                agen = ronde_out["kutipan"]["agen"]
+                rd = next(rd for rd in run_fallback["ronde_detail"] if rd["ronde"] == ronde_out["no"])
+                agen_data = next(a for a in rd["agen"] if a["nama"] == agen)
+                assert agen_data.get("fallback") is False, f"Kutipan dari agen fallback: {agen}"
+
+    def test_titik_balik_tidak_dari_fallback(self, run_fallback):
+        out = build_computed(run_fallback)
+        agen_tb = {t["agen"]: t for t in out["titikBalik"]}
+        # Orang Tua Bayi: R2 fallback=true tapi TIDAK berubah stance (menolak->menolak)
+        # R3 non-fallback berubah menolak->netral -> INI yang jadi titik balik
+        assert "Orang Tua Bayi" in agen_tb
+        assert agen_tb["Orang Tua Bayi"]["dari"] == "menolak"
+        assert agen_tb["Orang Tua Bayi"]["ke"] == "netral"
+        assert agen_tb["Orang Tua Bayi"]["kapan"] == "Ronde 3"
+        # Dokter/Nakes: R2 netral, R3 menolak (non-fallback) -> titik balik di R3
+        assert "Dokter/Nakes" in agen_tb
+        assert agen_tb["Dokter/Nakes"]["kapan"] == "Ronde 3"
+        assert agen_tb["Dokter/Nakes"]["dari"] == "netral"
+        assert agen_tb["Dokter/Nakes"]["ke"] == "menolak"
+
+    def test_distribusi_per_ronde_termasuk_fallback(self, run_fallback):
+        out = build_computed(run_fallback)
+        # R2: menolak=9, netral=2, mendukung=1 (fallback di Orang Tua Bayi di menolak)
+        d_r2 = next(r["distribusi"] for r in out["ronde"] if r["no"] == 2)
+        assert d_r2["menolak"] == 9
+        assert d_r2["netral"] == 2
+        assert d_r2["mendukung"] == 1

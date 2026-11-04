@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from backend.llm import call_llm
+from backend.llm_guard import chat as llm_chat, RateLimitError
 from backend.services.casestudy_builder import build_computed
 
 
@@ -133,9 +133,6 @@ Pemicu: {pemicu_angka} — {pemicu_teks}
 Bahan: {bahan}
 Sumber: {sumber}
 
-SKETSA SKENARIO (bisa dipakai/disesuaikan):
-{skenario_draft}
-
 Tulis narasi lengkap sesuai schema.
 """
 
@@ -203,7 +200,6 @@ def _build_narrator_prompt(computed: dict, run: dict) -> str:
     titik_balik = _format_titik_balik(computed.get("titikBalik", []))
     ronde_kutipan = _format_ronde_kutipan(computed.get("ronde", []))
     alasan_akhir = _format_alasan_akhir(computed["hasil"]["alasan"])
-    skenario_draft = _format_skenario_draft(computed.get("skenario", []))
 
     return NARRATOR_USER_TEMPLATE.format(
         topik=run.get("topik", ""),
@@ -225,7 +221,6 @@ def _build_narrator_prompt(computed: dict, run: dict) -> str:
         pemicu_teks=pemicu_teks,
         bahan=bahan,
         sumber=sumber,
-        skenario_draft=skenario_draft,
     )
 
 
@@ -364,7 +359,8 @@ def generate_narrative(run: dict, computed: dict | None = None) -> dict:
         computed: Optional pre-computed builder output. Jika None, dipanggil build_computed.
 
     Returns:
-        Dict narasi (vonis, alasan, situasi, kubu_catatan, ronde, skenario).
+        Dict narasi (vonis, alasan, situasi, kubu_catatan, ronde, skenario,
+        narator_fallback, narator_fallback_reason).
         Jika narator_fallback=True, hasil dari template fallback.
     """
     if computed is None:
@@ -372,41 +368,59 @@ def generate_narrative(run: dict, computed: dict | None = None) -> dict:
 
     prompt = _build_narrator_prompt(computed, run)
 
-    # Percobaan 1
+    # Percobaan 1: panggil LLM via llm_chat (bukan call_llm) agar bisa tangkap
+    # RateLimitError dan membedakan TPD/rate limit dari error lain.
     try:
-        raw = call_llm(
-            system_prompt=NARRATOR_SYSTEM,
-            user_prompt=prompt,
+        raw, _model = llm_chat(
+            messages=[
+                {"role": "system", "content": NARRATOR_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
             max_tokens=NARRATOR_MAX_TOKENS,
             response_format=NARRATOR_RESPONSE_FORMAT,
-            use_cache=False,
-            auto_complete=False,
+            temperature=0.3,
         )
         nar = json.loads(raw)
         errors = _validate_narrative(nar, computed, run)
         if not errors:
-            return {**nar, "narator_fallback": False}
-    except Exception:
-        pass  # coba fallback
+            return {**nar, "narator_fallback": False, "narator_fallback_reason": None}
+        # Validasi gagal → coba retry sekali
+        raise ValueError("validasi_gagal")
 
-    # Percobaan 2 (retry dengan instruksi lebih keras)
-    try:
-        retry_prompt = prompt + "\n\nOUTPUT SEBELUMNYA TIDAK VALID. Ikuti semua aturan di atas dengan ketat. Output HANYA JSON."
-        raw = call_llm(
-            system_prompt=NARRATOR_SYSTEM,
-            user_prompt=retry_prompt,
-            max_tokens=NARRATOR_MAX_TOKENS,
-            response_format=NARRATOR_RESPONSE_FORMAT,
-            use_cache=False,
-            auto_complete=False,
-        )
-        nar = json.loads(raw)
-        errors = _validate_narrative(nar, computed, run)
-        if not errors:
-            return {**nar, "narator_fallback": False}
-    except Exception:
-        pass
+    except RateLimitError as e:
+        err_str = str(e)
+        # TPD / daily limit → langsung fallback, JANGAN retry
+        if "per day" in err_str or "TPD" in err_str or "daily" in err_str.lower():
+            fb = _fallback_narrative(computed)
+            return {**fb, "narator_fallback": True, "narator_fallback_reason": "tpd_limit"}
+        # Rate limit per menit → langsung fallback, JANGAN retry (percuma)
+        fb = _fallback_narrative(computed)
+        return {**fb, "narator_fallback": True, "narator_fallback_reason": "rate_limit"}
 
-    # Fallback final
-    fb = _fallback_narrative(computed)
-    return {**fb, "narator_fallback": True}
+    except (json.JSONDecodeError, ValueError) as e:
+        reason = "json_invalid" if isinstance(e, json.JSONDecodeError) else "validasi_gagal"
+        # Coba retry sekali dengan instruksi lebih keras
+        try:
+            retry_prompt = prompt + "\n\nOUTPUT SEBELUMNYA TIDAK VALID. Ikuti semua aturan di atas dengan ketat. Output HANYA JSON."
+            raw, _model = llm_chat(
+                messages=[
+                    {"role": "system", "content": NARRATOR_SYSTEM},
+                    {"role": "user", "content": retry_prompt},
+                ],
+                max_tokens=NARRATOR_MAX_TOKENS,
+                response_format=NARRATOR_RESPONSE_FORMAT,
+                temperature=0.3,
+            )
+            nar = json.loads(raw)
+            errors = _validate_narrative(nar, computed, run)
+            if not errors:
+                return {**nar, "narator_fallback": False, "narator_fallback_reason": None}
+        except Exception:
+            pass
+        fb = _fallback_narrative(computed)
+        return {**fb, "narator_fallback": True, "narator_fallback_reason": reason}
+
+    except Exception as e:
+        # Error lain (network, dll) → langsung fallback
+        fb = _fallback_narrative(computed)
+        return {**fb, "narator_fallback": True, "narator_fallback_reason": "error_lain"}

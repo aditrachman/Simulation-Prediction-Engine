@@ -147,19 +147,23 @@ class TestPromptBuilder:
         assert "Menolak: 8" in prompt  # distribusi di prompt
         assert "Oposisi Kritis" in prompt
         assert "titik balik" in prompt.lower()
-        assert "Jika" in prompt and "maka" in prompt
+        # Skenario draft sudah dihapus dari prompt (FASE 7b)
+        # Narator membuat skenario berdasarkan alasan agen dan kubu
 
 
 class TestGenerateNarrative:
     def test_generate_narrative_sukses_pertama_kali(self, run_data, computed, monkeypatch):
-        """Mock call_llm return valid narrative di percobaan pertama."""
-        def mock_call_llm(system_prompt, user_prompt, **kwargs):
-            return json.dumps(VALID_NARRATIVE)
+        """Mock llm_guard.chat return valid narrative di percobaan pertama."""
+        from backend.llm_guard import chat as llm_chat
 
-        monkeypatch.setattr("backend.services.narrator.call_llm", mock_call_llm)
+        def mock_chat(messages, max_tokens, response_format, temperature):
+            return json.dumps(VALID_NARRATIVE), "test-model"
+
+        monkeypatch.setattr("backend.services.narrator.llm_chat", mock_chat)
 
         result = generate_narrative(run_data, computed)
         assert result["narator_fallback"] is False
+        assert result["narator_fallback_reason"] is None
         assert result["vonis"] == VALID_NARRATIVE["vonis"]
         assert len(result["alasan"]) == 3
 
@@ -167,41 +171,44 @@ class TestGenerateNarrative:
         """Percobaan pertama gagal validasi, kedua sukses."""
         call_count = {"n": 0}
 
-        def mock_call_llm(system_prompt, user_prompt, **kwargs):
+        def mock_chat(messages, max_tokens, response_format, temperature):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 bad = copy.deepcopy(VALID_NARRATIVE)
                 bad["vonis"] = "Semua peserta mendukung."
-                return json.dumps(bad)
-            return json.dumps(VALID_NARRATIVE)
+                return json.dumps(bad), "test-model"
+            return json.dumps(VALID_NARRATIVE), "test-model"
 
-        monkeypatch.setattr("backend.services.narrator.call_llm", mock_call_llm)
+        monkeypatch.setattr("backend.services.narrator.llm_chat", mock_chat)
 
         result = generate_narrative(run_data, computed)
         assert result["narator_fallback"] is False
+        assert result["narator_fallback_reason"] is None
         assert call_count["n"] == 2
 
     def test_generate_narrative_fallback_kedua_gagal(self, run_data, computed, monkeypatch):
         """Kedua percobaan gagal → fallback template."""
-        def mock_call_llm(system_prompt, user_prompt, **kwargs):
+        def mock_chat(messages, max_tokens, response_format, temperature):
             raise RuntimeError("LLM error")
 
-        monkeypatch.setattr("backend.services.narrator.call_llm", mock_call_llm)
+        monkeypatch.setattr("backend.services.narrator.llm_chat", mock_chat)
 
         result = generate_narrative(run_data, computed)
         assert result["narator_fallback"] is True
+        assert result["narator_fallback_reason"] == "error_lain"
         assert result["vonis"] == computed["hasil"]["vonis"]
         assert set(result["kubu_catatan"].keys()) == {"tolak", "netral", "dukung"}
 
     def test_generate_narrative_json_parse_error(self, run_data, computed, monkeypatch):
         """Response bukan valid JSON → fallback."""
-        def mock_call_llm(system_prompt, user_prompt, **kwargs):
-            return "bukan json {"
+        def mock_chat(messages, max_tokens, response_format, temperature):
+            return "bukan json {", "test-model"
 
-        monkeypatch.setattr("backend.services.narrator.call_llm", mock_call_llm)
+        monkeypatch.setattr("backend.services.narrator.llm_chat", mock_chat)
 
         result = generate_narrative(run_data, computed)
         assert result["narator_fallback"] is True
+        assert result["narator_fallback_reason"] == "json_invalid"
 
 
 class TestNarratorSmoke:
