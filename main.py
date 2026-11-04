@@ -80,6 +80,10 @@ MAX_TOPIC_LENGTH        = int(os.getenv("MAX_TOPIC_LENGTH",        "300"))
 _rate_limit_state: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
 
+# Router Case Study (FASE 5d)
+from backend.routers import case_study as _cs_router
+app.include_router(_cs_router.router)
+
 # BUG #6 FIX: Tambah pola XSS dan injeksi yang diblokir
 BLOCKED_PATTERNS = (
     "<script", "</script", "javascript:", "onerror=", "onload=", "onclick=",
