@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 const navLinks = [
   { label: "Beranda", href: "/" },
+  { label: "Studi Kasus", href: "/studi-kasus" },
   { label: "Coba Simulasi", href: "/demo" },
   { label: "Panduan", href: "https://github.com/aditrachman/Simulation-Prediction-Engine", external: true },
 ];

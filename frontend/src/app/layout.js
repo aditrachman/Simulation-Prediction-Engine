@@ -1,4 +1,4 @@
-import { Plus_Jakarta_Sans, Inter, Space_Grotesk } from "next/font/google";
+import { Plus_Jakarta_Sans, Inter, Space_Grotesk, Newsreader, Public_Sans } from "next/font/google";
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -21,6 +21,18 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-logo",
 });
 
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-newsreader",
+});
+
+const publicSans = Public_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-public-sans",
+});
+
 export const metadata = {
   title: "Simulasi Opini — Cobain reaksi publik sebelum kebijakan diluncurkan",
   description:
@@ -29,7 +41,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id" className={`${jakarta.variable} ${inter.variable} ${spaceGrotesk.variable}`}>
+    <html lang="id" className={`${jakarta.variable} ${inter.variable} ${spaceGrotesk.variable} ${newsreader.variable} ${publicSans.variable}`}>
       <body>
         <Navbar />
 
