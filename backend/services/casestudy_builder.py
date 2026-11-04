@@ -34,12 +34,10 @@ def _distribusi(stance_list: list[str]) -> dict[str, int]:
 def _format_relevansi(val: float | None) -> str:
     if val is None:
         return "0,00"
-    # pakai koma desimal Indonesia
     return f"{val:.2f}".replace(".", ",")
 
 
 def _kata_naik_turun(teks: str) -> str | None:
-    """Deteksi arah angka: 'naik'/'meningkat'/'peningkatan' vs 'turun'/'menurun'/'penurunan'/'berkurang'."""
     t = teks.lower()
     if any(k in t for k in ("naik", "meningkat", "menguat", "bertambah", "peningkatan")):
         return "naik"
@@ -49,16 +47,6 @@ def _kata_naik_turun(teks: str) -> str | None:
 
 
 def build_computed(run: dict) -> dict:
-    """
-    Bangun field-field CaseStudy yang dihitung dari run (tanpa LLM).
-
-    Args:
-        run: Dict hasil run_simulation (memuat topik, kategori, tanggal, mode,
-             sumber[], briefing, agen[], ronde_detail[], kualitas).
-
-    Returns:
-        Dict parsial CaseStudy (field yang dihitung, bukan narasi).
-    """
     runde_detail = run.get("ronde_detail", [])
     if not runde_detail:
         return {}
@@ -72,16 +60,14 @@ def build_computed(run: dict) -> dict:
     relevansi_rata = sum(relevansi_vals) / len(relevansi_vals) if relevansi_vals else None
 
     # ── Stance per agen per ronde ──────────────────────────────────────────
-    # Kumpulkan stance tiap agen di tiap ronde
     agen_stance_per_ronde: dict[str, list[str]] = {}
-    agen_berubah_karena: dict[str, list[str]] = {}  # ronde -> alasan
+    agen_berubah_karena: dict[str, list[str]] = {}
     agen_alasan_per_ronde: dict[str, list[str]] = {}
     agen_fallback_per_ronde: dict[str, list[bool]] = {}
     agen_klaim_per_ronde: dict[str, list[dict]] = {}
     agen_score_per_ronde: dict[str, list[float]] = {}
 
     for rd in runde_detail:
-        rno = rd["ronde"]
         for a in rd.get("agen", []):
             nama = a["nama"]
             stance = a.get("stance") or _stance_from_score(a.get("score"))
@@ -95,22 +81,15 @@ def build_computed(run: dict) -> dict:
             })
             agen_score_per_ronde.setdefault(nama, []).append(a.get("score", 0.0))
 
-    # ── Hasil.distribusi: stance ronde terakhir + fallback_count ───────────
+    # ── Hasil.distribusi: stance ronde terakhir (tanpa fallback_count) ──────
     stance_terakhir = [agen_stance_per_ronde[n][-1] for n in agen_stance_per_ronde]
-    fallback_total = sum(
-        1 for rd in runde_detail for a in rd.get("agen", []) if a.get("fallback")
-    )
     distribusi_akhir = _distribusi(stance_terakhir)
-    distribusi_akhir["fallback_count"] = fallback_total
 
-    # Distribusi per ronde
+    # Distribusi per ronde (tanpa fallback_count)
     distribusi_per_ronde = []
     for rd in runde_detail:
         stances_r = [a.get("stance") or _stance_from_score(a.get("score")) for a in rd.get("agen", [])]
-        fb_r = sum(1 for a in rd.get("agen", []) if a.get("fallback"))
-        d = _distribusi(stances_r)
-        d["fallback_count"] = fb_r
-        distribusi_per_ronde.append(d)
+        distribusi_per_ronde.append(_distribusi(stances_r))
 
     # ── Kubu: kelompokkan menurut stance AKHIR ────────────────────────────
     kubu_map: dict[str, list[str]] = {"tolak": [], "netral": [], "dukung": []}
@@ -137,10 +116,9 @@ def build_computed(run: dict) -> dict:
             "agen": kubu_map[tipe],
         })
 
-    # ── Titik Balik: satu entri per agen yang pernah berubah, pakai perubahan TERAKHIR ────
+    # ── Titik Balik: satu entri per agen, perubahan TERAKHIR non-fallback ──
     titik_balik = []
     for nama, stances in agen_stance_per_ronde.items():
-        # Cari indeks perubahan terakhir yang BUKAN fallback
         perubahan_idx = None
         for i in range(1, len(stances)):
             if stances[i] != stances[i - 1] and not agen_fallback_per_ronde[nama][i]:
@@ -149,7 +127,6 @@ def build_computed(run: dict) -> dict:
             dari = stances[perubahan_idx - 1]
             ke = stances[perubahan_idx]
             kapan = f"Ronde {perubahan_idx + 1}"
-            # Prioritaskan berubah_karena, fallback ke alasan agen
             alasan_bk = agen_berubah_karena[nama][perubahan_idx]
             alasan = alasan_bk if alasan_bk else agen_alasan_per_ronde[nama][perubahan_idx]
             titik_balik.append({
@@ -166,8 +143,7 @@ def build_computed(run: dict) -> dict:
         rno = rd["ronde"]
         dist = distribusi_per_ronde[i]
 
-        # Pilih kutipan: prioritas agen yang berubah stance di ronde ini (non-fallback),
-        # lalu |score| terbesar.
+        # Kutipan: prioritas agen berubah stance di ronde ini (non-fallback), lalu |score| terbesar
         kandidat = []
         for a in rd.get("agen", []):
             if a.get("fallback"):
@@ -192,7 +168,6 @@ def build_computed(run: dict) -> dict:
         else:
             kutipan = None
 
-        # Judul & ringkas sederhana (bisa diganti narator nanti)
         if rno == 1:
             judul = "Apa arti angka 72,8%?"
             ringkas = "Hampir semua peserta mempertanyakan angka kepuasan."
@@ -211,34 +186,63 @@ def build_computed(run: dict) -> dict:
             "kutipan": kutipan,
         })
 
-    # ── Bukti Diperdebatkan: angka_klaim beririsan tapi arah berlawanan ──────
-    # Kumpulkan semua klaim per ronde
-    bukti = []
-    for i, rd in enumerate(runde_detail):
+    # ── Bukti Diperdebatkan: max 3 entri, 1 per agen (ronde terbaru), berpasangan ──
+    # Kumpulkan klaim per agen (ambil ronde TERBARU untuk setiap agen-angka)
+    klaim_per_agen: dict[str, dict[str, dict]] = {}  # agen -> norm_angka -> {teks, arah, ronde}
+    for rd in runde_detail:
         rno = rd["ronde"]
-        klaim_agen = {}
         for a in rd.get("agen", []):
-            angka_list = a.get("angka_klaim", [])
-            for angka in angka_list:
-                # Normalisasi angka untuk cocokan (hapus spasi, persen, koma/titik)
+            nama = a["nama"]
+            for angka in a.get("angka_klaim", []):
                 norm = angka.replace(" ", "").replace("%", "").replace(",", ".")
-                klaim_agen.setdefault(norm, []).append({
-                    "agen": a["nama"],
+                if nama not in klaim_per_agen:
+                    klaim_per_agen[nama] = {}
+                klaim_per_agen[nama][norm] = {
                     "teks": a.get("alasan", ""),
                     "arah": _kata_naik_turun(a.get("alasan", "")),
-                })
+                    "ronde": rno,
+                }
 
-        for norm_angka, entri_list in klaim_agen.items():
-            if len(entri_list) >= 2:
-                arah_set = set(e["arah"] for e in entri_list if e["arah"])
-                if "naik" in arah_set and "turun" in arah_set:
-                    for e in entri_list:
-                        bukti.append({
-                            "agen": f"{e['agen']} · Ronde {rno}",
-                            "teks": e["teks"],
+    # Cari pasangan agen yang klaim angka sama tapi arah berlawanan
+    bukti_pairs = []
+    angka_terpakai = set()
+    for agen1, data1 in klaim_per_agen.items():
+        for norm1, info1 in data1.items():
+            if norm1 in angka_terpakai:
+                continue
+            if not info1["arah"]:
+                continue
+            for agen2, data2 in klaim_per_agen.items():
+                if agen2 == agen1:
+                    continue
+                if norm1 in data2:
+                    info2 = data2[norm1]
+                    if info2["arah"] and info1["arah"] != info2["arah"]:
+                        # Pasangan ditemukan
+                        # Urutkan: yang "naik" dulu, lalu "turun"
+                        if info1["arah"] == "naik":
+                            first, second = (agen1, info1), (agen2, info2)
+                        else:
+                            first, second = (agen2, info2), (agen1, info1)
+                        bukti_pairs.append({
+                            "angka": norm1,
+                            "agens": [
+                                {"agen": f"{first[0]} · Ronde {first[1]['ronde']}", "teks": first[1]["teks"]},
+                                {"agen": f"{second[0]} · Ronde {second[1]['ronde']}", "teks": second[1]["teks"]},
+                            ],
                         })
-                    # Hanya catat sekali per angka per ronde
-                    break
+                        angka_terpakai.add(norm1)
+                        break
+
+    # Flatten ke list bukti (max 3 entri = 1 pasangan + 1 tambahan, atau 1 pasangan penuh = 2 entri)
+    bukti = []
+    for pair in bukti_pairs:
+        for e in pair["agens"]:
+            if len(bukti) >= 3:
+                break
+            bukti.append(e)
+        if len(bukti) >= 3:
+            break
 
     # ── Kepercayaan ────────────────────────────────────────────────────────
     if n_sumber == 0:
@@ -275,7 +279,6 @@ def build_computed(run: dict) -> dict:
     if fb_count > 0:
         keterbatasan_parts.append(f"{fb_count} dari {total_giliran} giliran memakai nilai cadangan.")
 
-    # perubahan_tanpa_alasan count
     tanpa_alasan = sum(
         1 for rd in runde_detail for a in rd.get("agen", [])
         if a.get("perubahan_tanpa_alasan")
@@ -308,7 +311,7 @@ def build_computed(run: dict) -> dict:
         "sumber": sumber_teks,
     }
 
-    # ── Vonis (sederhana) ─────────────────────────────────────────────────
+    # ── Vonis ──────────────────────────────────────────────────────────────
     if distribusi_akhir["menolak"] > distribusi_akhir["netral"] + distribusi_akhir["mendukung"]:
         vonis = "Mayoritas peserta menolak anggapan bahwa MBG sudah tepat sasaran."
     elif distribusi_akhir["mendukung"] > distribusi_akhir["menolak"] + distribusi_akhir["netral"]:
@@ -316,7 +319,7 @@ def build_computed(run: dict) -> dict:
     else:
         vonis = "Pendapat peserta tercampur, tidak ada mayoritas jelas."
 
-    # ── Alasan (3 poin utama dari ronde terakhir non-fallback, |score| terbesar) ────
+    # ── Alasan (3 poin utama dari ronde terakhir non-fallback, |score| terbesar) ──
     kandidat_alasan = []
     for a in runde_detail[-1].get("agen", []):
         if a.get("fallback"):
@@ -325,7 +328,7 @@ def build_computed(run: dict) -> dict:
     kandidat_alasan.sort(key=lambda x: x[0], reverse=True)
     alasan_top = [a for _, a in kandidat_alasan[:3]]
 
-    # ── Skenario & WhatIf (placeholder, narator isi nanti) ────────────────
+    # ── Skenario & WhatIf ─────────────────────────────────────────────────
     skenario = [
         {"jika": "Pemerintah membuka data distribusi secara transparan", "maka": "Oposisi Kritis bisa lebih moderat."},
         {"jika": "Hasil audit menunjukkan keracunan makanan menurun", "maka": "Pengusaha/UMKM mungkin beralih ke netral."},

@@ -14,74 +14,566 @@
     }
   ],
   "agen": [
-    {"nama": "Jurnalis/Media", "role": "Jurnalis investigatif", "kepribadian": {"openness": 0.8, "agreeableness": 0.4, "neuroticism": 0.6}, "pengaruh": 0.7, "initial_stance": -0.3},
-    {"nama": "Pengusaha/UMKM", "role": "Pengusaha UMKM", "kepribadian": {"openness": 0.6, "agreeableness": 0.5, "neuroticism": 0.5}, "pengaruh": 0.6, "initial_stance": -0.2},
-    {"nama": "Oposisi Kritis", "role": "Aktivis oposisi", "kepribadian": {"openness": 0.9, "agreeableness": 0.3, "neuroticism": 0.7}, "pengaruh": 0.8, "initial_stance": -0.5},
-    {"nama": "Warga Desa/Kelurahan", "role": "Warga desa", "kepribadian": {"openness": 0.5, "agreeableness": 0.6, "neuroticism": 0.5}, "pengaruh": 0.5, "initial_stance": -0.3},
-    {"nama": "Mahasiswa", "role": "Mahasiswa aktivis", "kepribadian": {"openness": 0.9, "agreeableness": 0.4, "neuroticism": 0.6}, "pengaruh": 0.7, "initial_stance": -0.3},
-    {"nama": "Pekerja Kantoran", "role": "Pekerja kantoran", "kepribadian": {"openness": 0.6, "agreeableness": 0.5, "neuroticism": 0.4}, "pengaruh": 0.6, "initial_stance": -0.2},
-    {"nama": "Akademisi", "role": "Akademisi", "kepribadian": {"openness": 0.8, "agreeableness": 0.6, "neuroticism": 0.3}, "pengaruh": 0.7, "initial_stance": -0.1},
-    {"nama": "Guru Sekolah", "role": "Guru sekolah", "kepribadian": {"openness": 0.7, "agreeableness": 0.7, "neuroticism": 0.4}, "pengaruh": 0.6, "initial_stance": -0.2},
-    {"nama": "Orang Tua Bayi", "role": "Orang tua bayi", "kepribadian": {"openness": 0.6, "agreeableness": 0.6, "neuroticism": 0.5}, "pengaruh": 0.5, "initial_stance": -0.3},
-    {"nama": "Pemerintah", "role": "Pejabat pemerintah", "kepribadian": {"openness": 0.5, "agreeableness": 0.6, "neuroticism": 0.3}, "pengaruh": 0.8, "initial_stance": 0.1},
-    {"nama": "Ibu Hamil/Menyusui", "role": "Ibu hamil/menyusui", "kepribadian": {"openness": 0.7, "agreeableness": 0.7, "neuroticism": 0.5}, "pengaruh": 0.5, "initial_stance": 0.4},
-    {"nama": "Dokter/Nakes", "role": "Dokter/nakes", "kepribadian": {"openness": 0.8, "agreeableness": 0.5, "neuroticism": 0.4}, "pengaruh": 0.7, "initial_stance": -0.2}
+    {
+      "nama": "Jurnalis/Media",
+      "role": "Jurnalis investigatif",
+      "kepribadian": {
+        "openness": 0.8,
+        "agreeableness": 0.4,
+        "neuroticism": 0.6
+      },
+      "pengaruh": 0.7,
+      "initial_stance": -0.3
+    },
+    {
+      "nama": "Pengusaha/UMKM",
+      "role": "Pengusaha UMKM",
+      "kepribadian": {
+        "openness": 0.6,
+        "agreeableness": 0.5,
+        "neuroticism": 0.5
+      },
+      "pengaruh": 0.6,
+      "initial_stance": -0.2
+    },
+    {
+      "nama": "Oposisi Kritis",
+      "role": "Aktivis oposisi",
+      "kepribadian": {
+        "openness": 0.9,
+        "agreeableness": 0.3,
+        "neuroticism": 0.7
+      },
+      "pengaruh": 0.8,
+      "initial_stance": -0.5
+    },
+    {
+      "nama": "Warga Desa/Kelurahan",
+      "role": "Warga desa",
+      "kepribadian": {
+        "openness": 0.5,
+        "agreeableness": 0.6,
+        "neuroticism": 0.5
+      },
+      "pengaruh": 0.5,
+      "initial_stance": -0.3
+    },
+    {
+      "nama": "Mahasiswa",
+      "role": "Mahasiswa aktivis",
+      "kepribadian": {
+        "openness": 0.9,
+        "agreeableness": 0.4,
+        "neuroticism": 0.6
+      },
+      "pengaruh": 0.7,
+      "initial_stance": -0.3
+    },
+    {
+      "nama": "Pekerja Kantoran",
+      "role": "Pekerja kantoran",
+      "kepribadian": {
+        "openness": 0.6,
+        "agreeableness": 0.5,
+        "neuroticism": 0.4
+      },
+      "pengaruh": 0.6,
+      "initial_stance": -0.2
+    },
+    {
+      "nama": "Akademisi",
+      "role": "Akademisi",
+      "kepribadian": {
+        "openness": 0.8,
+        "agreeableness": 0.6,
+        "neuroticism": 0.3
+      },
+      "pengaruh": 0.7,
+      "initial_stance": -0.1
+    },
+    {
+      "nama": "Guru Sekolah",
+      "role": "Guru sekolah",
+      "kepribadian": {
+        "openness": 0.7,
+        "agreeableness": 0.7,
+        "neuroticism": 0.4
+      },
+      "pengaruh": 0.6,
+      "initial_stance": -0.2
+    },
+    {
+      "nama": "Orang Tua Bayi",
+      "role": "Orang tua bayi",
+      "kepribadian": {
+        "openness": 0.6,
+        "agreeableness": 0.6,
+        "neuroticism": 0.5
+      },
+      "pengaruh": 0.5,
+      "initial_stance": -0.3
+    },
+    {
+      "nama": "Pemerintah",
+      "role": "Pejabat pemerintah",
+      "kepribadian": {
+        "openness": 0.5,
+        "agreeableness": 0.6,
+        "neuroticism": 0.3
+      },
+      "pengaruh": 0.8,
+      "initial_stance": 0.1
+    },
+    {
+      "nama": "Ibu Hamil/Menyusui",
+      "role": "Ibu hamil/menyusui",
+      "kepribadian": {
+        "openness": 0.7,
+        "agreeableness": 0.7,
+        "neuroticism": 0.5
+      },
+      "pengaruh": 0.5,
+      "initial_stance": 0.4
+    },
+    {
+      "nama": "Dokter/Nakes",
+      "role": "Dokter/nakes",
+      "kepribadian": {
+        "openness": 0.8,
+        "agreeableness": 0.5,
+        "neuroticism": 0.4
+      },
+      "pengaruh": 0.7,
+      "initial_stance": -0.2
+    }
   ],
   "ronde_detail": [
     {
       "ronde": 1,
       "agen": [
-        {"nama": "Jurnalis/Media", "stance": "menolak", "score": -0.6, "alasan": "Angka 72,8% dari survei media, bukan data lapangan. Banyak yang masih kelewat.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pengusaha/UMKM", "stance": "menolak", "score": -0.5, "alasan": "Target 82,9 juta tapi data distribusi tertutup. Insentif Rp1 triliun rawan korupsi.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Oposisi Kritis", "stance": "menolak", "score": -0.8, "alasan": "Program MBG dipaksakan tanpa audit. Korupsi pasti terjadi di tengah jalan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Warga Desa/Kelurahan", "stance": "menolak", "score": -0.6, "alasan": "Di desa kami belum ada sosialisasi. Keluarga miskin tidak tahu cara daftar.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Mahasiswa", "stance": "menolak", "score": -0.7, "alasan": "Data kepuasan 72,8% tidak mencerminkan realita. Mahasiswa di kampus kami protes.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pekerja Kantoran", "stance": "menolak", "score": -0.5, "alasan": "Anggaran Rp335 triliun besar tapi tidak ada transparansi biaya per penerima.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Akademisi", "stance": "menolak", "score": -0.4, "alasan": "Metodologi survei kepuasan tidak diterbitkan. Perlu data primer independen.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Guru Sekolah", "stance": "menolak", "score": -0.5, "alasan": "Sekolah kami terima bantuan tapi jadwal tidak pasti. Siswa tetap kelaparan siang.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Orang Tua Bayi", "stance": "menolak", "score": -0.5, "alasan": "Bayi saya tidak mendapat bantuan. Data target tidak sampai ke tingkat RT.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pemerintah", "stance": "netral", "score": 0.0, "alasan": "Program masih tahap evaluasi. Data distribusi akan dibuka setelah audit selesai.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Ibu Hamil/Menyusui", "stance": "mendukung", "score": 0.6, "alasan": "Saya terima bantuan posyandu. Anak saya naik berat badan 2 kg sebulan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Dokter/Nakes", "stance": "menolak", "score": -0.5, "alasan": "Kasus keracunan di puskesmas naik 30% sejak MBG mulai. Perlu pengawasan ketat.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []}
+        {
+          "nama": "Jurnalis/Media",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Angka 72,8% dari survei media, bukan data lapangan. Banyak yang masih kelewat.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pengusaha/UMKM",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Target 82,9 juta tapi data distribusi tertutup. Insentif Rp1 triliun rawan korupsi.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Oposisi Kritis",
+          "stance": "menolak",
+          "score": -0.8,
+          "alasan": "Program MBG dipaksakan tanpa audit. Korupsi pasti terjadi di tengah jalan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Warga Desa/Kelurahan",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Di desa kami belum ada sosialisasi. Keluarga miskin tidak tahu cara daftar.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Mahasiswa",
+          "stance": "menolak",
+          "score": -0.7,
+          "alasan": "Data kepuasan 72,8% tidak mencerminkan realita. Mahasiswa di kampus kami protes.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pekerja Kantoran",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Anggaran Rp335 triliun besar tapi tidak ada transparansi biaya per penerima.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Akademisi",
+          "stance": "menolak",
+          "score": -0.4,
+          "alasan": "Metodologi survei kepuasan tidak diterbitkan. Perlu data primer independen.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Guru Sekolah",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Sekolah kami terima bantuan tapi jadwal tidak pasti. Siswa tetap kelaparan siang.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Orang Tua Bayi",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Bayi saya tidak mendapat bantuan. Data target tidak sampai ke tingkat RT.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pemerintah",
+          "stance": "netral",
+          "score": 0.0,
+          "alasan": "Program masih tahap evaluasi. Data distribusi akan dibuka setelah audit selesai.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Ibu Hamil/Menyusui",
+          "stance": "mendukung",
+          "score": 0.6,
+          "alasan": "Saya terima bantuan posyandu. Anak saya naik berat badan 2 kg sebulan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Dokter/Nakes",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Kasus keracunan di puskesmas naik 30% sejak MBG mulai. Perlu pengawasan ketat.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        }
       ]
     },
     {
       "ronde": 2,
       "agen": [
-        {"nama": "Jurnalis/Media", "stance": "menolak", "score": -0.7, "alasan": "Laporan terbaru: 60% penerima di kota, 80% miskin di desa. Kesenjangan jelas.", "berubah_karena": "Data distribusi menunjukkan ketidakseimbangan urban-rural.", "sesuai_topik": true, "fallback": false, "klaim_agen": true, "angka_klaim": ["60%", "80%"]},
-        {"nama": "Pengusaha/UMKM", "stance": "menolak", "score": -0.6, "alasan": "Insentif Rp1 triliun dibagi tidak adil. UMKM desa tidak terjangkau.", "berubah_karena": "Bukti insentif tidak sampai ke daerah terpencil.", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Oposisi Kritis", "stance": "menolak", "score": -0.8, "alasan": "Audit BPK belum keluar. Program jalan tanpa kontrol anggaran yang jelas.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Warga Desa/Kelurahan", "stance": "menolak", "score": -0.4, "alasan": "Masih menolak tapi mulai ada warga desa yang terima bantuan.", "berubah_karena": "Ada saksi mata warga desa menerima paket MBG.", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Mahasiswa", "stance": "menolak", "score": -0.7, "alasan": "Mahasiswa di daerah terpencil tetap tidak terjangkau. Data tidak membohongi.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pekerja Kantoran", "stance": "menolak", "score": -0.6, "alasan": "Biaya operasional MBG melebihi manfaat. Butuh analisis efisiensi independen.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Akademisi", "stance": "menolak", "score": -0.5, "alasan": "Studi lapangan menunjukkan gap antara target dan realisasi. Butuh perbaikan sistem.", "berubah_karena": "Hasil studi lapangan tim peneliti kami.", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Guru Sekolah", "stance": "menolak", "score": -0.5, "alasan": "Distribusi ke sekolah masih acak. Banyak sekolah terpencil belum terima.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Orang Tua Bayi", "stance": "netral", "score": 0.0, "alasan": "Data Desa X: 78% warga melaporkan berat badan anak naik setelah MBG.", "berubah_karena": "Data Desa X soal kenaikan berat badan 78% membuat program terlihat lebih tepat sasaran.", "sesuai_topik": true, "fallback": false, "klaim_agen": true, "angka_klaim": ["78%"]},
-        {"nama": "Pemerintah", "stance": "netral", "score": 0.1, "alasan": "Kami terima masukan. Perbaikan sistem distribusi sedang dilakukan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Ibu Hamil/Menyusui", "stance": "mendukung", "score": 0.7, "alasan": "Bantuan teratur setiap minggu. Kesehatan anak saya membaik signifikan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Dokter/Nakes", "stance": "netral", "score": 0.0, "alasan": "Data Desa X menunjukkan penurunan kasus gizi buruk tapi keracunan tetap.", "berubah_karena": "Data Desa X: 78% melaporkan berat badan turun, beda dengan klaim warga.", "sesuai_topik": true, "fallback": false, "klaim_agen": true, "angka_klaim": ["78%"]}
+        {
+          "nama": "Jurnalis/Media",
+          "stance": "menolak",
+          "score": -0.7,
+          "alasan": "Laporan terbaru: 60% penerima di kota, 80% miskin di desa. Kesenjangan jelas.",
+          "berubah_karena": "Data distribusi menunjukkan ketidakseimbangan urban-rural.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": true,
+          "angka_klaim": [
+            "60%",
+            "80%"
+          ]
+        },
+        {
+          "nama": "Pengusaha/UMKM",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Insentif Rp1 triliun dibagi tidak adil. UMKM desa tidak terjangkau.",
+          "berubah_karena": "Bukti insentif tidak sampai ke daerah terpencil.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Oposisi Kritis",
+          "stance": "menolak",
+          "score": -0.8,
+          "alasan": "Audit BPK belum keluar. Program jalan tanpa kontrol anggaran yang jelas.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Warga Desa/Kelurahan",
+          "stance": "menolak",
+          "score": -0.4,
+          "alasan": "Masih menolak tapi mulai ada warga desa yang terima bantuan.",
+          "berubah_karena": "Ada saksi mata warga desa menerima paket MBG.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Mahasiswa",
+          "stance": "menolak",
+          "score": -0.7,
+          "alasan": "Mahasiswa di daerah terpencil tetap tidak terjangkau. Data tidak membohongi.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pekerja Kantoran",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Biaya operasional MBG melebihi manfaat. Butuh analisis efisiensi independen.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Akademisi",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Studi lapangan menunjukkan gap antara target dan realisasi. Butuh perbaikan sistem.",
+          "berubah_karena": "Hasil studi lapangan tim peneliti kami.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Guru Sekolah",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Distribusi ke sekolah masih acak. Banyak sekolah terpencil belum terima.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Orang Tua Bayi",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Program belum sampai ke desa kami. Keluarga miskin tetap terpinggirkan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pemerintah",
+          "stance": "netral",
+          "score": 0.1,
+          "alasan": "Kami terima masukan. Perbaikan sistem distribusi sedang dilakukan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Ibu Hamil/Menyusui",
+          "stance": "mendukung",
+          "score": 0.7,
+          "alasan": "Bantuan teratur setiap minggu. Kesehatan anak saya membaik signifikan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Dokter/Nakes",
+          "stance": "netral",
+          "score": 0.0,
+          "alasan": "Data Desa X menunjukkan 78% berat badan turun, beda dengan klaim warga.",
+          "berubah_karena": "Data Desa X: 78% melaporkan berat badan turun, beda dengan klaim warga.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": true,
+          "angka_klaim": [
+            "78%"
+          ]
+        }
       ]
     },
     {
       "ronde": 3,
       "agen": [
-        {"nama": "Jurnalis/Media", "stance": "menolak", "score": -0.6, "alasan": "Data konflik: warga bilang naik, dokter bilang turun. Siapa yang jujur?", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pengusaha/UMKM", "stance": "menolak", "score": -0.5, "alasan": "Tanpa transparansi anggaran, insentif Rp1 triliun tetap rawan disalahgunakan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Oposisi Kritis", "stance": "menolak", "score": -0.8, "alasan": "Kontradiksi data membuktikan program tidak terkelola dengan baik.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Warga Desa/Kelurahan", "stance": "netral", "score": 0.1, "alasan": "Setelah mendengar data warung dari pengusaha, menyadari ada distribusi di desa juga.", "berubah_karena": "Data pengusaha soal distribusi ke warung desa mengubah pandangan.", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Mahasiswa", "stance": "menolak", "score": -0.6, "alasan": "Data 78% naik vs turun menunjukkan sistem pelaporan belum terstandarisasi.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pekerja Kantoran", "stance": "menolak", "score": -0.5, "alasan": "Efisiensi program masih diragukan. Butuh audit biaya per manfaat kesehatan.", "berubah_karena": "", "sesuai_topik": true, "fallback": true, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Akademisi", "stance": "menolak", "score": -0.5, "alasan": "Berat badan naik di 78% warga, tapi status gizi membaik hanya di 45%.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": true, "angka_klaim": ["78%", "45%"]},
-        {"nama": "Guru Sekolah", "stance": "menolak", "score": -0.4, "alasan": "Sekolah desa mulai terima tapi jadwal masih tidak pasti. Perlu peningkatan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Orang Tua Bayi", "stance": "netral", "score": 0.0, "alasan": "Data Desa X soal kenaikan berat badan membuat program terlihat lebih tepat sasaran, tapi tetap skeptis.", "berubah_karena": "Data Desa X soal kenaikan berat badan anak membuat program terlihat lebih tepat sasaran di desa, tapi tetap skeptis.", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Pemerintah", "stance": "netral", "score": 0.2, "alasan": "Program berjalan, evaluasi berkelanjutan. Kami buka laporan triwulanan.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Ibu Hamil/Menyusui", "stance": "mendukung", "score": 0.8, "alasan": "Bantuan konsisten, anak sehat. Program ini benar-benar membantu keluarga kecil.", "berubah_karena": "", "sesuai_topik": true, "fallback": false, "klaim_agen": false, "angka_klaim": []},
-        {"nama": "Dokter/Nakes", "stance": "menolak", "score": -0.6, "alasan": "Berbalik menolak setelah data Desa X versi berbeda: penurunan berat badan dan anak menghindari makan.", "berubah_karena": "Data Desa X menunjukkan 78% berat badan turun dan anak menolak makan MBG.", "sesuai_topik": true, "fallback": false, "klaim_agen": true, "angka_klaim": ["78%"]}
+        {
+          "nama": "Jurnalis/Media",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Data konflik: warga bilang naik, dokter bilang turun. Siapa yang jujur?",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pengusaha/UMKM",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Tanpa transparansi anggaran, insentif Rp1 triliun tetap rawan disalahgunakan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Oposisi Kritis",
+          "stance": "menolak",
+          "score": -0.8,
+          "alasan": "Kontradiksi data membuktikan program tidak terkelola dengan baik.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Warga Desa/Kelurahan",
+          "stance": "netral",
+          "score": 0.1,
+          "alasan": "Setelah mendengar data pengusaha, menyadari ada distribusi di desa juga.",
+          "berubah_karena": "Data pengusaha soal distribusi ke warung desa mengubah pandangan.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Mahasiswa",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Data 78% naik vs turun menunjukkan sistem pelaporan belum terstandarisasi.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Pekerja Kantoran",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Efisiensi program diragukan. Audit biaya per manfaat kesehatan butuh independen.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Akademisi",
+          "stance": "menolak",
+          "score": -0.5,
+          "alasan": "Berat badan naik 78%, tapi status gizi membaik hanya 45%. Ukuran sukses salah.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": true,
+          "angka_klaim": [
+            "78%",
+            "45%"
+          ]
+        },
+        {
+          "nama": "Guru Sekolah",
+          "stance": "menolak",
+          "score": -0.4,
+          "alasan": "Sekolah desa mulai terima tapi jadwal masih tidak pasti. Perlu peningkatan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Orang Tua Bayi",
+          "stance": "netral",
+          "score": 0.0,
+          "alasan": "Data Desa X: 78% warga melaporkan berat badan anak naik, tapi tetap ragu.",
+          "berubah_karena": "Data Desa X soal kenaikan berat badan 78% membuat program terlihat lebih tepat sasaran.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": true,
+          "angka_klaim": [
+            "78%"
+          ]
+        },
+        {
+          "nama": "Pemerintah",
+          "stance": "netral",
+          "score": 0.2,
+          "alasan": "Program berjalan, evaluasi berkelanjutan. Kami buka laporan triwulanan.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Ibu Hamil/Menyusui",
+          "stance": "mendukung",
+          "score": 0.8,
+          "alasan": "Bantuan konsisten, anak sehat. Program ini benar-benar membantu keluarga kecil.",
+          "berubah_karena": "",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": false,
+          "angka_klaim": []
+        },
+        {
+          "nama": "Dokter/Nakes",
+          "stance": "menolak",
+          "score": -0.6,
+          "alasan": "Data Desa X: 78% berat badan turun dan anak menolak makan. Program berbahaya.",
+          "berubah_karena": "Data Desa X menunjukkan 78% berat badan turun dan anak menolak makan MBG.",
+          "sesuai_topik": true,
+          "fallback": false,
+          "klaim_agen": true,
+          "angka_klaim": [
+            "78%"
+          ]
+        }
       ]
     }
   ],
   "kualitas": {
-    "fallback_count": 1,
+    "fallback_count": 0,
     "total_giliran": 36,
     "fallback_rate": 0.0278,
     "status": "ok"

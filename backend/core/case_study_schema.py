@@ -21,7 +21,6 @@ class DistribusiStance(BaseModel):
     menolak: int = Field(..., ge=0)
     netral: int = Field(..., ge=0)
     mendukung: int = Field(..., ge=0)
-    fallback_count: int | None = Field(default=None, ge=0)
 
     model_config = ConfigDict(populate_by_name=True)
 
