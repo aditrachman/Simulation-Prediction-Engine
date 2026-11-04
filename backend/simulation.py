@@ -74,7 +74,7 @@ BATAS_TRIM_JSON = 1200
 # Paralel antaragen dalam satu ronde (khusus jalur JSON). Ronde 1 independen dan
 # Ronde 2+ hanya membaca ringkasan ronde sebelumnya, jadi tidak ada dependensi
 # antaragen dalam satu ronde. Pacing dipegang TokenBudget + rate limiter RPM.
-PARALLEL_AGENTS = os.getenv("PARALLEL_AGENTS", "true").lower() in {"1", "true", "yes", "on"}
+PARALLEL_AGENTS = os.getenv("PARALLEL_AGENTS", "false").lower() in {"1", "true", "yes", "on"}
 PARALLEL_AGENTS_MAX = int(os.getenv("PARALLEL_AGENTS_MAX", "4"))
 
 _STANCE_KE_LABEL = {"menolak": "negatif", "netral": "netral", "mendukung": "positif"}
