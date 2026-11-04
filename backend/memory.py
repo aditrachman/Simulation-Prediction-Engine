@@ -117,7 +117,7 @@ def build_memory_context(agent: dict) -> str:
     if len(agent["memori"]) >= 2:
         base_context = (
             f"{structured_ctx} "
-            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:70]}\" "
             f"(posisi: {label_terakhir}{skor_str}). "
         )
         if has_previous:
@@ -129,17 +129,51 @@ def build_memory_context(agent: dict) -> str:
             return (
                 base_context +
                 f"Sebelumnya kamu {label_sblm}{skor_sblm_str}: '{pendapat_sblm}...'. "
-                f"Kalau sekarang posisimu berubah, JELASKAN kenapa — "
-                f"apa data baru atau argumen yang bikin kamu pikir ulang."
+                f"Kalau berubah, jelaskan pemicunya."
             )
-        return base_context + "Pertahankan posisi ini kecuali ada alasan kuat."
+        return base_context + "Pertahankan posisi kecuali ada alasan kuat."
 
     # Hanya 1 entri memori
     return (
-        f"Terakhir kamu bilang: \"{terakhir['pendapat'][:80]}\" "
+        f"Terakhir kamu bilang: \"{terakhir['pendapat'][:70]}\" "
         f"(posisi: {label_terakhir}{skor_str}). "
-        f"Pertahankan posisi ini kecuali ada argumen baru yang sangat kuat."
+        f"Pertahankan posisi kecuali ada argumen baru yang kuat."
     )
+
+
+MAKS_KATA_RINGKASAN = 25
+
+
+def build_round_summary(semua_pendapat: list[dict], maks_agen: int = 3) -> str:
+    """
+    Ringkasan ekstraktif ronde sebelumnya tanpa LLM dan tanpa nama agen.
+
+    Ambil `maks_agen` alasan dengan |skor| terbesar dari agen berbeda, tiap alasan
+    dipotong MAX_KATA_RINGKASAN kata. Nama persona tidak ditampilkan agar agen
+    menanggapi argumennya, bukan orangnya.
+    """
+    kandidat = sorted(
+        (p for p in semua_pendapat if (p.get("pendapat") or "").strip()),
+        key=lambda p: abs((p.get("sentimen") or {}).get("skor") or 0.0),
+        reverse=True,
+    )
+    baris: list[str] = []
+    dipakai: set[str] = set()
+    for p in kandidat:
+        nama = p.get("nama")
+        if nama in dipakai:
+            continue
+        kata = p["pendapat"].split()
+        if not kata or kata[0].startswith("("):
+            continue  # placeholder giliran gagal/fallback
+        dipakai.add(nama)
+        potong = " ".join(kata[:MAKS_KATA_RINGKASAN]).rstrip(",;:")
+        baris.append(f'- "{potong}"')
+        if len(baris) == maks_agen:
+            break
+    if not baris:
+        return ""
+    return "Pihak lain berpendapat:\n" + "\n".join(baris)
 
 
 def build_influence_context(

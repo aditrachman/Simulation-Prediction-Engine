@@ -44,17 +44,15 @@ TURN_RESPONSE_FORMAT = {
 _FALLBACK_ALASAN = "(agen tidak memberikan output valid)"
 
 TURN_SYSTEM_SUFFIX = (
-    "\n\nFORMAT OUTPUT (WAJIB): balas HANYA satu objek JSON, tanpa teks lain, "
-    "tanpa markdown, tanpa backtick.\n"
+    "\n\nFORMAT OUTPUT: balas HANYA satu objek JSON valid, tanpa markdown.\n"
     '{"stance":"menolak|netral|mendukung","score":<-1..1>,'
     '"alasan":"<=35 kata","sesuai_topik":true|false,'
-    '"berubah_karena":"alasan perubahan, string kosong jika tidak berubah"}\n'
-    "- stance: posisimu terhadap topik.\n"
-    "- score: -1 (menolak kuat) sampai 1 (mendukung kuat).\n"
-    f"- alasan: argumen utamamu, maksimal {MAKS_KATA_ALASAN} kata, tetap pakai gaya bicaramu.\n"
+    '"berubah_karena":"pemicu perubahan atau string kosong"}\n'
+    f"- alasan: argumen utamamu, maksimal {MAKS_KATA_ALASAN} kata, gaya bicaramu sendiri.\n"
     "- sesuai_topik: false hanya kalau kamu memang tidak bisa membahas topik ini.\n"
-    "- berubah_karena: wajib diisi kalau posisimu berbeda dari ronde sebelumnya; "
-    "string kosong kalau tidak berubah."
+    "- berubah_karena: wajib diisi kalau posisimu beda dari ronde sebelumnya.\n"
+    "Jangan menyapa nama peserta lain. Jangan buka dengan 'Kamu benar'/'Gue setuju'/"
+    "'Aku setuju', kecuali menanggapi 'Pihak lain berpendapat'."
 )
 
 TURN_RETRY_SUFFIX = (
@@ -73,6 +71,86 @@ def _potong_kata(teks: str, maks: int = MAKS_KATA_ALASAN) -> str:
     if len(kata) <= maks:
         return " ".join(kata)
     return " ".join(kata[:maks])
+
+
+# Pembuka yang dilarang di alasan (termasuk sisa respons ke agen lain di Ronde 1).
+_OPENER_TERLARANG = re.compile(
+    r"^(?:\s*(?:ya|nah|oke|iya)[,!.]?\s+)?"
+    r"(?:"
+    r"(?:gue|gua|aku|saya|kami)\s+(?:juga\s+)?(?:setuju|sepakat)"
+    r"|(?:kamu|lu|lo|anda)\s+(?:memang\s+)?(?:benar|bener|betul)"
+    r")"
+    r"\b[^.!?]*?[,.:;]\s*",
+    re.IGNORECASE,
+)
+
+# Artefak di akhir kalimat: ";." dan ", Gua." hasil generasi model.
+_ARTEFAK_AKHIR = (
+    re.compile(r"\s*[;,]\s*\.\s*$"),
+    re.compile(r"[,;]?\s+(?:gua|gue)\s*\.\s*$", re.IGNORECASE),
+)
+
+
+def bersihkan_alasan(teks: str) -> str:
+    """Buang pembuka terlarang dan artefak akhir dari alasan (tanpa menyentuh JSON)."""
+    bersih = (teks or "").strip()
+    sebelumnya = None
+    while sebelumnya != bersih:
+        sebelumnya = bersih
+        bersih = _OPENER_TERLARANG.sub("", bersih, count=1).strip()
+    for pola in _ARTEFAK_AKHIR:
+        bersih = pola.sub(".", bersih)
+    bersih = re.sub(r"\s+([.!?,])", r"\1", bersih).strip()
+    if bersih[:1].islower():
+        bersih = bersih[0].upper() + bersih[1:]
+    return bersih
+
+
+_ANGKA_RE = re.compile(r"\d+(?:[.,]\d+)*\s*%?")
+
+
+def _normalisasi_angka(tok: str) -> str:
+    """Samakan format: '72,8 %', '72.8%', '72,80' -> satu bentuk."""
+    t = re.sub(r"\s|%", "", tok)
+
+    def _digit(nilai: str) -> str:
+        return re.sub(r"\D", "", nilai)
+
+    if len(_digit(t)) < 2:
+        return ""
+    # Pemisah ribuan: 3.200 / 3,200 / 1.234.567
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", t):
+        return t.replace(".", "").replace(",", "")
+    t = t.replace(",", ".")
+    if "." in t:
+        t = t.rstrip("0").rstrip(".")
+    return t
+
+
+def _kumpulan_angka(teks: str) -> set[str]:
+    hasil = set()
+    for tok in _ANGKA_RE.findall(teks or ""):
+        normal = _normalisasi_angka(tok)
+        if normal:
+            hasil.add(normal)
+    return hasil
+
+
+def angka_klaim(alasan: str, sumber: str) -> list[str]:
+    """
+    Angka di `alasan` yang tidak ada di `sumber` (briefing + topik).
+
+    Post-check murni Python, tanpa LLM. List kosong = tidak ada klaim angka asing.
+    """
+    sah = _kumpulan_angka(sumber)
+    asing: list[str] = []
+    for tok in _ANGKA_RE.findall(alasan or ""):
+        normal = _normalisasi_angka(tok)
+        if normal and normal not in sah:
+            tampil = re.sub(r"\s+", "", tok)
+            if tampil not in asing:
+                asing.append(tampil)
+    return asing
 
 
 def _ekstrak_objek(raw: str) -> str | None:
@@ -125,7 +203,11 @@ def parse_turn(raw: str) -> dict | None:
         score = _score_dari_stance(stance)
     score = max(-1.0, min(1.0, round(score, 2)))
 
-    alasan = _potong_kata(str(data.get("alasan") or "").strip())
+    alasan = bersihkan_alasan(str(data.get("alasan") or ""))
+    if not alasan:
+        # Pembersihan tidak boleh mengosongkan alasan; pakai teks aslinya.
+        alasan = str(data.get("alasan") or "").strip()
+    alasan = _potong_kata(alasan)
     if not alasan:
         return None
 

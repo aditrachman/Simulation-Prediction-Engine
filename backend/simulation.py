@@ -30,7 +30,7 @@ from .llm      import (
     _strip_emoji,
 )
 from .memory   import (
-    update_agent_memory, build_memory_context, build_influence_context,
+    update_agent_memory, build_memory_context, build_round_summary,
     _compute_gaya_str,
 )
 from .sentiment import score_sentiment, filter_forbidden_opens
@@ -48,7 +48,6 @@ from .core.event_system import (
 )
 from .core.scheduler import (
     get_speaking_order,
-    select_response_target,
     get_strategy_display,
 )
 from .core.prediction import heuristic_predict, compute_confidence
@@ -56,6 +55,7 @@ from .services.agent_turn import (
     execute_turn,
     TURN_MAX_TOKENS,
     TURN_RESPONSE_FORMAT,
+    angka_klaim,
 )
 # CrowdPool removed 2026-07-05 — unused, over-engineered
 
@@ -286,6 +286,21 @@ def _hitung_kualitas(ronde_detail: list[dict]) -> dict:
     }
 
 
+def _hitung_klaim(ronde_detail: list[dict]) -> dict:
+    """Rekap klaim angka asing per run (FASE 2)."""
+    giliran_klaim = 0
+    semua_angka: list[str] = []
+    for r in ronde_detail:
+        for a in r.get("agen", []):
+            if a.get("klaim_agen"):
+                giliran_klaim += 1
+                semua_angka.extend(a.get("angka_klaim") or [])
+    return {
+        "giliran_klaim": giliran_klaim,
+        "angka": sorted(set(semua_angka)),
+    }
+
+
 def run_simulation(
     topik: str,
     agents: list[dict],
@@ -352,100 +367,83 @@ def run_simulation(
     # Track stance terakhir per agen untuk validasi perubahan & fallback
     stance_terakhir: dict[str, str] = {}
 
+    # Sumber angka sah untuk post-check klaim (briefing + topik, tanpa LLM)
+    sumber_angka = f"{briefing_real or ''} {topik}"
+
     def _proses_satu_agen(
         agen: dict,
         ronde_ke: int,
         topik_ronde: str,
         pendapat_dalam_ronde_ini: list[dict],
-        idx_agen: int = 0,
     ) -> dict:
         konteks_memori = build_memory_context(agen)
 
-        # BUG #11 FIX: konteks_sumber dihapus — tidak digunakan
-        konteks_pengaruh = build_influence_context(
-            agen, pendapat_ronde_sebelumnya + pendapat_dalam_ronde_ini, idx_agen=idx_agen
-        )
+        # Ronde 1 independen: tidak ada output agen lain di prompt.
+        # Ronde 2+: ringkasan ekstraktif ronde sebelumnya, tanpa nama agen.
+        if ronde_ke == 1:
+            konteks_pengaruh = ""
+        else:
+            konteks_pengaruh = build_round_summary(pendapat_ronde_sebelumnya)
 
-        gaya_str     = _compute_gaya_str(agen)
         role_singkat = agen.get("_role_singkat") or agen["role"][:250].rstrip()
 
-        ada_yang_sudah_bicara = bool(pendapat_dalam_ronde_ini or pendapat_ronde_sebelumnya)
-
-        # VOICE ANCHOR — bikin setiap agen punya "suara" unik
-        # Setiap agen punya: vocabulary unik, cara mulai kalimat, filler words, quirks
+        # VOICE ANCHOR — suara unik per persona + satu register bahasa yang dikunci
         voice_anchor = ""
         nama_lower = agen["nama"].lower()
         if "mahasiswa" in nama_lower:
             voice_anchor = (
                 "Kamu mahasiswa semester 7, vokal dan blak-blakan. "
-                "Bahasa: campur Indonesia-Indo gaul, sering pakai 'gue', 'lu', 'bro', 'anjir', 'sih', 'banget'. "
-                "Cara mulai: langsung poin, kadang provokatif — 'Eh, menurut gue...' atau 'Gila sih, ...'. "
-                "Quirk: suka bandingin sama pengalaman kampus, sering generalisasi dari temen sekeliling. "
-                "Kalau dikritik: defensif tapi tetap dengerin, kadang mengalah dengan catatan. "
+                "Register: gue/lo, konsisten sampai akhir. "
+                "Sering pakai 'bro', 'sih', 'banget'; mulai langsung ke poin, kadang provokatif. "
+                "Quirk: bandingin sama pengalaman kampus."
             )
         elif "founder" in nama_lower or "startup" in nama_lower:
             voice_anchor = (
                 "Kamu founder startup tech yang sudah raise seed. "
-                "Bahasa: campur Indonesia-Inggris tech (pivot, scale, burn rate, user acquisition). "
-                "Cara mulai: data-driven tapi kasih framing narasi — 'Look, angkanya jelas...' atau 'Basically...'. "
-                "Quirk: suka analogi startup ke hidup, selalu kaitkan sama market opportunity. "
-                "Kalau dikritik: analisis Kenapa kritik itu salah atau right timing. "
+                "Register: 'saya' dengan sisipan istilah Inggris (pivot, burn rate). "
+                "Mulai dengan framing narasi, selalu kaitkan ke market opportunity."
             )
         elif "pengusaha" in nama_lower or "umkm" in nama_lower:
             voice_anchor = (
-                "Kamu pengusaha UMKM Warung Kopi yang sudah jalan 8 tahun. "
-                "Bahasa: Indonesia kasual, sering pakai 'Mas', 'Bro', 'gitu loh', 'kan', 'lho'. "
-                "Cara mulai: dari pengalaman langsung — 'Gue lihat di lapangan...' atau 'Kenyataannya...'. "
-                "Quirk: selalu hitung untung rugi, nggak peduli ide bagus kalau nggak profitable. "
-                "Kalau dikritik: bawa ke pengalaman nyata, 'Coba aja jualan sendiri, baru tau...'. "
+                "Kamu pengusaha UMKM warung kopi 8 tahun. "
+                "Register: gue/lo kasual, sering pakai 'kan', 'lho', 'gitu loh'. "
+                "Mulai dari pengalaman lapangan; selalu hitung untung rugi."
             )
         elif "pekerja" in nama_lower or "kantoran" in nama_lower:
             voice_anchor = (
-                "Kamu pekerja kantoran HRD yang sudah 5 tahun ngurus hiring. "
-                "Bahasa: Indonesia formal-casual, sering pakai 'Honestly', 'Realistically', 'to be fair'. "
-                "Cara mulai: dari pengalaman kerja — 'Di tempat gue kerja...' atau 'Yang gue lihat...'. "
-                "Quirk: suka kasih perspektif employee vs employer, realistis soal gaji dan work-life balance. "
-                "Kalau dikritik: akui ada benernya tapi tambahin konteks yang hilang. "
+                "Kamu pekerja kantoran HRD 5 tahun. "
+                "Register: gue/lo santai-formal, sesekali 'Honestly', 'Realistically'. "
+                "Mulai dari pengalaman kerja, realistis soal gaji dan beban kerja."
             )
         elif "pemerintah" in nama_lower or "pejabat" in nama_lower:
             voice_anchor = (
-                "Kamu pejabat Eselon III yang technocrat — paham birokrasi tapi nggak kaku. "
-                "Bahasa: Indonesia formal tapi ada sentuhan manusiawi, sesekali 'kita', 'bangsa ini'. "
-                "Cara mulai: acknowledge dulu, baru kasih posisi — 'Kami memahami concern itu...' atau 'Tentu, ini memang kompleks...'. "
-                "Quirk: selalu tutup dengan langkah konkret, hindari janji kosong. "
-                "Kalau dikritik: akui tantangan sebagai sesuatu yang SEDANG ditangani, bukan diabaikan. "
+                "Kamu pejabat Eselon III yang technocrat. "
+                "Register: 'kami' formal dan manusiawi, jangan pakai 'gue'/'lo'. "
+                "Acknowledge dulu, lalu posisi; tutup dengan langkah konkret."
             )
         elif "akademisi" in nama_lower or "dosen" in nama_lower or "peneliti" in nama_lower:
             voice_anchor = (
-                "Kamu dosen Psikologi yang suka research tapi bisa jelasin simple. "
-                "Bahasa: Indonesia baku tapi accessible, sering pakai 'Menurut data...', 'Studi menunjukkan...'. "
-                "Cara mulai: kasih framing research — 'Kalau kita lihat datanya...' atau 'Yang menarik dari studi ini...'. "
-                "Quirk: suka sebut sample size atau metodologi, tapi jelasin kenapa itu penting. "
-                "Kalau dikritik: balik ke data, 'Fair point, tapi kalau kita lihat angkanya...'. "
+                "Kamu dosen Psikologi yang bisa jelasin simple. "
+                "Register: 'saya' baku tapi mengalir, jangan pakai 'gue'/'lo'. "
+                "Framing research, sebut keterbatasan data bila relevan."
             )
         elif "media" in nama_lower or "jurnalis" in nama_lower:
             voice_anchor = (
-                "Kamu jurnalis investigatif Metro TV yang sudah 10 tahun liput politik. "
-                "Bahasa: Indonesia tajam, sering pakai pertanyaan retoris — 'Lho, kok bisa?' atau 'Bayangkan...'. "
-                "Cara mulai: provoke dengan fakta — 'Faktanya, ...' atau 'Yang tidak banyak orang tahu...'. "
-                "Quirk: suka sebut sumber, tunjuk inkonsistensi, nggak takut sebut nama. "
-                "Kalau dikritik: counter dengan bukti baru atau pertanyaan yang belum terjawab. "
+                "Kamu jurnalis investigatif Metro TV 10 tahun. "
+                "Register: 'saya' tegas, jangan pakai 'gue'/'lo'. "
+                "Mulai dengan fakta atau pertanyaan retoris; tunjuk inkonsistensi."
             )
         elif "masyarakat" in nama_lower or "umum" in nama_lower or "warga" in nama_lower:
             voice_anchor = (
-                "Kamu ibu rumah tangga 45 tahun yang anaknya baru lulus SMA. "
-                "Bahasa: Indonesia sehari-hari, sering pakai 'Aduh', 'Iya kan', 'Emang sih', 'Kasihan'. "
-                "Cara mulai: dari perasaan — 'Aduh, denger berita itu...' atau 'Iya kan, anak gue juga...'. "
-                "Quirk: suka cerita pengalaman tetangga/anak, nggak peduli data statistik. "
-                "Kalau dikritik: nggak defensif, langsung mengalah — 'Iya sih, bener juga ya...'. "
+                "Kamu ibu rumah tangga 45 tahun, anaknya baru lulus SMA. "
+                "Register: 'saya' sehari-hari, sering pakai 'aduh', 'iya kan', 'emang sih'. "
+                "Mulai dari perasaan dan pengalaman tetangga, bukan statistik."
             )
         elif "oposisi" in nama_lower or "kritis" in nama_lower:
             voice_anchor = (
                 "Kamu aktivis mahasiswa yang suka turun ke jalan. "
-                "Bahasa: Indonesia vokal, sering pakai 'Rakyat!', 'Keadilan!', 'Ini soal principle!'. "
-                "Cara mulai: langsung serang — 'Ini membuktikan...' atau 'Lagi-lagi rakyat yang dirugikan...'. "
-                "Quirk: suka generalisasi dari kasus spesifik, emotional tapi ada data. "
-                "Kalau dikritik: makin vokal, tambahin contoh kasus lain yang mendukung. "
+                "Register: 'kami' rakyat, vokal, jangan pakai 'gue'/'lo'. "
+                "Mulai dengan serangan langsung ke dampak kebijakan."
             )
 
         # ERROR-1 FIX: hitung skor_ronde_lalu DI SINI
@@ -459,19 +457,16 @@ def run_simulation(
         stance_rule = ""
         if "pemerintah" in agen["nama"].lower() or "pejabat pemerintah" in agen.get("role", "").lower():
             stance_rule = (
-                "Kamu PERWAKILAN PEMERINTAH — bicara atas nama pemerintah, bukan tentang pemerintah dari luar. "
-                "JANGAN ngomong 'pemerintah harus' atau 'pemerintah perlu' — kamu IS pemerintah. "
-                "Kalau dikritik: akui tantangan sebagai hal yang SEDANG ditangani, bukan diabaikan. "
-                "Tutup dengan langkah konkret yang sudah atau akan dilakukan."
+                "Kamu PERWAKILAN PEMERINTAH — bicara atas nama pemerintah, bukan dari luar. "
+                "Jangan bilang 'pemerintah harus'. Akui tantangan sebagai hal yang sedang ditangani. "
+                "Tutup dengan langkah konkret."
             )
 
         # BUG-08 FIX: stance lock khusus Pemerintah harus masuk sebelum system_p dibuat.
         is_pemerintah = "pemerintah" in agen["nama"].lower()
         if is_pemerintah and skor_ronde_lalu is not None and skor_ronde_lalu > 0.0:
             stance_rule += (
-                "Kamu SUDAH mendukung kebijakan ini sebelumnya. "
-                "JANGAN berubah ke menolak — pemerintah nggak mengkritik kebijakannya sendiri. "
-                "Kalau situasi kompleks, boleh netral — tapi tetap pertahankan bahwa langkah yang diambil sudah benar."
+                "Kamu SUDAH mendukung sebelumnya; jangan menolak, paling jauh netral."
             )
 
         akademisi_rule = ""
@@ -508,28 +503,17 @@ def run_simulation(
 
         # SYSTEM PROMPT — natural, bukan rule-book
         system_p = (
-            f"Kamu {agen['nama']}. {role_singkat}\n\n"
-            f"{voice_anchor}\n\n"
-            f"Gaya bicaramu: {gaya_str}. "
+            f"Kamu {agen['nama']}. {role_singkat}\n"
+            f"{voice_anchor}\n"
             + stance_rule
             + akademisi_rule
             + conviction_rule
-            + "ATURAN KERAS (melanggar = outputmu dihapus):\n"
-            "1. JANGAN sebut role/jabatanmu ('sebagai X', 'saya selaku X').\n"
-            "2. JANGAN bilang kamu nggak punya opini — semua orang punya sudut pandang.\n"
-            "3. JANGAN ulangin argumen yang udah dikatakan orang lain — kasih sudut pandang BARU.\n"
-            "4. JANGAN buka dengan 'Saya pikir', 'Menurut saya', 'Data menunjukkan' — langsung poin.\n"
-            "5. JANGAN mengarang angka atau nama survei — kalau nggak ada data, bilang aja pendapatmu.\n"
-            "6. Tulis 2-4 kalimat. Boleh panjang dikit kalau emang perlu jelasin.\n"
-            "7. Kamu lagi OBROLAN, bukan nulis esai. Bicara kayak manusia beneran.\n\n"
-            f"Kamu {agen['nama']} yang lagi diskusi. Tunjukin siapa kamu lewat cara bicaramu."
-        )
-
-        # ISSUE #22 — guard agen pembuka ronde 1
-        adalah_pembuka = (
-            ronde_ke == 1
-            and not pendapat_dalam_ronde_ini
-            and not pendapat_ronde_sebelumnya
+            + "\nATURAN (melanggar = output dihapus):\n"
+            "1. Jangan sebut role/jabatanmu, jangan buka dengan 'Saya pikir'.\n"
+            "2. Jangan bilang tak punya opini; jangan ulang argumen orang lain.\n"
+            "3. Dilarang menyebut angka atau statistik yang tidak ada di BRIEFING atau "
+            "TOPIK. Jika butuh data, tulis 'perlu data'.\n"
+            "4. 2-3 kalimat, maksimal 35 kata, seperti orang ngobrol.\n"
         )
 
         parts = []
@@ -540,19 +524,14 @@ def run_simulation(
             if isinstance(initial, (int, float)):
                 if initial > 0.2:
                     parts.append(
-                        "POSISI AWAL: Kamu cenderung MENDUKUNG topik ini. "
-                        "Mulai dari posisi ini. Kalau mau berubah nanti, harus ada argumen baru yang kuat."
+                        "POSISI AWAL: cenderung MENDUKUNG. Ubah hanya kalau ada argumen baru yang kuat."
                     )
                 elif initial < -0.2:
                     parts.append(
-                        "POSISI AWAL: Kamu cenderung MENOLAK topik ini. "
-                        "Mulai dari posisi ini. Kalau mau berubah nanti, harus ada argumen baru yang kuat."
+                        "POSISI AWAL: cenderung MENOLAK. Ubah hanya kalau ada argumen baru yang kuat."
                     )
                 else:
-                    parts.append(
-                        "POSISI AWAL: Kamu NETRAL. "
-                        "Kalau ada bukti kuat yang condong ke satu arah, ambil posisi itu."
-                    )
+                    parts.append("POSISI AWAL: NETRAL. Ambil posisi kalau bukti condong.")
 
         if konteks_memori:
             parts.append(konteks_memori)
@@ -574,26 +553,16 @@ def run_simulation(
                     "Terakhir kamu netral. Kalau sekarang kamu ambil posisi kuat, JELASKAN kenapa."
                 )
 
-        if ada_yang_sudah_bicara and konteks_pengaruh:
-            parts.append(konteks_pengaruh)
-            if current_response_target and current_response_target != agen["nama"]:
-                # Ambil ringkasan singkat argumen target
-                target_opinions = [p for p in pendapat_ronde_sebelumnya + pendapat_dalam_ronde_ini
-                                   if p.get("nama") == current_response_target]
-                target_ringkas = target_opinions[-1]["pendapat"][:120] if target_opinions else ""
-                parts.append(
-                    f"Balas langsung ke {current_response_target} — "
-                    f"tanggapi ini: \"{target_ringkas}\". "
-                    "Tunjukin kenapa kamu setuju atau nggak setuju. Pakai bahasamu sendiri."
-                )
-            else:
-                parts.append(
-                    "Tanggapi salah satu yang baru aja ngomong — setuju, sanggah, atau tambahin dari sudut pandangmu."
-                )
-        elif adalah_pembuka:
+        if ronde_ke == 1:
+            # Semua agen Ronde 1 dapat briefing yang sama, tanpa saling melihat output.
             if briefing_real:
                 parts.append(f"Info konteks: {briefing_real[:500]}")
-            parts.append("Buka diskusi dengan posisimu yang paling kuat tentang topik ini.")
+            parts.append("Sampaikan posisimu yang paling kuat.")
+        elif konteks_pengaruh:
+            parts.append(konteks_pengaruh)
+            parts.append(
+                "Tanggapi ringkasan itu — setuju atau sanggah, pakai katamu sendiri, tanpa menyebut nama."
+            )
         # Phase 3: inject event impact note for this agent
         _event_impacts = event_impacts.get(intervensi, {}) if intervensi else {}
         impact_note = get_agent_impact_note(agen["nama"], _event_impacts)
@@ -608,21 +577,18 @@ def run_simulation(
             if _fresh_prompt:
                 parts.append(_fresh_prompt)
 
-        parts.append(f"Topik: {topik_ronde[:130]}\n\nSekarang giliranmu — apa tanggapannya?")
+        parts.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
         user_p = "\n".join(parts)
 
-        # Pangkas jika > 900 char (naik dari 700 — konteks pengaruh sekarang lebih panjang)
+        # Pangkas jika > 900 char (jaga prompt tetap hemat untuk TPM)
         if len(user_p) > 900:
             parts_trimmed = []
             if konteks_memori:
                 parts_trimmed.append(konteks_memori[:80])
-            if ada_yang_sudah_bicara and konteks_pengaruh:
-                baris_pengaruh = konteks_pengaruh.split("\n")
-                parts_trimmed.append("\n".join(baris_pengaruh[:4]))
-                parts_trimmed.append(
-                    "Respons ke salah satu peserta — boleh sebut namanya, "
-                    "boleh juga langsung counter argumennya tanpa sebut nama."
-                )
+            if ronde_ke == 1 and briefing_real:
+                parts_trimmed.append(f"Info konteks: {briefing_real[:320]}")
+            elif konteks_pengaruh:
+                parts_trimmed.append("\n".join(konteks_pengaruh.split("\n")[:4]))
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
             user_p = "\n".join(parts_trimmed)
 
@@ -652,6 +618,9 @@ def run_simulation(
             # Ini clamp Python, bukan hasil model. Stance tetap seperti yang ditulis agen.
             turn["score"] = _apply_delta_cap(turn["score"], skor_ronde_lalu, agen["nama"], ronde_ke)
             stance_terakhir[agen["nama"]] = turn["stance"]
+
+            # Post-check angka: klaim di luar briefing/topik ditandai, bukan diubah.
+            asing = angka_klaim(turn["alasan"], sumber_angka)
             return {
                 "nama":     agen["nama"],
                 "pendapat": turn["alasan"],
@@ -666,6 +635,8 @@ def run_simulation(
                 "berubah_karena":  turn["berubah_karena"],
                 "sesuai_topik":    turn["sesuai_topik"],
                 "fallback":        turn["fallback"],
+                "klaim_agen":      bool(asing),
+                "angka_klaim":     asing,
             }
         # ── Jalur lama (USE_LEGACY_PIPELINE=true) ──────────────────────────
         jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
@@ -763,7 +734,6 @@ def run_simulation(
 
     # Phase 3: track event impacts per-agent
     event_impacts: dict[str, dict[str, float]] = {}
-    current_response_target: str | None = None
 
     for ronde_ke in range(1, jumlah_ronde + 1):
         topik_ronde = topik
@@ -792,16 +762,8 @@ def run_simulation(
         urutan_agen = [agents[i] for i in order]
 
         for idx, agen in enumerate(urutan_agen):
-            current_response_target = select_response_target(
-                current_nama=agen["nama"],
-                agents=agents,
-                ronde_ke=ronde_ke,
-                pendapat_dalam_ronde_ini=pendapat_dalam_ronde_ini,
-                pendapat_ronde_sebelumnya=pendapat_ronde_sebelumnya,
-                strategy=scheduler_strategy,
-            )
             try:
-                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini, idx_agen=idx)
+                res = _proses_satu_agen(agen, ronde_ke, topik_ronde, pendapat_dalam_ronde_ini)
                 res_failed = False
             except Exception as e:
                 import traceback
@@ -832,6 +794,8 @@ def run_simulation(
                 "berubah_karena":  res.get("berubah_karena"),
                 "sesuai_topik":    res.get("sesuai_topik"),
                 "fallback":        res.get("fallback", False),
+                "klaim_agen":      res.get("klaim_agen", False),
+                "angka_klaim":     res.get("angka_klaim", []),
             })
 
             if not res_failed:
@@ -1012,6 +976,7 @@ def run_simulation(
 
     kualitas = _hitung_kualitas(ronde_detail)
     hasil_dict["kualitas"] = kualitas
+    hasil_dict["klaim_angka"] = _hitung_klaim(ronde_detail)
     if kualitas["status"] != "ok":
         print(
             f"[KUALITAS] status={kualitas['status']} — "
