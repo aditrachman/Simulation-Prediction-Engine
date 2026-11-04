@@ -16,3 +16,11 @@ backend/data/sentiment_model.pkl
 # Node modules
 frontend/node_modules/
 frontend/.next/
+
+# Case study data (generated)
+backend/data/runs/
+backend/data/case_studies/
+backend/data/presets.json
+
+# Frontend build cache
+frontend/.next.bak-*/
