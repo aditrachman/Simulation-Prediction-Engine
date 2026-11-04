@@ -173,6 +173,8 @@ def call_llm(
     model: str = MODEL_ANALYSIS,
     use_analysis_chain: bool = False,
     use_cache: bool = True,
+    auto_complete: bool = True,
+    response_format: dict | None = None,
 ) -> str:
     """
     Panggil LLM via llm_guard (token budget, retry, model chain fallback).
@@ -185,6 +187,10 @@ def call_llm(
         model: Model preference (used for cache key; actual model from chain)
         use_analysis_chain: Jika True, pakai analysis chain (MODEL_CHAIN_ANALYSIS)
         use_cache: Jika False, skip cache (untuk opini agen agar tidak identik)
+        auto_complete: Potong teks prosa di kalimat terakhir kalau tidak diakhiri
+            tanda baca. WAJIB False untuk output JSON, karena pemotongan merusak JSON.
+        response_format: Diteruskan ke API (mis. {"type": "json_object"} atau
+            {"type": "json_schema", ...}).
     """
     # ── Cache lookup (dengan TTL check) ──────────────────────────────────
     if use_cache:
@@ -212,10 +218,10 @@ def call_llm(
         if use_analysis_chain:
             text, used_model = chat_analysis(messages, max_tokens)
         else:
-            text, used_model = chat(messages, max_tokens)
+            text, used_model = chat(messages, max_tokens, response_format=response_format)
 
-        # Auto-complete kalimat terpotong
-        if text and text[-1] not in ".!?\"'":
+        # Auto-complete kalimat terpotong — hanya untuk teks prosa.
+        if auto_complete and text and text[-1] not in ".!?\"'":
             last_punct = max(
                 text.rfind("."), text.rfind("!"), text.rfind("?")
             )

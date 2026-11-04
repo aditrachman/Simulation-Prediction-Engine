@@ -19,6 +19,28 @@ STANCES = ("menolak", "netral", "mendukung")
 TURN_MAX_TOKENS = 220
 MAKS_KATA_ALASAN = 35
 
+# Groq Structured Outputs strict: didukung gpt-oss-20b, gpt-oss-120b, qwen3.8-27b
+# (semua model di CHAIN). Parser toleran tetap dipakai sebagai cadangan.
+TURN_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "agent_turn",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "stance": {"type": "string", "enum": list(STANCES)},
+                "score": {"type": "number"},
+                "alasan": {"type": "string"},
+                "sesuai_topik": {"type": "boolean"},
+                "berubah_karena": {"type": "string"},
+            },
+            "required": ["stance", "score", "alasan", "sesuai_topik", "berubah_karena"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 _FALLBACK_ALASAN = "(agen tidak memberikan output valid)"
 
 TURN_SYSTEM_SUFFIX = (
@@ -26,13 +48,13 @@ TURN_SYSTEM_SUFFIX = (
     "tanpa markdown, tanpa backtick.\n"
     '{"stance":"menolak|netral|mendukung","score":<-1..1>,'
     '"alasan":"<=35 kata","sesuai_topik":true|false,'
-    '"berubah_karena":"alasan perubahan atau null"}\n'
+    '"berubah_karena":"alasan perubahan, string kosong jika tidak berubah"}\n'
     "- stance: posisimu terhadap topik.\n"
     "- score: -1 (menolak kuat) sampai 1 (mendukung kuat).\n"
     f"- alasan: argumen utamamu, maksimal {MAKS_KATA_ALASAN} kata, tetap pakai gaya bicaramu.\n"
     "- sesuai_topik: false hanya kalau kamu memang tidak bisa membahas topik ini.\n"
     "- berubah_karena: wajib diisi kalau posisimu berbeda dari ronde sebelumnya; "
-    "null kalau tidak berubah."
+    "string kosong kalau tidak berubah."
 )
 
 TURN_RETRY_SUFFIX = (

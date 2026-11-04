@@ -91,6 +91,7 @@ def chat(
     chain: Optional[list[str]] = None,
     reasoning_effort: str = "low",
     temperature: float = 0.8,
+    response_format: Optional[dict] = None,
 ) -> tuple[str, str]:
     """
     Panggil LLM dengan token budget, retry, dan model chain fallback.
@@ -118,6 +119,8 @@ def chat(
                 )
                 if model.startswith("openai/gpt-oss"):
                     kw["reasoning_effort"] = reasoning_effort
+                if response_format is not None:
+                    kw["response_format"] = response_format
 
                 resp = _get_client().chat.completions.create(**kw)
                 actual = resp.usage.total_tokens

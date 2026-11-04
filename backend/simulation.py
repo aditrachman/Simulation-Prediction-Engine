@@ -55,6 +55,7 @@ from .core.prediction import heuristic_predict, compute_confidence
 from .services.agent_turn import (
     execute_turn,
     TURN_MAX_TOKENS,
+    TURN_RESPONSE_FORMAT,
 )
 # CrowdPool removed 2026-07-05 — unused, over-engineered
 
@@ -258,6 +259,31 @@ def _qa_check_topic(topik: str, jawaban: str, system_p: str, user_p: str) -> str
             return jawaban_retry
 
     return jawaban
+
+
+def _hitung_kualitas(ronde_detail: list[dict]) -> dict:
+    """
+    Penjaga kualitas run: fallback tinggi tidak boleh lolos diam-diam.
+
+    Ambang: <= 0.10 "ok", < 0.30 "warning", >= 0.30 "degraded".
+    """
+    total = sum(len(r.get("agen", [])) for r in ronde_detail)
+    fallback_n = sum(
+        1 for r in ronde_detail for a in r.get("agen", []) if a.get("fallback")
+    )
+    rate = round(fallback_n / total, 3) if total else 0.0
+    if rate <= 0.10:
+        status = "ok"
+    elif rate < 0.30:
+        status = "warning"
+    else:
+        status = "degraded"
+    return {
+        "fallback_count": fallback_n,
+        "total_giliran": total,
+        "fallback_rate": rate,
+        "status": status,
+    }
 
 
 def run_simulation(
@@ -604,7 +630,12 @@ def run_simulation(
         if not USE_LEGACY_PIPELINE:
             turn = execute_turn(
                 llm=lambda s, u: call_llm(
-                    s, u, max_tokens=TURN_MAX_TOKENS, model=MODEL_AGENT, use_cache=False
+                    s, u,
+                    max_tokens=TURN_MAX_TOKENS,
+                    model=MODEL_AGENT,
+                    use_cache=False,
+                    auto_complete=False,          # JSON tidak boleh dipotong
+                    response_format=TURN_RESPONSE_FORMAT,
                 ),
                 system_p=system_p,
                 user_p=user_p,
@@ -978,6 +1009,16 @@ def run_simulation(
     }
 
     hasil_dict["explainability_report"] = generate_report(hasil_dict)
+
+    kualitas = _hitung_kualitas(ronde_detail)
+    hasil_dict["kualitas"] = kualitas
+    if kualitas["status"] != "ok":
+        print(
+            f"[KUALITAS] status={kualitas['status']} — "
+            f"{kualitas['fallback_count']}/{kualitas['total_giliran']} giliran fallback "
+            f"({kualitas['fallback_rate']:.0%}). Hasil studi kasus dari run ini "
+            f"{'tidak layak dirakit' if kualitas['status'] == 'degraded' else 'perlu dibaca hati-hati'}."
+        )
 
     return hasil_dict
 
