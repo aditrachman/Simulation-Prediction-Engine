@@ -55,6 +55,8 @@ from .services.agent_turn import (
     execute_turn,
     TURN_MAX_TOKENS,
     TURN_RESPONSE_FORMAT,
+    PEMICU_MAX_TOKENS,
+    PEMICU_RESPONSE_FORMAT,
     angka_klaim,
 )
 # CrowdPool removed 2026-07-05 — unused, over-engineered
@@ -637,6 +639,14 @@ def run_simulation(
                 user_p=user_p,
                 prev_stance=stance_ronde_lalu,
                 prev_score=skor_ronde_lalu,
+                llm_pemicu=lambda s, u: call_llm(
+                    s, u,
+                    max_tokens=PEMICU_MAX_TOKENS,
+                    model=MODEL_AGENT,
+                    use_cache=False,
+                    auto_complete=False,
+                    response_format=PEMICU_RESPONSE_FORMAT,
+                ),
             )
             if turn["fallback"]:
                 print(
@@ -665,6 +675,7 @@ def run_simulation(
                 "score_disesuaikan": turn["score_disesuaikan"],
                 "alasan":          turn["alasan"],
                 "berubah_karena":  turn["berubah_karena"],
+                "perubahan_tanpa_alasan": turn.get("perubahan_tanpa_alasan", False),
                 "sesuai_topik":    turn["sesuai_topik"],
                 "fallback":        turn["fallback"],
                 "klaim_agen":      bool(asing),
@@ -826,6 +837,7 @@ def run_simulation(
                 "score_disesuaikan": res.get("score_disesuaikan", False),
                 "alasan":          res.get("alasan"),
                 "berubah_karena":  res.get("berubah_karena"),
+                "perubahan_tanpa_alasan": res.get("perubahan_tanpa_alasan", False),
                 "sesuai_topik":    res.get("sesuai_topik"),
                 "fallback":        res.get("fallback", False),
                 "klaim_agen":      res.get("klaim_agen", False),

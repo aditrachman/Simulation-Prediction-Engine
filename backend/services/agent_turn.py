@@ -61,9 +61,26 @@ TURN_RETRY_SUFFIX = (
     "Balas ulang HANYA satu objek JSON valid sesuai format di atas."
 )
 
-TURN_RETRY_ALASAN_SUFFIX = (
-    "\n\nPosisimu berbeda dari ronde sebelumnya. Isi berubah_karena "
-    "dengan pemicu konkret perubahan itu."
+# Panggilan kecil pengisi pemicu: tidak regenerate giliran, hanya mengisi
+# berubah_karena. Stance/score/alasan dari percobaan pertama tetap dikunci.
+PEMICU_MAX_TOKENS = 60
+PEMICU_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "pemicu_perubahan",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {"berubah_karena": {"type": "string"}},
+            "required": ["berubah_karena"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+PEMICU_SYSTEM_SUFFIX = (
+    "\n\nPanggilan singkat: balas HANYA satu objek JSON "
+    '{"berubah_karena":"..."} tanpa markdown.'
 )
 
 
@@ -274,18 +291,42 @@ def turn_fallback(prev_stance: str | None, prev_score: float | None = None) -> d
     }
 
 
+def parse_pemicu(raw: str) -> str | None:
+    """Ambil berubah_karena dari jawaban panggilan pengisi. None = gagal/kosong."""
+    teks = (raw or "").strip()
+    if not teks:
+        return None
+    kandidat = _ekstrak_objek(teks)
+    if kandidat is not None:
+        try:
+            data = json.loads(kandidat)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            isi = str(data.get("berubah_karena") or "").strip()
+            return isi or None
+    # Model kadang membalas kalimat biasa; terima hanya jika pendek dan bukan JSON rusak.
+    if "{" not in teks and len(teks) <= 200:
+        return teks
+    return None
+
+
 def execute_turn(
     llm,
     system_p: str,
     user_p: str,
     prev_stance: str | None = None,
     prev_score: float | None = None,
+    llm_pemicu=None,
 ) -> dict:
     """
     Jalankan satu giliran agen: 1 call LLM, retry maksimal 1x.
 
     llm dipanggil sebagai llm(system_prompt, user_prompt) -> str.
+    llm_pemicu opsional: callback dengan max_tokens/response_format sendiri untuk
+    mengisi berubah_karena tanpa regenerate giliran (lihat _isi_pemicu).
     """
+    system_base = system_p
     system_p = system_p + TURN_SYSTEM_SUFFIX
     turn = parse_turn(llm(system_p, user_p))
     alasan = alasan_retry(turn, prev_stance)
@@ -293,9 +334,14 @@ def execute_turn(
     if alasan is None:
         return _finalisasi(turn)
 
-    retry_p = user_p + TURN_RETRY_SUFFIX
     if alasan == "berubah_tanpa_alasan":
-        retry_p += TURN_RETRY_ALASAN_SUFFIX
+        # Jangan regenerate: stance/score/alasan percobaan pertama dikunci.
+        pemicu = _isi_pemicu(llm_pemicu or llm, system_base, turn, prev_stance)
+        turn["berubah_karena"] = pemicu
+        turn["perubahan_tanpa_alasan"] = pemicu is None
+        return _finalisasi(turn)
+
+    retry_p = user_p + TURN_RETRY_SUFFIX
     retry_turn = parse_turn(llm(system_p, retry_p))
 
     # Pakai hasil retry kalau bisa diparse, kalau tidak pakai hasil pertama (kalau ada).
@@ -307,10 +353,26 @@ def execute_turn(
     return _finalisasi(turn)
 
 
+def _isi_pemicu(llm_pemicu, system_base: str, turn: dict, prev_stance: str | None):
+    """Satu panggilan kecil untuk mengisi berubah_karena. None = gagal/kosong."""
+    prompt = (
+        f"Posisi sebelumnya: {prev_stance or 'belum ada'}. "
+        f"Stance-mu di ronde ini: {turn['stance']}. "
+        f"Alasanmu: \"{turn['alasan']}\"\n"
+        "Tulis HANYA pemicu perubahan dari posisi sebelumnya dalam satu kalimat."
+    )
+    try:
+        raw = llm_pemicu(system_base + PEMICU_SYSTEM_SUFFIX, prompt)
+    except Exception:
+        return None
+    return parse_pemicu(raw)
+
+
 def _finalisasi(turn: dict) -> dict:
     """Samakan score dengan stance sebelum delta cap dipakai."""
     asli = turn["score"]
     turn["score"], disesuaikan = sesuaikan_score(asli, turn["stance"])
     turn["score_disesuaikan"] = disesuaikan
     turn["score_asli"] = asli if disesuaikan else None
+    turn.setdefault("perubahan_tanpa_alasan", False)
     return turn

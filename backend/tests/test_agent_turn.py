@@ -126,7 +126,7 @@ class TestExecuteTurn:
         assert hasil["stance"] == "mendukung"
         assert hasil["fallback"] is False
 
-    def test_berubah_tanpa_alasan_retry_dengan_instruksi(self):
+    def test_berubah_tanpa_alasan_isi_pemicu_tanpa_regenerate(self):
         teks = [
             _turn(stance="netral", berubah_karena=None),
             _turn(stance="netral", berubah_karena="Angka kepuasan tidak menunjukkan sasaran."),
@@ -134,8 +134,9 @@ class TestExecuteTurn:
         llm, calls = _llm(teks)
         hasil = execute_turn(llm, "sistem", "pertanyaan", prev_stance="menolak")
         assert len(calls) == 2
-        assert "Posisimu berbeda dari ronde sebelumnya" in calls[1][1]
+        assert "Tulis HANYA pemicu perubahan" in calls[1][1]
         assert hasil["berubah_karena"] == "Angka kepuasan tidak menunjukkan sasaran."
+        assert hasil["perubahan_tanpa_alasan"] is False
 
     def test_tetap_tanpa_alasan_setelah_retry_tetap_diterima(self):
         teks = [
