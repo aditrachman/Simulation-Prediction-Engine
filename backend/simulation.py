@@ -52,7 +52,17 @@ from .core.scheduler import (
     get_strategy_display,
 )
 from .core.prediction import heuristic_predict, compute_confidence
+from .services.agent_turn import (
+    execute_turn,
+    TURN_MAX_TOKENS,
+)
 # CrowdPool removed 2026-07-05 — unused, over-engineered
+
+# Jalur baru: satu call LLM per giliran, stance/score dari JSON agen.
+# Set USE_LEGACY_PIPELINE=true untuk kembali ke jalur lama (QA + sentimen LLM terpisah).
+USE_LEGACY_PIPELINE = os.getenv("USE_LEGACY_PIPELINE", "false").lower() in {"1", "true", "yes", "on"}
+
+_STANCE_KE_LABEL = {"menolak": "negatif", "netral": "netral", "mendukung": "positif"}
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +103,10 @@ def _apply_delta_cap(skor_baru: float, skor_lalu: float | None, nama_agen: str, 
     """
     FIX-A: Clamp skor agen agar tidak loncat lebih dari _DELTA_CAP dalam 1 ronde.
     Contoh: skor_lalu=0.83, skor_baru=-0.98 → delta=1.81 → dikurangi ke -0.13
+
+    Catatan: ini aturan realisme (manusia tidak berbalik posisi ekstrem dalam satu
+    ronde), BUKAN hasil model. Stance tetap seperti yang ditulis agen; hanya score
+    yang di-clamp.
     """
     if skor_lalu is None:
         return skor_baru
@@ -282,15 +296,19 @@ def run_simulation(
     sentiment_mode = SENTIMENT_MODE if tier != "free" else "inline"
     llm_for_sentiment = int(sentiment_mode not in ("inline", "ml"))
     # Di FAST_MODE kita skip QA (1 call per agen) dan regenerate justification (~20% agen)
-    if FAST_MODE:
-        estimated_llm_calls = n_agents * jumlah_ronde + (0 if tier == "free" else 2)
+    if USE_LEGACY_PIPELINE:
+        if FAST_MODE:
+            estimated_llm_calls = n_agents * jumlah_ronde + (0 if tier == "free" else 2)
+        else:
+            estimated_llm_calls = (
+                n_agents * jumlah_ronde
+                + (llm_for_sentiment * n_agents * jumlah_ronde)
+                + (0 if tier == "free" else 1)
+                + (0 if tier == "free" else 2)
+            )
     else:
-        estimated_llm_calls = (
-            n_agents * jumlah_ronde
-            + (llm_for_sentiment * n_agents * jumlah_ronde)
-            + (0 if tier == "free" else 1)
-            + (0 if tier == "free" else 2)
-        )
+        # Jalur JSON: 1 call per giliran + analisis/aktor di tier normal.
+        estimated_llm_calls = n_agents * jumlah_ronde + (0 if tier == "free" else 2)
 
     # ── Phase 2: Normalisasi agents ke AgentProfile ──
     agent_profiles: list[AgentProfile] = [AgentProfile(**a) for a in agents]
@@ -304,6 +322,9 @@ def run_simulation(
 
     # Phase 2: track actions via AgentAction
     agent_actions: list[AgentAction] = []
+
+    # Track stance terakhir per agen untuk validasi perubahan & fallback
+    stance_terakhir: dict[str, str] = {}
 
     def _proses_satu_agen(
         agen: dict,
@@ -406,6 +427,7 @@ def run_simulation(
         if len(agen.get("memori", [])) > 0:
             last_mem = agen["memori"][-1]
             skor_ronde_lalu = last_mem.get("skor", None)
+        stance_ronde_lalu = stance_terakhir.get(agen["nama"])
 
         # ISSUE #23 — stance rule khusus Pemerintah
         stance_rule = ""
@@ -578,6 +600,43 @@ def run_simulation(
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
             user_p = "\n".join(parts_trimmed)
 
+        # ── Jalur baru: satu call LLM per giliran, output JSON ──────────────
+        if not USE_LEGACY_PIPELINE:
+            turn = execute_turn(
+                llm=lambda s, u: call_llm(
+                    s, u, max_tokens=TURN_MAX_TOKENS, model=MODEL_AGENT, use_cache=False
+                ),
+                system_p=system_p,
+                user_p=user_p,
+                prev_stance=stance_ronde_lalu,
+                prev_score=skor_ronde_lalu,
+            )
+            if turn["fallback"]:
+                print(
+                    f"[GiliranFallback] {agen['nama']} R{ronde_ke}: "
+                    f"output JSON tidak valid, pakai stance {turn['stance']}"
+                )
+
+            # Aturan realisme: score dibatasi agar tidak loncat > _DELTA_CAP per ronde.
+            # Ini clamp Python, bukan hasil model. Stance tetap seperti yang ditulis agen.
+            turn["score"] = _apply_delta_cap(turn["score"], skor_ronde_lalu, agen["nama"], ronde_ke)
+            stance_terakhir[agen["nama"]] = turn["stance"]
+            return {
+                "nama":     agen["nama"],
+                "pendapat": turn["alasan"],
+                "sentimen": {
+                    "label": _STANCE_KE_LABEL[turn["stance"]],
+                    "skor":  turn["score"],
+                },
+                "pengaruh":        agen.get("pengaruh", 0.5),
+                "stance":          turn["stance"],
+                "score":           turn["score"],
+                "alasan":          turn["alasan"],
+                "berubah_karena":  turn["berubah_karena"],
+                "sesuai_topik":    turn["sesuai_topik"],
+                "fallback":        turn["fallback"],
+            }
+        # ── Jalur lama (USE_LEGACY_PIPELINE=true) ──────────────────────────
         jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
         if jawaban.startswith(("[Error", "[RateLimit", "[Offline")):
             # Jangan simpan teks error sebagai opini agen — outer handler
@@ -736,6 +795,12 @@ def run_simulation(
                 "sentimen": res["sentimen"],
                 "status":   res.get("status", "sukses"),
                 "alasan_gagal": res.get("alasan_gagal"),
+                "stance":          res.get("stance"),
+                "score":           res.get("score"),
+                "alasan":          res.get("alasan"),
+                "berubah_karena":  res.get("berubah_karena"),
+                "sesuai_topik":    res.get("sesuai_topik"),
+                "fallback":        res.get("fallback", False),
             })
 
             if not res_failed:
@@ -891,6 +956,7 @@ def run_simulation(
             "scheduler_label": get_strategy_display(scheduler_strategy),
             "n_crowd": n_crowd,
             "fast_mode": FAST_MODE,
+            "pipeline": "legacy" if USE_LEGACY_PIPELINE else "json",
         },
         "events":           simulation_state_payload.get("events", []),
         "jumlah_ronde":     jumlah_ronde,
