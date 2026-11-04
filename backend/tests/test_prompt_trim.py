@@ -39,6 +39,9 @@ def _jalankan(monkeypatch, briefing: str, alasan_r1: str, agen=None):
     monkeypatch.setattr(simulation, "call_llm", fake)
     monkeypatch.setattr(simulation.time, "sleep", lambda *_: None)
     monkeypatch.setattr(simulation, "USE_LEGACY_PIPELINE", False, raising=False)
+    # Mock narrator LLM call to avoid real API calls
+    monkeypatch.setattr("backend.services.narrator.llm_chat",
+                        lambda *a, **k: ('{"vonis":"test","alasan":["a","b","c"],"situasi":{"pemicu":{"angka":"","teks":""},"bahan":[]},"kubu_catatan":{"tolak":"","netral":"","dukung":""},"ronde":[{"no":1,"judul":"j","ringkas":"r"}],"skenario":[{"jika":"j","maka":"m","dasar_agen":"d"}]}', "test-model"))
 
     hasil = simulation.run_simulation(
         topik=TOPIK, agents=agen, jumlah_ronde=2,

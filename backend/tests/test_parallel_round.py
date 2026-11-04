@@ -1,3 +1,4 @@
+import time
 """Test FASE 4: paralel per ronde, deterministik, tanpa race, flag false = serial."""
 
 import json
@@ -40,9 +41,13 @@ def _pabrik_llm(tunda: dict[str, float] | None = None):
 def _jalankan(monkeypatch, *, parallel: bool, max_agents: int = 4, tunda=None):
     monkeypatch.setattr(simulation, "call_llm", _pabrik_llm(tunda))
     monkeypatch.setattr(simulation.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)  # patch global time.sleep for tunda
     monkeypatch.setattr(simulation, "USE_LEGACY_PIPELINE", False, raising=False)
     monkeypatch.setattr(simulation, "PARALLEL_AGENTS", parallel)
     monkeypatch.setattr(simulation, "PARALLEL_AGENTS_MAX", max_agents)
+    # Mock narrator LLM call to avoid real API calls
+    monkeypatch.setattr("backend.services.narrator.llm_chat",
+                        lambda *a, **k: ('{"vonis":"test","alasan":["a","b","c"],"situasi":{"pemicu":{"angka":"","teks":""},"bahan":[]},"kubu_catatan":{"tolak":"","netral":"","dukung":""},"ronde":[{"no":1,"judul":"j","ringkas":"r"}],"skenario":[{"jika":"j","maka":"m","dasar_agen":"d"}]}', "test-model"))
 
     agen = get_agents("Politik")[:4]
     hasil = simulation.run_simulation(

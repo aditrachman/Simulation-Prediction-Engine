@@ -242,6 +242,7 @@ def _fallback_narrative(computed: dict) -> dict:
             "no": r["no"],
             "judul": r["judul"],
             "ringkas": r["ringkas"],
+            "distribusi": r.get("distribusi", {"menolak": 0, "netral": 0, "mendukung": 0}),
         })
 
     skenario = []

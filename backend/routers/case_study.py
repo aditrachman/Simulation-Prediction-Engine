@@ -1,8 +1,10 @@
 # backend/routers/case_study.py
 # Router untuk endpoint Case Study (FASE 5c/5d + FASE 8).
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Header
 from pathlib import Path
+import os
+import hmac
 
 from backend.services.run_store import list_runs, load_run
 from backend.services.casestudy_assemble import (
@@ -13,6 +15,27 @@ from backend.services.casestudy_assemble import (
 from backend.core.case_study_schema import CaseStudy
 
 router = APIRouter(prefix="/case-study", tags=["case-study"])
+
+# ── Admin token config ───────────────────────────────────────────────────────
+CASE_STUDY_ADMIN_TOKEN = os.getenv("CASE_STUDY_ADMIN_TOKEN", "")
+
+
+def _verify_admin_token(x_admin_token: str | None = Header(None)) -> bool:
+    """Verify admin token using constant-time comparison."""
+    if not CASE_STUDY_ADMIN_TOKEN:
+        return False
+    if not x_admin_token:
+        return False
+    return hmac.compare_digest(x_admin_token, CASE_STUDY_ADMIN_TOKEN)
+
+
+def _require_admin(x_admin_token: str | None = Header(None)) -> None:
+    """Dependency to require valid admin token."""
+    if not _verify_admin_token(x_admin_token):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin token required. Set X-Admin-Token header with valid CASE_STUDY_ADMIN_TOKEN.",
+        )
 
 
 # ── Preset alias resolution ──────────────────────────────────────────────────
@@ -37,21 +60,34 @@ import json
 
 @router.get("")
 async def list_case_studies(limit: int = 50, offset: int = 0):
-    """Daftar CaseStudy yang sudah di-assemble (dari case_studies/)."""
-    items = list_case_studies(limit=limit, offset=offset)
+    """Daftar CaseStudy publik (hanya yang punya alias/preset)."""
+    presets = _load_presets()
+    items = []
+    for alias, run_id in presets.items():
+        cached = load_case_study(run_id)
+        if cached:
+            kualitas = cached.get("kualitas", {})
+            items.append({
+                "id": run_id,
+                "alias": alias,
+                "judul": cached.get("judul", ""),
+                "tanggal": cached.get("meta", {}).get("tanggal"),
+                "kualitas_status": kualitas.get("status", "unknown"),
+                "narator_fallback": cached.get("narator_fallback"),
+            })
     return {"items": items, "limit": limit, "offset": offset}
 
 
 @router.get("/runs")
-async def list_runs_raw(limit: int = 50, offset: int = 0):
-    """Daftar run mentah (RunResult) dari run_store."""
+async def list_runs_raw(limit: int = 50, offset: int = 0, _: None = Depends(_require_admin)):
+    """Daftar run mentah (RunResult) dari run_store. Admin only."""
     items = list_runs(limit=limit, offset=offset)
     return {"items": items, "limit": limit, "offset": offset}
 
 
 @router.get("/{id_or_alias}/raw")
-async def get_case_study_raw(id_or_alias: str):
-    """Ambil data run mentah (RunResult) berdasarkan ID atau alias."""
+async def get_case_study_raw(id_or_alias: str, _: None = Depends(_require_admin)):
+    """Ambil data run mentah (RunResult) berdasarkan ID atau alias. Admin only."""
     run_id = _resolve_id(id_or_alias)
     data = load_run(run_id)
     if data is None:
@@ -104,7 +140,7 @@ async def get_case_study(id_or_alias: str):
 
 
 @router.post("/{id_or_alias}/regenerate-narrative")
-async def regenerate_narrative(id_or_alias: str):
+async def regenerate_narrative(id_or_alias: str, _: None = Depends(_require_admin)):
     """
     Jalankan ulang narator (LLM) dan timpa cache CaseStudy.
     - Tolak jika kualitas == "degraded".
