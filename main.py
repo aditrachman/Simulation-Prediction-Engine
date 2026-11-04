@@ -567,6 +567,10 @@ def start_sim(payload: SimRequest, request: Request):
         },
         "source_diversity": source_diversity,
     }
+    # Case Study ID (untuk endpoint /case-study/{id})
+    run_id = hasil.get("_run_id")
+    if run_id:
+        response_data["case_study_id"] = run_id
     if topik_warning:
         response_data["warning"] = topik_warning
     return response_data

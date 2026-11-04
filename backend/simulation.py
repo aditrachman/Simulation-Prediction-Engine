@@ -1072,6 +1072,23 @@ def run_simulation(
             f"{'tidak layak dirakit' if kualitas['status'] == 'degraded' else 'perlu dibaca hati-hati'}."
         )
 
+    # Simpan run ke file (atomik, thread-safe)
+    try:
+        from .services.run_store import save_run
+        run_id = save_run(hasil_dict)
+        hasil_dict["_run_id"] = run_id
+        print(f"[RUN_STORE] saved run_id={run_id}")
+    except Exception as e:
+        print(f"[RUN_STORE] save failed: {e}")
+
+    # Assemble CaseStudy (narator + computed) — tidak boleh gagalkan simulasi
+    try:
+        from .services.casestudy_assemble import assemble_case_study
+        _ = assemble_case_study(run_id)
+        print(f"[CASE_STUDY] assembled for run_id={run_id}")
+    except Exception as e:
+        print(f"[CASE_STUDY] assemble failed: {e}")
+
     return hasil_dict
 
 
