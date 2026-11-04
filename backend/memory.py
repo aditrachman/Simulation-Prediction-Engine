@@ -110,6 +110,7 @@ def build_memory_context(agent: dict) -> str:
     label_terakhir = _stance_label_from_skor(skor_terakhir)
     skor_str = f" (skor {skor_terakhir:.2f})" if skor_terakhir is not None else ""
 
+    # Alasan terakhir dipakai utuh (maks 35 kata) agar posisi awal agen tidak hilang.
     # Phase 5: Gunakan structured memory untuk konteks (tanpa LLM)
     store = _get_or_create_store(agent)
     structured_ctx = store.build_context(agent["memori"])
@@ -117,7 +118,7 @@ def build_memory_context(agent: dict) -> str:
     if len(agent["memori"]) >= 2:
         base_context = (
             f"{structured_ctx} "
-            f"Terakhir kamu bilang: \"{terakhir['pendapat'][:70]}\" "
+            f"Terakhir kamu bilang: \"{terakhir['pendapat']}\" "
             f"(posisi: {label_terakhir}{skor_str}). "
         )
         if has_previous:
@@ -135,7 +136,7 @@ def build_memory_context(agent: dict) -> str:
 
     # Hanya 1 entri memori
     return (
-        f"Terakhir kamu bilang: \"{terakhir['pendapat'][:70]}\" "
+        f"Terakhir kamu bilang: \"{terakhir['pendapat']}\" "
         f"(posisi: {label_terakhir}{skor_str}). "
         f"Pertahankan posisi kecuali ada argumen baru yang kuat."
     )
@@ -144,16 +145,23 @@ def build_memory_context(agent: dict) -> str:
 MAKS_KATA_RINGKASAN = 25
 
 
-def build_round_summary(semua_pendapat: list[dict], maks_agen: int = 3) -> str:
+def build_round_summary(
+    semua_pendapat: list[dict], maks_agen: int = 3, kecuali: str | None = None
+) -> str:
     """
     Ringkasan ekstraktif ronde sebelumnya tanpa LLM dan tanpa nama agen.
 
     Ambil `maks_agen` alasan dengan |skor| terbesar dari agen berbeda, tiap alasan
     dipotong MAX_KATA_RINGKASAN kata. Nama persona tidak ditampilkan agar agen
-    menanggapi argumennya, bukan orangnya.
+    menanggapi argumennya, bukan orangnya. `kecuali` = agen yang sedang bicara,
+    karena pendapatnya sendiri bukan "pihak lain".
     """
     kandidat = sorted(
-        (p for p in semua_pendapat if (p.get("pendapat") or "").strip()),
+        (
+            p
+            for p in semua_pendapat
+            if (p.get("pendapat") or "").strip() and p.get("nama") != kecuali
+        ),
         key=lambda p: abs((p.get("sentimen") or {}).get("skor") or 0.0),
         reverse=True,
     )

@@ -71,6 +71,15 @@ class TestRingkasanRonde:
         hasil = build_round_summary(data)
         assert hasil == 'Pihak lain berpendapat:\n- "Data distribusi belum terbuka."'
 
+    def test_pendapat_sendiri_tidak_masuk_ringkasan(self):
+        data = [
+            _opini("Mahasiswa", "Argumen sendiri yang tidak boleh muncul.", -0.9),
+            _opini("Pemerintah", "Argumen pihak lain yang boleh muncul.", 0.5),
+        ]
+        hasil = build_round_summary(data, kecuali="Mahasiswa")
+        assert "Argumen sendiri" not in hasil
+        assert "Argumen pihak lain" in hasil
+
     def test_kosong(self):
         assert build_round_summary([]) == ""
 

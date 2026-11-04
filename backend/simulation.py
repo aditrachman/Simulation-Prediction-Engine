@@ -63,6 +63,10 @@ from .services.agent_turn import (
 # Set USE_LEGACY_PIPELINE=true untuk kembali ke jalur lama (QA + sentimen LLM terpisah).
 USE_LEGACY_PIPELINE = os.getenv("USE_LEGACY_PIPELINE", "false").lower() in {"1", "true", "yes", "on"}
 
+# Ambang pemangkasan prompt jalur JSON. Lebih longgar dari legacy karena posisi agen,
+# aturan berubah_karena, dan ringkasan pihak lain wajib utuh.
+BATAS_TRIM_JSON = 1200
+
 _STANCE_KE_LABEL = {"menolak": "negatif", "netral": "netral", "mendukung": "positif"}
 
 
@@ -383,7 +387,9 @@ def run_simulation(
         if ronde_ke == 1:
             konteks_pengaruh = ""
         else:
-            konteks_pengaruh = build_round_summary(pendapat_ronde_sebelumnya)
+            konteks_pengaruh = build_round_summary(
+                pendapat_ronde_sebelumnya, kecuali=agen["nama"]
+            )
 
         role_singkat = agen.get("_role_singkat") or agen["role"][:250].rstrip()
 
@@ -536,6 +542,15 @@ def run_simulation(
         if konteks_memori:
             parts.append(konteks_memori)
 
+        # Aturan eksplisit perubahan posisi (wajib ada di Ronde 2+, tidak boleh dipangkas)
+        aturan_berubah = ""
+        if ronde_ke >= 2:
+            aturan_berubah = (
+                "Kalau stance-mu beda dari ronde sebelumnya, isi berubah_karena dengan "
+                "pemicunya dalam satu kalimat; kalau sama, kosongkan."
+            )
+            parts.append(aturan_berubah)
+
         # Stabilization PR — BUG #27: change_rule berbasis skor sentimen nyata
         if skor_ronde_lalu is not None and len(agen.get("memori", [])) >= 2:
             if skor_ronde_lalu > 0.2:
@@ -580,15 +595,30 @@ def run_simulation(
         parts.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
         user_p = "\n".join(parts)
 
-        # Pangkas jika > 900 char (jaga prompt tetap hemat untuk TPM)
-        if len(user_p) > 900:
+        if USE_LEGACY_PIPELINE:
+            # Jalur lama tidak diubah.
+            if len(user_p) > 900:
+                parts_trimmed = []
+                if konteks_memori:
+                    parts_trimmed.append(konteks_memori[:80])
+                if ronde_ke == 1 and briefing_real:
+                    parts_trimmed.append(f"Info konteks: {briefing_real[:320]}")
+                elif konteks_pengaruh:
+                    parts_trimmed.append("\n".join(konteks_pengaruh.split("\n")[:4]))
+                parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
+                user_p = "\n".join(parts_trimmed)
+        elif len(user_p) > BATAS_TRIM_JSON:
+            # Jalur JSON: posisi agen, aturan berubah_karena, dan ringkasan pihak lain
+            # tidak boleh dipangkas. Yang dipangkas hanya briefing/topik panjang.
             parts_trimmed = []
             if konteks_memori:
-                parts_trimmed.append(konteks_memori[:80])
+                parts_trimmed.append(konteks_memori)
+            if aturan_berubah:
+                parts_trimmed.append(aturan_berubah)
             if ronde_ke == 1 and briefing_real:
-                parts_trimmed.append(f"Info konteks: {briefing_real[:320]}")
-            elif konteks_pengaruh:
-                parts_trimmed.append("\n".join(konteks_pengaruh.split("\n")[:4]))
+                parts_trimmed.append(f"Info konteks: {briefing_real[:200]}")
+            if konteks_pengaruh:
+                parts_trimmed.append(konteks_pengaruh)
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
             user_p = "\n".join(parts_trimmed)
 
@@ -631,6 +661,8 @@ def run_simulation(
                 "pengaruh":        agen.get("pengaruh", 0.5),
                 "stance":          turn["stance"],
                 "score":           turn["score"],
+                "score_asli":      turn["score_asli"],
+                "score_disesuaikan": turn["score_disesuaikan"],
                 "alasan":          turn["alasan"],
                 "berubah_karena":  turn["berubah_karena"],
                 "sesuai_topik":    turn["sesuai_topik"],
@@ -790,6 +822,8 @@ def run_simulation(
                 "alasan_gagal": res.get("alasan_gagal"),
                 "stance":          res.get("stance"),
                 "score":           res.get("score"),
+                "score_asli":      res.get("score_asli"),
+                "score_disesuaikan": res.get("score_disesuaikan", False),
                 "alasan":          res.get("alasan"),
                 "berubah_karena":  res.get("berubah_karena"),
                 "sesuai_topik":    res.get("sesuai_topik"),

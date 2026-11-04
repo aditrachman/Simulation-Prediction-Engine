@@ -50,7 +50,8 @@ TURN_SYSTEM_SUFFIX = (
     '"berubah_karena":"pemicu perubahan atau string kosong"}\n'
     f"- alasan: argumen utamamu, maksimal {MAKS_KATA_ALASAN} kata, gaya bicaramu sendiri.\n"
     "- sesuai_topik: false hanya kalau kamu memang tidak bisa membahas topik ini.\n"
-    "- berubah_karena: wajib diisi kalau posisimu beda dari ronde sebelumnya.\n"
+    "- berubah_karena: kalau stance-mu beda dari ronde sebelumnya, isi pemicunya "
+    "dalam satu kalimat; kalau sama, kosongkan.\n"
     "Jangan menyapa nama peserta lain. Jangan buka dengan 'Kamu benar'/'Gue setuju'/"
     "'Aku setuju', kecuali menanggapi 'Pihak lain berpendapat'."
 )
@@ -177,6 +178,22 @@ def _score_dari_stance(stance: str) -> float:
     return {"mendukung": 0.6, "netral": 0.0, "menolak": -0.6}[stance]
 
 
+# Score harus konsisten dengan stance. Stance menang, score disesuaikan.
+_RENTANG_SCORE_STANCE = {
+    "menolak": (-1.0, -0.2),
+    "netral": (-0.2, 0.2),
+    "mendukung": (0.2, 1.0),
+}
+
+
+def sesuaikan_score(score: float, stance: str) -> tuple[float, bool]:
+    """Clamp score ke rentang stance. Return (score, disesuaikan)."""
+    bawah, atas = _RENTANG_SCORE_STANCE[stance]
+    asli = round(float(score), 2)
+    baru = round(max(bawah, min(atas, asli)), 2)
+    return baru, baru != asli
+
+
 def parse_turn(raw: str) -> dict | None:
     """
     Parse output agen jadi dict tervalidasi. Return None kalau tidak bisa dipakai.
@@ -274,7 +291,7 @@ def execute_turn(
     alasan = alasan_retry(turn, prev_stance)
 
     if alasan is None:
-        return turn
+        return _finalisasi(turn)
 
     retry_p = user_p + TURN_RETRY_SUFFIX
     if alasan == "berubah_tanpa_alasan":
@@ -285,6 +302,15 @@ def execute_turn(
     if retry_turn is not None:
         turn = retry_turn
     elif turn is None:
-        return turn_fallback(prev_stance, prev_score)
+        return _finalisasi(turn_fallback(prev_stance, prev_score))
 
+    return _finalisasi(turn)
+
+
+def _finalisasi(turn: dict) -> dict:
+    """Samakan score dengan stance sebelum delta cap dipakai."""
+    asli = turn["score"]
+    turn["score"], disesuaikan = sesuaikan_score(asli, turn["stance"])
+    turn["score_disesuaikan"] = disesuaikan
+    turn["score_asli"] = asli if disesuaikan else None
     return turn
