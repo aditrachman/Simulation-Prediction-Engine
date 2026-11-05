@@ -132,7 +132,7 @@
 .cs-round-title { font-family: var(--cs-display); font-weight: 600; font-size: 26px; line-height: 1.2; margin: 0; }
 .cs-round-sum { font-size: 16px; color: #3a352e; margin: 0; }
 .cs-quote { font-family: var(--cs-display); font-size: 21px; line-height: 1.35; margin: 0; }
-.cs-quote-by { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 14px; }
+.cs-quote-by { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
 .cs-quote-by strong { font-weight: 700; }
 .cs-tag { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 10px; background: #e6e0d2; color: var(--cs-ink); }
 .cs-tag-claim { background: var(--cs-warn-bg); color: var(--cs-warn-ink); border: 1px solid var(--cs-warn-line); }
