@@ -1,4 +1,4 @@
-import Link from "next/link";
+import ShareButton from "./ShareButton";
 import "./case-study.css";
 
 const ORDER = ["menolak", "netral", "mendukung"];
@@ -327,7 +327,7 @@ export default function CaseStudyView({ data, banner }) {
         <div className="cs-actions">
           <div className="cs-btns">
             {/* Sembunyikan Unduh PDF, Word, CSV - tidak ada endpoint ekspor */}
-            <a className="cs-btn" href="#">Bagikan tautan</a>
+            <ShareButton />
           </div>
           <a className="cs-link" href="#babak3">Lihat catatan debat lengkap</a>
         </div>
