@@ -46,10 +46,18 @@ const STEPS = [
   { no: "+", name: "Uji kebijakan", href: "#whatif" },
 ];
 
-export default function CaseStudyView({ data }) {
+export default function CaseStudyView({ data, banner }) {
   const { meta, hasil, situasi, kualitas, narator_fallback } = data;
   return (
     <div className="cs">
+      {banner && (
+        <div className="cs-wrap" style={{ paddingTop: 32 }}>
+          <div className="cs-warn" role="note">
+            <div className="cs-warn-icon" aria-hidden="true">!</div>
+            <div>{banner}</div>
+          </div>
+        </div>
+      )}
       {/* HERO + HASIL SINGKAT */}
       <header className="cs-wrap cs-hero">
         <div className="cs-title-block">

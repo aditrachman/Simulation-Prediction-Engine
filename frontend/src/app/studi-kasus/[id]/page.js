@@ -70,18 +70,10 @@ export default async function CaseStudyPage({ params }) {
     // and ONLY for id "mbg-tepat-sasaran"
     if (id === "mbg-tepat-sasaran") {
       return (
-        <section className="mx-auto max-w-4xl px-4 py-16">
-          <div className="mb-6 p-4 rounded-[12px] bg-[#fffbeb] border border-[#fcd34d]/30">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-2xl">⚠️</span>
-              <strong className="text-[#92400e]">Menampilkan data contoh: server tidak terjangkau.</strong>
-            </div>
-            <p className="text-sm text-[#92400e]">
-              Tidak dapat menghubungi server simulasi. Menampilkan salinan statis data MBG.
-            </p>
-          </div>
-          <CaseStudyView data={mbgStatic} />
-        </section>
+        <CaseStudyView
+          data={mbgStatic}
+          banner="Menampilkan data contoh: server tidak terjangkau. Tidak dapat menghubungi server simulasi, jadi yang tampil adalah salinan statis data MBG."
+        />
       );
     }
 
@@ -106,9 +98,5 @@ export default async function CaseStudyPage({ params }) {
   }
 
   // Success - render the case study
-  return (
-    <section className="mx-auto max-w-4xl px-4 py-16">
-      <CaseStudyView data={result.data} />
-    </section>
-  );
+  return <CaseStudyView data={result.data} />;
 }
