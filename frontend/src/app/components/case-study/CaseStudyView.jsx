@@ -47,22 +47,9 @@ const STEPS = [
 ];
 
 export default function CaseStudyView({ data }) {
-  const { meta, hasil, situasi } = data;
+  const { meta, hasil, situasi, kualitas, narator_fallback } = data;
   return (
     <div className="cs">
-      {/* TOP BAR — ganti dengan navbar situs kalau sudah ada */}
-      <div className="cs-top">
-        <div className="cs-wrap cs-top-in">
-          <div className="cs-logo">Simulasi Opini</div>
-          <nav className="cs-nav" aria-label="Navigasi utama">
-        <Link href="/">Beranda</Link>
-        <Link href="/studi-kasus" className="is-active">Studi Kasus</Link>
-        <Link href="/metodologi">Metodologi</Link>
-        <Link href="/simulasi" className="is-cta">Coba Simulasi</Link>
-      </nav>
-        </div>
-      </div>
-
       {/* HERO + HASIL SINGKAT */}
       <header className="cs-wrap cs-hero">
         <div className="cs-title-block">
@@ -73,6 +60,10 @@ export default function CaseStudyView({ data }) {
             <span className="cs-chip">{meta.ronde} ronde debat</span>
             <span className="cs-chip">{meta.sumber} artikel sumber</span>
             <span className="cs-chip">Dijalankan {meta.tanggal}</span>
+            {/* FASE 3: chip "Ringkasan otomatis" jika narator_fallback */}
+            {narator_fallback && (
+              <span className="cs-chip cs-chip-warn">Ringkasan otomatis</span>
+            )}
           </div>
         </div>
 
@@ -82,6 +73,17 @@ export default function CaseStudyView({ data }) {
             <strong>Baca sebagai gambaran awal, bukan survei.</strong> {data.keterbatasan}
           </div>
         </div>
+
+        {/* FASE 3: warning kualitas jika status === "warning" */}
+        {kualitas?.status === "warning" && (
+          <div className="cs-warn cs-warn-quality" role="note">
+            <div className="cs-warn-icon" aria-hidden="true">!</div>
+            <div>
+              <strong>Kualitas data:</strong>{" "}
+              {kualitas.fallback_count} dari {kualitas.total_giliran} giliran memakai nilai cadangan.
+            </div>
+          </div>
+        )}
 
         <section className="cs-verdict" aria-label="Hasil singkat">
           <div className="cs-verdict-main">
@@ -312,14 +314,11 @@ export default function CaseStudyView({ data }) {
         </section>
       )}
 
-      {/* FOOTER */}
+      {/* FOOTER - hanya tautan Bagikan tautan (sembunyikan export tanpa endpoint) */}
       <footer className="cs-wrap cs-foot">
         <div className="cs-actions">
           <div className="cs-btns">
-            {/* ganti href dengan endpoint ekspor yang sudah ada */}
-            <a className="cs-btn is-primary" href="#">Unduh PDF</a>
-            <a className="cs-btn" href="#">Word</a>
-            <a className="cs-btn" href="#">CSV</a>
+            {/* Sembunyikan Unduh PDF, Word, CSV - tidak ada endpoint ekspor */}
             <a className="cs-btn" href="#">Bagikan tautan</a>
           </div>
           <a className="cs-link" href="#babak3">Lihat catatan debat lengkap</a>

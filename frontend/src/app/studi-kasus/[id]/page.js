@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import CaseStudyView from "@/app/components/case-study/CaseStudyView";
 import mbgStatic from "@/data/mbg-tepat-sasaran.json";
 
@@ -93,12 +94,12 @@ export default async function CaseStudyPage({ params }) {
           <p className="text-[#6c6a64] mb-6">
             Tidak dapat menghubungi server. Silakan coba lagi nanti.
           </p>
-          <button
-            onClick={() => window.location.reload()}
+          <Link
+            href={`/studi-kasus/${id}`}
             className="btn-primary"
           >
             Muat Ulang
-          </button>
+          </Link>
         </div>
       </section>
     );
