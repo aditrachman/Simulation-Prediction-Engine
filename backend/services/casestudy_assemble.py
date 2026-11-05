@@ -23,9 +23,17 @@ _lock = threading.Lock()
 def _atomic_write(path: Path, data: dict) -> None:
     """Tulis ke file sementara lalu rename (atomik di POSIX)."""
     tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    tmp.replace(path)  # atomik
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp.replace(path)  # atomik
+    except Exception as exc:
+        raise OSError(
+            f"Gagal menulis {path}: {type(exc).__name__}: {exc}"
+        ) from exc
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
 
 def assemble_case_study(run_id: str) -> dict:
