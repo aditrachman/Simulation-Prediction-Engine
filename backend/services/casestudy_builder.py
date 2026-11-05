@@ -335,12 +335,6 @@ def build_computed(run: dict) -> dict:
         {"jika": "Data baru menunjukkan perbaikan nyata di lapangan", "maka": "Jurnalis/Media bisa mengubah sikap."},
         {"jika": "Anak-anak di daerah terpencil tetap terpinggirkan", "maka": "Aksi protes dari kubu kritis cenderung meningkat."},
     ]
-    whatif = {
-        "judul": "Bagaimana kalau pemerintah merilis data distribusi per kecamatan?",
-        "deskripsi": "Simulasi dijalankan ulang dengan satu intervensi, lalu hasilnya dibandingkan dengan simulasi awal.",
-        "sebelum": distribusi_akhir,
-        "sesudah": None,
-    }
 
     return {
         "meta": {"peserta": n_agen, "ronde": n_ronde, "sumber": n_sumber, "tanggal": tanggal},
@@ -357,5 +351,4 @@ def build_computed(run: dict) -> dict:
         "titikBalik": titik_balik,
         "buktiDiperdebatkan": bukti,
         "skenario": skenario,
-        "whatif": whatif,
     }

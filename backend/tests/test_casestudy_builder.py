@@ -120,12 +120,10 @@ class TestBuildComputed:
         assert s["sumber"] == "Sumber: 1 artikel RSS. Briefing terbatas."
         assert s["pemicu"]["angka"] == "72,8%"
 
-    def test_whatif_sesudah_null(self, run_data):
+    def test_tanpa_whatif(self, run_data):
         out = build_computed(run_data)
-        assert out["whatif"]["sesudah"] is None
-        assert out["whatif"]["sebelum"]["menolak"] == 8
-        # whatif.sebelum hanya punya 3 kunci stance
-        assert set(out["whatif"]["sebelum"].keys()) == {"menolak", "netral", "mendukung"}
+        # whatif hanya boleh ada setelah simulasi intervensi (FASE 9)
+        assert "whatif" not in out
 
     def test_golden_master(self, run_data):
         """Hasil builder harus identik dengan expected_computed.json (golden test)."""

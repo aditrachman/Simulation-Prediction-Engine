@@ -167,15 +167,5 @@
       "jika": "Anak-anak di daerah terpencil tetap terpinggirkan",
       "maka": "Aksi protes dari kubu kritis cenderung meningkat."
     }
-  ],
-  "whatif": {
-    "judul": "Bagaimana kalau pemerintah merilis data distribusi per kecamatan?",
-    "deskripsi": "Simulasi dijalankan ulang dengan satu intervensi, lalu hasilnya dibandingkan dengan simulasi awal.",
-    "sebelum": {
-      "menolak": 8,
-      "netral": 3,
-      "mendukung": 1
-    },
-    "sesudah": null
-  }
+  ]
 }
