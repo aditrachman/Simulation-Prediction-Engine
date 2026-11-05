@@ -18,13 +18,10 @@ TURN_JSON = json.dumps(
 
 
 def test_full_simulation_writes_case_study(tmp_path, monkeypatch):
-    run_dir = tmp_path / "runs"
-    case_dir = tmp_path / "case_studies"
-    run_dir.mkdir()
-    case_dir.mkdir()
+    # conftest sudah mengarahkan DATA_DIR kedua modul ke tmp_path
+    run_dir = run_store.DATA_DIR
+    case_dir = casestudy_assemble.DATA_DIR
 
-    monkeypatch.setattr(run_store, "DATA_DIR", run_dir)
-    monkeypatch.setattr(casestudy_assemble, "DATA_DIR", case_dir)
     monkeypatch.setattr(simulation, "call_llm", lambda *args, **kwargs: TURN_JSON)
     monkeypatch.setattr(
         casestudy_assemble,
