@@ -120,3 +120,25 @@ def test_tanggal_dari_meta_saved_at():
     run.pop("tanggal")
     run["_meta"] = {"saved_at": datetime(2026, 11, 4, 10, 0).timestamp()}
     assert build_computed(run)["meta"]["tanggal"] == "4 Nov 2026"
+
+
+def test_load_case_study_membuang_whatif_lama(tmp_path, monkeypatch):
+    monkeypatch.setattr(casestudy_assemble, "DATA_DIR", tmp_path)
+    lama = {
+        "judul": "Uji",
+        "whatif": {"judul": "x", "deskripsi": "y", "sebelum": {"menolak": 1, "netral": 0, "mendukung": 0}, "sesudah": None},
+    }
+    (tmp_path / "lama.json").write_text(json.dumps(lama), encoding="utf-8")
+
+    assert "whatif" not in casestudy_assemble.load_case_study("lama")
+
+
+def test_load_case_study_mempertahankan_whatif_berjalan(tmp_path, monkeypatch):
+    monkeypatch.setattr(casestudy_assemble, "DATA_DIR", tmp_path)
+    baru = {
+        "judul": "Uji",
+        "whatif": {"judul": "x", "deskripsi": "y", "sebelum": {"menolak": 1, "netral": 0, "mendukung": 0}, "sesudah": {"menolak": 0, "netral": 1, "mendukung": 0}},
+    }
+    (tmp_path / "baru.json").write_text(json.dumps(baru), encoding="utf-8")
+
+    assert casestudy_assemble.load_case_study("baru")["whatif"]["sesudah"]["netral"] == 1

@@ -89,12 +89,16 @@ def save_case_study(case_id: str, case_dict: dict) -> None:
 
 
 def load_case_study(case_id: str) -> dict | None:
-    """Baca CaseStudy dari file."""
+    """Baca CaseStudy dari file. whatif tanpa hasil intervensi dibuang."""
     path = DATA_DIR / f"{case_id}.json"
     if not path.exists():
         return None
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    whatif = data.get("whatif")
+    if whatif and not whatif.get("sesudah"):
+        data.pop("whatif")
+    return data
 
 
 def list_case_studies(limit: int = 100, offset: int = 0) -> list[dict]:
