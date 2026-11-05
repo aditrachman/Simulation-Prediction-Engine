@@ -68,7 +68,9 @@ export default function CaseStudyView({ data, banner }) {
             <span className="cs-chip">{meta?.peserta} peserta</span>
             <span className="cs-chip">{meta?.ronde} ronde debat</span>
             <span className="cs-chip">{meta?.sumber} artikel sumber</span>
-            <span className="cs-chip">Dijalankan {meta?.tanggal}</span>
+            {meta?.tanggal && (
+              <span className="cs-chip">Dijalankan {meta.tanggal}</span>
+            )}
             {/* FASE 3: chip "Ringkasan otomatis" jika narator_fallback */}
             {narator_fallback && (
               <span className="cs-chip cs-chip-warn">Ringkasan otomatis</span>
