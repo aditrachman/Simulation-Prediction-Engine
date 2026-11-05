@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.core.case_study_schema import CaseStudy
-from backend.services.casestudy_builder import build_computed
+from backend.services.casestudy_builder import build_computed, normalisasi_judul
 from backend.services.narrator import generate_narrative
 from backend.services.run_store import load_run
 
@@ -61,12 +61,16 @@ def assemble_case_study(run_id: str) -> dict:
     narrative = generate_narrative(run, computed)
 
     # 3. Gabung jadi CaseStudy dict
+    topik = run.get("topik", "")
+    judul = normalisasi_judul(topik)
     case_dict = {
         **computed,
         **narrative,
-        "judul": run.get("topik", ""),
+        "judul": judul,
         "kategori": run.get("kategori", "Umum"),
     }
+    if judul != topik:
+        case_dict["judul_asli"] = topik
 
     # 4. Validasi dengan Pydantic (by_alias=True untuk output)
     try:

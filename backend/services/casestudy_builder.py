@@ -4,12 +4,36 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
+from datetime import datetime
 from typing import Any
 
 STANCE_LABELS = ("menolak", "netral", "mendukung")
 STANCE_TO_TIPE = {"menolak": "tolak", "netral": "netral", "mendukung": "dukung"}
 TIPE_TO_NAMA_KUBU = {"tolak": "Kritikus", "netral": "Penengah", "dukung": "Pendukung"}
+
+_BULAN = ("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+
+
+def normalisasi_judul(teks: str) -> str:
+    """Rapikan spasi dan tanda baca judul tanpa mengubah kata."""
+    judul = " ".join((teks or "").split())
+    judul = re.sub(r"\s+([?!])", r"\1", judul)
+    return judul[:1].upper() + judul[1:]
+
+
+def _tanggal_dari_run(run: dict) -> str:
+    """Satu sumber tanggal: field run, lalu waktu simpan, lalu hari ini."""
+    eksplisit = run.get("tanggal")
+    if eksplisit:
+        return eksplisit
+    saved_at = (run.get("_meta") or {}).get("saved_at")
+    if saved_at:
+        dt = datetime.fromtimestamp(saved_at)
+    else:
+        dt = datetime.now()
+    return f"{dt.day} {_BULAN[dt.month - 1]} {dt.year}"
 
 
 def _stance_from_score(score: float | None) -> str:
@@ -55,7 +79,7 @@ def build_computed(run: dict) -> dict:
     n_agen = len(run.get("agen", [])) or len(runde_detail[0].get("agen", []))
     n_ronde = len(runde_detail)
     n_sumber = len(run.get("sumber", []))
-    tanggal = run.get("tanggal", "4 Nov 2026")
+    tanggal = _tanggal_dari_run(run)
     relevansi_vals = [s.get("relevansi") for s in run.get("sumber", []) if s.get("relevansi") is not None]
     relevansi_rata = sum(relevansi_vals) / len(relevansi_vals) if relevansi_vals else None
 
@@ -258,7 +282,12 @@ def build_computed(run: dict) -> dict:
 
     # ── Keterbatasan ──────────────────────────────────────────────────────
     keterbatasan_parts = []
-    if n_sumber <= 1:
+    if n_sumber == 0:
+        keterbatasan_parts.append(
+            "Simulasi ini tidak memakai artikel sumber, dan angka yang "
+            "muncul di debat adalah klaim para agen, bukan data yang sudah diverifikasi."
+        )
+    elif n_sumber == 1:
         keterbatasan_parts.append(
             "Simulasi ini hanya memakai 1 artikel sumber, dan angka yang "
             "muncul di debat adalah klaim para agen, bukan data yang sudah diverifikasi."

@@ -134,6 +134,7 @@ class CaseStudy(BaseModel):
     """
 
     judul: str
+    judul_asli: Optional[str] = None  # hanya terisi bila judul dinormalisasi
     kategori: str
     meta: MetaInfo
     keterbatasan: str

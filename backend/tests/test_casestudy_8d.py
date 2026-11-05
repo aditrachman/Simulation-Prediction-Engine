@@ -2,10 +2,13 @@
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from backend.services import casestudy_assemble, narrator
-from backend.services.casestudy_builder import build_computed
+from backend.services.casestudy_builder import build_computed, normalisasi_judul
 
 FIXTURE = Path("backend/tests/fixtures/run_mbg_synthetic.json")
 
@@ -78,3 +81,42 @@ def test_skenario_tanpa_nama_agen_dan_cocok_dengan_kubu():
         assert s["dasar_agen"] in k["agen"]
         # tidak menyebut peserta yang tidak ada di run
         assert not any(nama in teks for nama in nama_agen)
+
+
+@pytest.mark.parametrize(
+    "masukan, harapan",
+    [
+        ("  apakah   program  MBG tepat sasaran ? ", "Apakah program MBG tepat sasaran?"),
+        ("sudah tepat!", "Sudah tepat!"),
+        ("dua  spasi", "Dua spasi"),
+        ("", ""),
+    ],
+)
+def test_normalisasi_judul(masukan, harapan):
+    assert normalisasi_judul(masukan) == harapan
+
+
+def test_judul_dinormalisasi_dan_judul_asli_disimpan(monkeypatch):
+    asli = "  apakah   program  MBG tepat sasaran ? "
+    case = _assemble(_run(topik=asli), monkeypatch)
+    assert case["judul"] == "Apakah program MBG tepat sasaran?"
+    assert case["judul_asli"] == asli
+
+
+def test_judul_bersih_tanpa_judul_asli(monkeypatch):
+    case = _assemble(_run(topik="Apakah program MBG tepat sasaran?"), monkeypatch)
+    assert "judul_asli" not in case
+
+
+def test_tanpa_sumber_konsisten():
+    out = build_computed(_run(sumber=[]))
+    assert out["meta"]["sumber"] == 0
+    assert "tidak memakai artikel sumber" in out["keterbatasan"]
+    assert out["situasi"]["sumber"] == "Sumber: 0 artikel RSS. Briefing terbatas."
+
+
+def test_tanggal_dari_meta_saved_at():
+    run = _run()
+    run.pop("tanggal")
+    run["_meta"] = {"saved_at": datetime(2026, 11, 4, 10, 0).timestamp()}
+    assert build_computed(run)["meta"]["tanggal"] == "4 Nov 2026"
