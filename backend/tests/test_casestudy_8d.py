@@ -1,6 +1,7 @@
 """Test FASE 8d: whatif, catatan kubu, skenario, judul, dan sumber."""
 
 import json
+import re
 from pathlib import Path
 
 from backend.services import casestudy_assemble, narrator
@@ -13,6 +14,26 @@ def _run(**ubah):
     run = json.loads(FIXTURE.read_text(encoding="utf-8"))
     run.update(ubah)
     return run
+
+
+def _run_empat_agen():
+    agen = ["Mahasiswa", "Pengusaha/UMKM", "Pekerja Kantoran", "Pemerintah"]
+    stance = ["menolak", "menolak", "menolak", "netral"]
+    return {
+        "topik": "Apakah program MBG tepat sasaran?",
+        "tanggal": "4 Nov 2026",
+        "sumber": [],
+        "agen": [{"nama": n} for n in agen],
+        "ronde_detail": [
+            {
+                "ronde": 1,
+                "agen": [
+                    {"nama": n, "stance": s, "alasan": "Alasan uji.", "score": 0.0}
+                    for n, s in zip(agen, stance)
+                ],
+            }
+        ],
+    }
 
 
 def _assemble(run, monkeypatch):
@@ -32,3 +53,28 @@ def _assemble(run, monkeypatch):
 def test_case_study_run_biasa_tanpa_whatif(monkeypatch):
     case = _assemble(_run(), monkeypatch)
     assert "whatif" not in case
+
+
+def test_catatan_kubu_generik():
+    out = build_computed(_run_empat_agen())
+    catatan = {k["tipe"]: k["catatan"] for k in out["kubu"]}
+    assert catatan == {"tolak": "3 peserta menolak.", "netral": "1 peserta netral."}
+    assert all("posyandu" not in c for c in catatan.values())
+
+
+def test_skenario_tanpa_nama_agen_dan_cocok_dengan_kubu():
+    run = _run_empat_agen()
+    out = build_computed(run)
+    kubu = {k["nama"]: k for k in out["kubu"]}
+    nama_agen = {a["nama"] for a in run["agen"]}
+
+    assert out["skenario"]
+    for s in out["skenario"]:
+        teks = f"{s['jika']} {s['maka']}"
+        kubu_disebut = [n for n in kubu if n in teks]
+        assert len(kubu_disebut) == 1
+        k = kubu[kubu_disebut[0]]
+        assert int(re.match(r"\d+", s["maka"]).group()) == len(k["agen"])
+        assert s["dasar_agen"] in k["agen"]
+        # tidak menyebut peserta yang tidak ada di run
+        assert not any(nama in teks for nama in nama_agen)

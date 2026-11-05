@@ -245,14 +245,12 @@ def _fallback_narrative(computed: dict) -> dict:
             "distribusi": r.get("distribusi", {"menolak": 0, "netral": 0, "mendukung": 0}),
         })
 
+    agen_pertama = next((k["agen"][0] for k in kubu if k["agen"]), "")
     skenario = []
     for s in computed.get("skenario", [])[:4]:
-        dasar = "Oposisi Kritis"
-        if kubu:
-            for k in kubu:
-                if k["tipe"] == "tolak" and k["agen"]:
-                    dasar = k["agen"][0]
-                    break
+        dasar = s.get("dasar_agen") or agen_pertama
+        if not dasar:
+            continue
         # Pastikan format "jika ... maka ..." untuk validasi
         jika = s.get("jika", "")
         maka = s.get("maka", "")

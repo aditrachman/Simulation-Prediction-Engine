@@ -39,7 +39,7 @@
     {
       "nama": "Kritikus",
       "tipe": "tolak",
-      "catatan": "Menolak: kepuasan bukan bukti tepat sasaran.",
+      "catatan": "8 peserta menolak.",
       "agen": [
         "Jurnalis/Media",
         "Pengusaha/UMKM",
@@ -54,7 +54,7 @@
     {
       "nama": "Penengah",
       "tipe": "netral",
-      "catatan": "Netral: terbuka pada bukti tambahan.",
+      "catatan": "3 peserta netral.",
       "agen": [
         "Warga Desa/Kelurahan",
         "Orang Tua Bayi",
@@ -64,7 +64,7 @@
     {
       "nama": "Pendukung",
       "tipe": "dukung",
-      "catatan": "Mendukung: manfaat terlihat di posyandu.",
+      "catatan": "1 peserta mendukung.",
       "agen": [
         "Ibu Hamil/Menyusui"
       ]
@@ -152,20 +152,19 @@
   ],
   "skenario": [
     {
-      "jika": "Pemerintah membuka data distribusi secara transparan",
-      "maka": "Oposisi Kritis bisa lebih moderat."
+      "jika": "bukti baru menunjukkan bantuan sampai ke penerima",
+      "maka": "8 peserta Kritikus bisa bergeser ke netral.",
+      "dasar_agen": "Jurnalis/Media"
     },
     {
-      "jika": "Hasil audit menunjukkan keracunan makanan menurun",
-      "maka": "Pengusaha/UMKM mungkin beralih ke netral."
+      "jika": "bukti baru memperkuat salah satu sisi",
+      "maka": "3 peserta Penengah menentukan arah mayoritas.",
+      "dasar_agen": "Warga Desa/Kelurahan"
     },
     {
-      "jika": "Data baru menunjukkan perbaikan nyata di lapangan",
-      "maka": "Jurnalis/Media bisa mengubah sikap."
-    },
-    {
-      "jika": "Anak-anak di daerah terpencil tetap terpinggirkan",
-      "maka": "Aksi protes dari kubu kritis cenderung meningkat."
+      "jika": "temuan masalah distribusi meluas",
+      "maka": "1 peserta Pendukung bisa melemah.",
+      "dasar_agen": "Ibu Hamil/Menyusui"
     }
   ]
 }

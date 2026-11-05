@@ -103,16 +103,12 @@ def build_computed(run: dict) -> dict:
         if not kubu_map[tipe]:
             continue
         nama_kubu = TIPE_TO_NAMA_KUBU[tipe]
-        if tipe == "tolak":
-            catatan = "Menolak: kepuasan bukan bukti tepat sasaran."
-        elif tipe == "netral":
-            catatan = "Netral: terbuka pada bukti tambahan."
-        else:
-            catatan = "Mendukung: manfaat terlihat di posyandu."
+        n_anggota = len(kubu_map[tipe])
+        label = {"tolak": "menolak", "netral": "netral", "dukung": "mendukung"}[tipe]
         kubu.append({
             "nama": nama_kubu,
             "tipe": tipe,
-            "catatan": catatan,
+            "catatan": f"{n_anggota} peserta {label}.",
             "agen": kubu_map[tipe],
         })
 
@@ -328,12 +324,24 @@ def build_computed(run: dict) -> dict:
     kandidat_alasan.sort(key=lambda x: x[0], reverse=True)
     alasan_top = [a for _, a in kandidat_alasan[:3]]
 
-    # ── Skenario & WhatIf ─────────────────────────────────────────────────
+    # ── Skenario: hanya dari kubu yang benar-benar ada di run ─────────────
+    kondisi = {
+        "tolak": "bukti baru menunjukkan bantuan sampai ke penerima",
+        "netral": "bukti baru memperkuat salah satu sisi",
+        "dukung": "temuan masalah distribusi meluas",
+    }
+    akibat = {
+        "tolak": "{n} peserta Kritikus bisa bergeser ke netral.",
+        "netral": "{n} peserta Penengah menentukan arah mayoritas.",
+        "dukung": "{n} peserta Pendukung bisa melemah.",
+    }
     skenario = [
-        {"jika": "Pemerintah membuka data distribusi secara transparan", "maka": "Oposisi Kritis bisa lebih moderat."},
-        {"jika": "Hasil audit menunjukkan keracunan makanan menurun", "maka": "Pengusaha/UMKM mungkin beralih ke netral."},
-        {"jika": "Data baru menunjukkan perbaikan nyata di lapangan", "maka": "Jurnalis/Media bisa mengubah sikap."},
-        {"jika": "Anak-anak di daerah terpencil tetap terpinggirkan", "maka": "Aksi protes dari kubu kritis cenderung meningkat."},
+        {
+            "jika": kondisi[k["tipe"]],
+            "maka": akibat[k["tipe"]].format(n=len(k["agen"])),
+            "dasar_agen": k["agen"][0],
+        }
+        for k in kubu
     ]
 
     return {
