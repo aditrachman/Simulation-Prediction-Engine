@@ -42,7 +42,7 @@ class Kepercayaan(BaseModel):
 
 
 class Pemicu(BaseModel):
-    angka: str
+    angka: Optional[str] = None
     teks: str
 
     model_config = ConfigDict(populate_by_name=True)

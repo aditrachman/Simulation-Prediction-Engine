@@ -192,7 +192,7 @@ def _build_narrator_prompt(computed: dict, run: dict) -> str:
     dukung_count = len(dukung_agen_list)
 
     situasi = computed["situasi"]
-    pemicu_angka = situasi["pemicu"]["angka"]
+    pemicu_angka = situasi["pemicu"].get("angka") or "(tidak ada angka)"
     pemicu_teks = situasi["pemicu"]["teks"]
     bahan = "; ".join(situasi["bahan"])
     sumber = situasi["sumber"]
@@ -314,8 +314,10 @@ def _validate_narrative(nar: dict, computed: dict, run: dict) -> list[str]:
     briefing = run.get("briefing", "")
     for m in re.findall(r'\d+(?:[.,]\d+)?\s*%', briefing.lower()):
         pct_allowed.add(m.replace(" ", "").replace(",", "."))
-    # Default: 72,8% selalu diizinkan
-    pct_allowed.update({"72,8%", "72.8%"})
+    # Angka pemicu dari run (kalau ada) ikut diizinkan
+    pemicu_angka = (computed.get("situasi", {}).get("pemicu") or {}).get("angka")
+    if pemicu_angka:
+        pct_allowed.add(pemicu_angka.replace(" ", "").replace(",", "."))
     
     for pct in pct_in_nar:
         norm = pct.replace(" ", "").replace(",", ".")

@@ -150,3 +150,53 @@ def test_validator_memakai_agen_dari_ronde_detail():
     computed = build_computed(run)
     nar = narrator._fallback_narrative(computed)
     assert narrator._validate_narrative(nar, computed, run) == []
+
+
+def _run_non_mbg():
+    agen = ["Mahasiswa", "Pemerintah"]
+    return {
+        "topik": "Apakah kenaikan tarif angkutan umum perlu ditinjau?",
+        "tanggal": "4 Nov 2026",
+        "agen": [{"nama": n} for n in agen],
+        "ronde_detail": [
+            {
+                "ronde": 1,
+                "agen": [
+                    {
+                        "nama": "Mahasiswa",
+                        "stance": "menolak",
+                        "alasan": "Tarif naik tanpa perbaikan layanan.",
+                        "score": -0.6,
+                    },
+                    {
+                        "nama": "Pemerintah",
+                        "stance": "mendukung",
+                        "alasan": "Kenaikan mengikuti biaya operasional.",
+                        "score": 0.6,
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def test_situasi_non_mbg_tanpa_naskah_tertanam(monkeypatch):
+    run = _run_non_mbg()
+    out = build_computed(run)
+    assert out["situasi"]["pemicu"]["angka"] is None
+    assert out["situasi"]["bahan"] == []
+    assert "tarif angkutan umum" in out["situasi"]["pemicu"]["teks"]
+
+    dump = json.dumps(_assemble(run, monkeypatch), ensure_ascii=False)
+    for kata in ("72,8", "keracunan", "Desa X", "posyandu"):
+        assert kata not in dump
+
+
+def test_pemicu_angka_hanya_dari_briefing():
+    out = build_computed(_run(briefing="Evaluasi: 55,5% responden puas.", sumber=[]))
+    assert out["situasi"]["pemicu"]["angka"] == "55,5%"
+
+
+def test_pemicu_angka_tanpa_persen_adalah_null():
+    out = build_computed(_run(briefing="Tidak ada angka persen di sini.", sumber=[]))
+    assert out["situasi"]["pemicu"]["angka"] is None

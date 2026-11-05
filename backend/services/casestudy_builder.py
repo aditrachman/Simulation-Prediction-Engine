@@ -36,6 +36,26 @@ def _tanggal_dari_run(run: dict) -> str:
     return f"{dt.day} {_BULAN[dt.month - 1]} {dt.year}"
 
 
+_POLA_PERSEN = re.compile(r"\d+(?:[.,]\d+)?\s?%")
+
+
+def _teks_sumber(run: dict) -> str:
+    """Gabungkan briefing dan sumber run menjadi satu teks."""
+    bagian = [str(run.get("briefing") or "")]
+    for s in run.get("sumber") or []:
+        if isinstance(s, dict):
+            bagian.extend(str(v) for v in s.values() if isinstance(v, (str, int, float)))
+        else:
+            bagian.append(str(s))
+    return " ".join(bagian)
+
+
+def _angka_pemicu(run: dict) -> str | None:
+    """Angka persen pertama yang tertulis verbatim di briefing/sumber run."""
+    cocok = _POLA_PERSEN.search(_teks_sumber(run))
+    return cocok.group(0) if cocok else None
+
+
 def _stance_from_score(score: float | None) -> str:
     if score is None:
         return "netral"
@@ -188,15 +208,11 @@ def build_computed(run: dict) -> dict:
         else:
             kutipan = None
 
-        if rno == 1:
-            judul = "Apa arti angka 72,8%?"
-            ringkas = "Hampir semua peserta mempertanyakan angka kepuasan."
-        elif rno == 2:
-            judul = "Isu bergeser ke distribusi"
-            ringkas = "Debat pindah ke soal siapa yang menerima."
-        else:
-            judul = "Bukti lapangan muncul, tafsirnya beda"
-            ringkas = "Data dari lapangan masuk ke debat, tafsir berbeda."
+        judul = f"Sikap peserta di ronde {rno}"
+        ringkas = (
+            f"{dist['menolak']} menolak, {dist['netral']} netral, "
+            f"{dist['mendukung']} mendukung."
+        )
 
         ronde_out.append({
             "no": rno,
@@ -315,17 +331,13 @@ def build_computed(run: dict) -> dict:
 
     keterbatasan = " ".join(keterbatasan_parts)
 
-    # ── Situasi ────────────────────────────────────────────────────────────
-    pemicu_angka = "72,8%"
+    # ── Situasi: dari topik dan briefing run, tanpa naskah tertanam ────────
+    topik = (run.get("topik") or "").strip()
     pemicu_teks = (
-        "masyarakat disebut puas dengan program Makan Bergizi Gratis. "
-        "Tapi muncul pertanyaan lain: apakah bantuan itu sampai ke yang paling membutuhkan?"
+        f"Topik simulasi ini: {topik}" if topik else "Topik simulasi ini tidak disebutkan."
     )
-    bahan = [
-        "Isu keracunan makanan berulang",
-        "Keluarga miskin yang disebut belum terjangkau",
-        "Kepuasan tinggi belum tentu berarti masalah kesehatan berkurang",
-    ]
+    pemicu_angka = _angka_pemicu(run)
+    bahan: list[str] = []
     sumber_teks = f"Sumber: {n_sumber} artikel RSS."
     if n_sumber <= 1:
         sumber_teks += " Briefing terbatas."
@@ -338,9 +350,9 @@ def build_computed(run: dict) -> dict:
 
     # ── Vonis ──────────────────────────────────────────────────────────────
     if distribusi_akhir["menolak"] > distribusi_akhir["netral"] + distribusi_akhir["mendukung"]:
-        vonis = "Mayoritas peserta menolak anggapan bahwa MBG sudah tepat sasaran."
+        vonis = "Mayoritas peserta menolak usulan dalam topik ini."
     elif distribusi_akhir["mendukung"] > distribusi_akhir["menolak"] + distribusi_akhir["netral"]:
-        vonis = "Mayoritas peserta mendukung anggapan bahwa MBG sudah tepat sasaran."
+        vonis = "Mayoritas peserta mendukung usulan dalam topik ini."
     else:
         vonis = "Pendapat peserta tercampur, tidak ada mayoritas jelas."
 
