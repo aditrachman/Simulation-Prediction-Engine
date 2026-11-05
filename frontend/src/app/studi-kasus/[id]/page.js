@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import CaseStudyView from "@/app/components/case-study/CaseStudyView";
 import mbgStatic from "@/data/mbg-tepat-sasaran.json";
 
@@ -34,8 +33,25 @@ async function getCaseStudy(id, apiBase) {
   }
 }
 
+function ErrorCard({ id, title, children }) {
+  return (
+    <div className="cs">
+      <div className="cs-wrap cs-section">
+        <div className="cs-card" role="alert">
+          <h2 className="cs-h2">{title}</h2>
+          <p className="cs-lead">{children}</p>
+          <div className="cs-btns">
+            <a className="cs-btn is-primary" href={`/studi-kasus/${id}`}>
+              Muat Ulang
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default async function CaseStudyPage({ params }) {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const { id } = await params;
   const result = await getCaseStudy(id, process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
 
@@ -47,27 +63,15 @@ export default async function CaseStudyPage({ params }) {
   // 409 - degraded quality
   if (result.status === 409) {
     return (
-      <section className="mx-auto max-w-4xl px-4 py-16">
-        <div className="cs-card" role="alert">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0 text-3xl">⚠️</div>
-            <div>
-              <h2 className="display-sm text-[#c64545] mb-2">Studi kasus tidak ditampilkan</h2>
-              <p className="text-base leading-relaxed text-[#3d3d3a]">
-                Studi kasus ini tidak ditampilkan karena kualitas datanya rendah (terlalu banyak
-                giliran memakai nilai cadangan).
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <ErrorCard id={id} title="Studi kasus tidak ditampilkan">
+        Studi kasus ini tidak ditampilkan karena kualitas datanya rendah (terlalu banyak
+        giliran memakai nilai cadangan).
+      </ErrorCard>
     );
   }
 
-  // Network error / timeout / 5xx / other errors
-  if (result.status !== 200) {
-    // Fallback static mbg-tepat-sasaran.json ONLY for network error, timeout, or 5xx,
-    // and ONLY for id "mbg-tepat-sasaran"
+  // Fetch threw (network/timeout) or server error: static fallback for the MBG case only
+  if (result.status === 0 || result.status >= 500) {
     if (id === "mbg-tepat-sasaran") {
       return (
         <CaseStudyView
@@ -76,24 +80,19 @@ export default async function CaseStudyPage({ params }) {
         />
       );
     }
-
-    // Generic error for other IDs
     return (
-      <section className="mx-auto max-w-4xl px-4 py-16">
-        <div className="card text-center" style={{ maxWidth: "480px", margin: "0 auto" }}>
-          <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="display-sm text-[#c64545] mb-3">Gagal memuat studi kasus</h2>
-          <p className="text-[#6c6a64] mb-6">
-            Tidak dapat menghubungi server. Silakan coba lagi nanti.
-          </p>
-          <Link
-            href={`/studi-kasus/${id}`}
-            className="btn-primary"
-          >
-            Muat Ulang
-          </Link>
-        </div>
-      </section>
+      <ErrorCard id={id} title="Gagal memuat studi kasus">
+        Tidak dapat menghubungi server. Silakan coba lagi nanti.
+      </ErrorCard>
+    );
+  }
+
+  // Other non-ok status (400, 401, 403, 429, ...): error card, never the fallback data
+  if (result.status !== 200) {
+    return (
+      <ErrorCard id={id} title="Gagal memuat studi kasus">
+        Server menolak permintaan (status {result.status}). Silakan coba lagi nanti.
+      </ErrorCard>
     );
   }
 
