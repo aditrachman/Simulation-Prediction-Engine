@@ -149,6 +149,7 @@ class CaseStudy(BaseModel):
     # Tambahan jujur — frontend boleh mengabaikan
     kualitas: Kualitas | None = None
     narator_fallback: bool | None = None
+    narator_fallback_reason: Optional[str] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

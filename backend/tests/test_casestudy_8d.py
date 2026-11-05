@@ -210,3 +210,12 @@ def test_kondisi_skenario_generik_tanpa_kata_mbg():
         assert "kubu" in kondisi
         for kata in ("mbg", "bantuan", "posyandu", "keracunan", "distribusi"):
             assert kata not in kondisi
+
+
+def test_bersihkan_awalan_jika_maka():
+    from backend.services.casestudy_builder import _bersihkan_awalan
+    assert _bersihkan_awalan("Jika cuaca bagus") == "cuaca bagus"
+    assert _bersihkan_awalan("Maka hasilnya baik") == "hasilnya baik"
+    assert _bersihkan_awalan("Jika Jika bersarang") == "bersarang"
+    assert _bersihkan_awalan("tidak ada awalan") == "tidak ada awalan"
+    assert _bersihkan_awalan("  Jika  spasi  ") == "spasi"

@@ -31,9 +31,37 @@ def _tanggal_dari_run(run: dict) -> str:
     saved_at = (run.get("_meta") or {}).get("saved_at")
     if saved_at:
         dt = datetime.fromtimestamp(saved_at)
-    else:
-        dt = datetime.now()
-    return f"{dt.day} {_BULAN[dt.month - 1]} {dt.year}"
+        return f"{dt.day} {_BULAN[dt.month - 1]} {dt.year}"
+    # fallback hari ini -> string kosong supaya chip frontend tidak tampil
+    return ""
+
+
+_POLA_PERSEN = re.compile(r"\d+(?:[.,]\d+)?\s?%")
+
+
+def _teks_sumber(run: dict) -> str:
+    """Gabungkan briefing dan sumber run menjadi satu teks."""
+    bagian = [str(run.get("briefing") or "")]
+    for s in run.get("sumber") or []:
+        if isinstance(s, dict):
+            bagian.extend(str(v) for v in s.values() if isinstance(v, (str, int, float)))
+        else:
+            bagian.append(str(s))
+    return " ".join(bagian)
+
+
+def _bersihkan_awalan(teks: str) -> str:
+    """Buang awalan 'Jika ' atau 'Maka ' (case-insensitive) yang terduplikasi."""
+    t = teks.strip()
+    while True:
+        t_lower = t.lower()
+        if t_lower.startswith("jika "):
+            t = t[5:].strip()
+        elif t_lower.startswith("maka "):
+            t = t[5:].strip()
+        else:
+            break
+    return t
 
 
 _POLA_PERSEN = re.compile(r"\d+(?:[.,]\d+)?\s?%")
@@ -214,13 +242,15 @@ def build_computed(run: dict) -> dict:
             f"{dist['mendukung']} mendukung."
         )
 
-        ronde_out.append({
+        runde_dict = {
             "no": rno,
             "judul": judul,
             "ringkas": ringkas,
             "distribusi": dist,
-            "kutipan": kutipan,
-        })
+        }
+        if kutipan:
+            runde_dict["kutipan"] = kutipan
+        ronde_out.append(runde_dict)
 
     # ── Bukti Diperdebatkan: max 3 entri, 1 per agen (ronde terbaru), berpasangan ──
     # Kumpulkan klaim per agen (ambil ronde TERBARU untuk setiap agen-angka)
@@ -373,13 +403,14 @@ def build_computed(run: dict) -> dict:
     }
     skenario = [
         {
-            "jika": f"muncul bukti baru yang menantang kubu {k['nama']}",
-            "maka": akibat[k["tipe"]].format(n=len(k["agen"])),
+            "jika": _bersihkan_awalan(f"muncul bukti baru yang menantang kubu {k['nama']}"),
+            "maka": _bersihkan_awalan(akibat[k["tipe"]].format(n=len(k["agen"]))),
             "dasar_agen": k["agen"][0],
         }
         for k in kubu
     ]
 
+    kualitas = run.get("kualitas")
     return {
         "meta": {"peserta": n_agen, "ronde": n_ronde, "sumber": n_sumber, "tanggal": tanggal},
         "keterbatasan": keterbatasan,
@@ -395,4 +426,5 @@ def build_computed(run: dict) -> dict:
         "titikBalik": titik_balik,
         "buktiDiperdebatkan": bukti,
         "skenario": skenario,
+        **({"kualitas": kualitas} if kualitas else {}),
     }

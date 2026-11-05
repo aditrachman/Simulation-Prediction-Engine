@@ -9,7 +9,7 @@ import json
 from typing import Any
 
 from backend.llm_guard import chat as llm_chat, RateLimitError
-from backend.services.casestudy_builder import build_computed
+from backend.services.casestudy_builder import build_computed, _bersihkan_awalan
 
 
 NARRATOR_MAX_TOKENS = 700
@@ -251,9 +251,9 @@ def _fallback_narrative(computed: dict) -> dict:
         dasar = s.get("dasar_agen") or agen_pertama
         if not dasar:
             continue
-        # Pastikan format "jika ... maka ..." untuk validasi
-        jika = s.get("jika", "")
-        maka = s.get("maka", "")
+        # Pastikan format "jika ... maka ..." untuk validasi; builder sudah normalisasi awalan
+        jika = _bersihkan_awalan(s.get("jika", ""))
+        maka = _bersihkan_awalan(s.get("maka", ""))
         if "jika" not in jika.lower():
             jika = f"Jika {jika}"
         if "maka" not in maka.lower():
