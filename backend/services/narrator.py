@@ -329,6 +329,11 @@ def _validate_narrative(nar: dict, computed: dict, run: dict) -> list[str]:
 
     # 5. Skenario: dasar_agen harus nama agen yang ada di run
     agen_names = {a["nama"] for a in run.get("agen", [])}
+    if not agen_names:
+        # Run hasil simulasi menyimpan agen di ronde_detail, bukan di run["agen"]
+        agen_names = {
+            a["nama"] for rd in run.get("ronde_detail", []) for a in rd.get("agen", [])
+        }
     for s in nar.get("skenario", []):
         if "dasar_agen" in s and s["dasar_agen"] not in agen_names:
             errors.append(f"dasar_agen tidak dikenal: {s['dasar_agen']}")

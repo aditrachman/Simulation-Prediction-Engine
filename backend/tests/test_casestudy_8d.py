@@ -142,3 +142,11 @@ def test_load_case_study_mempertahankan_whatif_berjalan(tmp_path, monkeypatch):
     (tmp_path / "baru.json").write_text(json.dumps(baru), encoding="utf-8")
 
     assert casestudy_assemble.load_case_study("baru")["whatif"]["sesudah"]["netral"] == 1
+
+
+def test_validator_memakai_agen_dari_ronde_detail():
+    run = _run_empat_agen()
+    run.pop("agen")
+    computed = build_computed(run)
+    nar = narrator._fallback_narrative(computed)
+    assert narrator._validate_narrative(nar, computed, run) == []
