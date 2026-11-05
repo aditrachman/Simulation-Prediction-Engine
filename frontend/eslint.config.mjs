@@ -1,45 +1,33 @@
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
-import nextPlugin from "@next/eslint-plugin-next";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+  recommendedConfig: js.configs.recommended,
+});
+
+const nextConfig = compat.extends("next/core-web-vitals");
 
 export default [
-  js.configs.recommended,
-  {
-    plugins: { "@next/next": nextPlugin },
-    rules: {
-      ...nextPlugin.configs.recommended.rules,
-      ...nextPlugin.configs["core-web-vitals"].rules,
-      "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-      "no-undef": "warn",
-    },
-    languageOptions: {
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
-      globals: {
-        browser: true,
-        es2021: true,
-        node: true,
-        process: "readonly",
-      },
-    },
-  },
-  {
-    files: ["**/*.{js,jsx}"],
-    languageOptions: {
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
-    },
-  },
+  ...nextConfig,
   {
     ignores: [
       ".next/**",
-      ".next.bak-**",
       "out/**",
       "build/**",
       "next-env.d.ts",
       "node_modules/**",
-      "*.config.*",
     ],
+  },
+  {
+    files: ["**/*.{js,jsx}"],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
   },
 ];

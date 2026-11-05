@@ -180,3 +180,28 @@
   .cs-verdict, .cs-whatif { padding: 24px; }
   .cs-round { padding: 20px; }
 }
+
+/* ── Override global styles that leak into .cs ──────────────────────
+   globals.css sets: p, li { line-height: 1.7; } on elements.
+   .cs defines its own line-height (1.55). These rules ensure .cs
+   paragraphs and list items use .cs's line-height, not the global one.
+   ────────────────────────────────────────────────────────────────── */
+.cs p,
+.cs li {
+  line-height: 1.55;
+}
+
+/* globals.css sets body font-family to var(--font-body).
+   .cs uses var(--cs-body) which maps to var(--font-public-sans).
+   This ensures .cs text uses the correct font. */
+.cs,
+.cs * {
+  font-family: var(--cs-body);
+}
+
+/* globals.css sets body font-size: 16px.
+   .cs also sets 16px explicitly, but this ensures consistency
+   for any nested elements that might inherit differently. */
+.cs {
+  font-size: 16px;
+}
