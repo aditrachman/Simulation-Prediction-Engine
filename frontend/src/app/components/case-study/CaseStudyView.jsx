@@ -4,13 +4,13 @@ import "./case-study.css";
 const ORDER = ["menolak", "netral", "mendukung"];
 
 function distText(d) {
-  return ORDER.filter((k) => d[k] > 0)
+  return ORDER.filter((k) => d?.[k] > 0)
     .map((k) => `${d[k]} ${k}`)
     .join(" · ");
 }
 
 function StanceBar({ dist, size = "lg" }) {
-  const items = ORDER.filter((k) => dist[k] > 0);
+  const items = ORDER.filter((k) => dist?.[k] > 0);
   return (
     <div className={`cs-bar cs-bar-${size}`} role="img" aria-label={distText(dist)}>
       {items.map((k) => (
@@ -25,7 +25,7 @@ function StanceBar({ dist, size = "lg" }) {
 function Legend({ dist }) {
   return (
     <div className="cs-legend">
-      {ORDER.filter((k) => dist[k] > 0).map((k) => (
+      {ORDER.filter((k) => dist?.[k] > 0).map((k) => (
         <span key={k}>
           <i className={`cs-dot cs-${k}`} />
           {dist[k]} {k}
@@ -35,7 +35,7 @@ function Legend({ dist }) {
   );
 }
 
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
 const STEPS = [
   { no: "1", name: "Situasi", href: "#babak1" },
@@ -47,7 +47,7 @@ const STEPS = [
 ];
 
 export default function CaseStudyView({ data, banner }) {
-  const { meta, hasil, situasi, kualitas, narator_fallback } = data;
+  const { meta, hasil, situasi, kualitas, narator_fallback } = data ?? {};
   return (
     <div className="cs">
       {banner && (
@@ -61,13 +61,13 @@ export default function CaseStudyView({ data, banner }) {
       {/* HERO + HASIL SINGKAT */}
       <header className="cs-wrap cs-hero">
         <div className="cs-title-block">
-          <div className="cs-eyebrow">Studi kasus · {data.kategori ?? "Kebijakan publik"}</div>
-          <h1 className="cs-h1">{data.judul}</h1>
+          <div className="cs-eyebrow">Studi kasus · {data?.kategori ?? "Kebijakan publik"}</div>
+          <h1 className="cs-h1">{data?.judul}</h1>
           <div className="cs-chips">
-            <span className="cs-chip">{meta.peserta} peserta</span>
-            <span className="cs-chip">{meta.ronde} ronde debat</span>
-            <span className="cs-chip">{meta.sumber} artikel sumber</span>
-            <span className="cs-chip">Dijalankan {meta.tanggal}</span>
+            <span className="cs-chip">{meta?.peserta} peserta</span>
+            <span className="cs-chip">{meta?.ronde} ronde debat</span>
+            <span className="cs-chip">{meta?.sumber} artikel sumber</span>
+            <span className="cs-chip">Dijalankan {meta?.tanggal}</span>
             {/* FASE 3: chip "Ringkasan otomatis" jika narator_fallback */}
             {narator_fallback && (
               <span className="cs-chip cs-chip-warn">Ringkasan otomatis</span>
@@ -78,7 +78,7 @@ export default function CaseStudyView({ data, banner }) {
         <div className="cs-warn" role="note">
           <div className="cs-warn-icon" aria-hidden="true">!</div>
           <div>
-            <strong>Baca sebagai gambaran awal, bukan survei.</strong> {data.keterbatasan}
+            <strong>Baca sebagai gambaran awal, bukan survei.</strong> {data?.keterbatasan}
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export default function CaseStudyView({ data, banner }) {
             <div className="cs-warn-icon" aria-hidden="true">!</div>
             <div>
               <strong>Kualitas data:</strong>{" "}
-              {kualitas.fallback_count} dari {kualitas.total_giliran} giliran memakai nilai cadangan.
+              {kualitas?.fallback_count} dari {kualitas?.total_giliran} giliran memakai nilai cadangan.
             </div>
           </div>
         )}
@@ -96,17 +96,17 @@ export default function CaseStudyView({ data, banner }) {
         <section className="cs-verdict" aria-label="Hasil singkat">
           <div className="cs-verdict-main">
             <div className="cs-eyebrow cs-eyebrow-muted">Hasil singkat</div>
-            <div className="cs-vtext">{hasil.vonis}</div>
+            <div className="cs-vtext">{hasil?.vonis}</div>
             <div className="cs-stack">
-              <div className="cs-label">Sikap akhir {meta.peserta} peserta</div>
-              <StanceBar dist={hasil.distribusi} />
-              <Legend dist={hasil.distribusi} />
+              <div className="cs-label">Sikap akhir {meta?.peserta} peserta</div>
+              <StanceBar dist={hasil?.distribusi} />
+              <Legend dist={hasil?.distribusi} />
             </div>
           </div>
           <div className="cs-verdict-side">
             <div className="cs-reasons">
               <div className="cs-label">Tiga alasan utama</div>
-              {hasil.alasan.map((a, i) => (
+              {hasil?.alasan?.map((a, i) => (
                 <div className="cs-reason" key={i}>
                   <div className="cs-reason-no">{i + 1}</div>
                   <div className="cs-reason-txt">{a}</div>
@@ -116,8 +116,8 @@ export default function CaseStudyView({ data, banner }) {
             <div className="cs-trust">
               <div className="cs-label">Seberapa bisa dipercaya?</div>
               <div className="cs-trust-row">
-                <span className="cs-badge">{hasil.kepercayaan.level}</span>
-                <span className="cs-trust-note">{hasil.kepercayaan.catatan}</span>
+                <span className="cs-badge">{hasil?.kepercayaan?.level}</span>
+                <span className="cs-trust-note">{hasil?.kepercayaan?.catatan}</span>
               </div>
             </div>
           </div>
@@ -145,20 +145,22 @@ export default function CaseStudyView({ data, banner }) {
         <div className="cs-row">
           <div className="cs-card cs-card-lg">
             <div className="cs-label">Pemicu isu</div>
-            <div className="cs-bignum">{situasi.pemicu.angka}</div>
-            <p className="cs-p18">{situasi.pemicu.teks}</p>
+            {situasi?.pemicu?.angka && (
+              <div className="cs-bignum">{situasi?.pemicu?.angka}</div>
+            )}
+            <p className="cs-p18">{situasi?.pemicu?.teks}</p>
           </div>
           <div className="cs-card cs-card-lg cs-card-sand">
             <div className="cs-label">Bahan awal simulasi</div>
             <div className="cs-bullets">
-              {situasi.bahan.map((b, i) => (
+              {situasi?.bahan?.map((b, i) => (
                 <div className="cs-bullet" key={i}>
                   <b>·</b>
                   <span>{b}</span>
                 </div>
               ))}
             </div>
-            <div className="cs-small cs-src">{situasi.sumber}</div>
+            <div className="cs-small cs-src">{situasi?.sumber}</div>
           </div>
         </div>
       </section>
@@ -169,19 +171,19 @@ export default function CaseStudyView({ data, banner }) {
           <div className="cs-eyebrow">Babak 2 · Para pihak</div>
           <h2 className="cs-h2">Siapa yang terlibat?</h2>
           <p className="cs-lead">
-            {meta.peserta} peserta dari berbagai latar belakang, dikelompokkan menurut sikap akhir mereka.
+            {meta?.peserta} peserta dari berbagai latar belakang, dikelompokkan menurut sikap akhir mereka.
           </p>
         </div>
         <div className="cs-row cs-row-20">
-          {data.kubu.map((k) => (
-            <div key={k.nama} className={`cs-card cs-kubu cs-kubu-${k.tipe}`}>
+          {data?.kubu?.map((k) => (
+            <div key={k?.nama} className={`cs-card cs-kubu cs-kubu-${k?.tipe}`}>
               <div className="cs-kubu-head">
-                <div className="cs-kubu-name">{k.nama}</div>
-                <div className="cs-kubu-count">{k.agen.length} peserta</div>
+                <div className="cs-kubu-name">{k?.nama}</div>
+                <div className="cs-kubu-count">{k?.agen?.length} peserta</div>
               </div>
-              <p className="cs-kubu-note">{k.catatan}</p>
+              <p className="cs-kubu-note">{k?.catatan}</p>
               <div className="cs-agents">
-                {k.agen.map((a) => (
+                {k?.agen?.map((a) => (
                   <span className="cs-agent" key={a}>{a}</span>
                 ))}
               </div>
@@ -197,28 +199,30 @@ export default function CaseStudyView({ data, banner }) {
           <h2 className="cs-h2">Apa yang terjadi di tiap ronde?</h2>
         </div>
         <div className="cs-rounds">
-          {data.ronde.map((r) => (
-            <article className="cs-round" key={r.no}>
+          {data?.ronde?.map((r) => (
+            <article className="cs-round" key={r?.no}>
               <div className="cs-round-l">
-                <span className="cs-roundtag">Ronde {r.no}</span>
-                <h3 className="cs-round-title">{r.judul}</h3>
-                <p className="cs-round-sum">{r.ringkas}</p>
+                <span className="cs-roundtag">Ronde {r?.no}</span>
+                <h3 className="cs-round-title">{r?.judul}</h3>
+                <p className="cs-round-sum">{r?.ringkas}</p>
                 <div className="cs-stack" style={{ marginTop: 4 }}>
-                  <StanceBar dist={r.distribusi} size="sm" />
-                  <div className="cs-small">{distText(r.distribusi)}</div>
+                  <StanceBar dist={r?.distribusi} size="sm" />
+                  <div className="cs-small">{distText(r?.distribusi)}</div>
                 </div>
               </div>
-              <div className="cs-round-r">
-                <p className="cs-quote">“{r.kutipan.teks}”</p>
-                <div className="cs-quote-by">
-                  <strong>{r.kutipan.agen}</strong>
-                  {r.kutipan.jenis === "klaim" ? (
-                    <span className="cs-tag cs-tag-claim">Klaim agen, belum diverifikasi</span>
-                  ) : (
-                    <span className="cs-tag">Kutipan langsung</span>
-                  )}
+              {r?.kutipan?.teks && (
+                <div className="cs-round-r">
+                  <p className="cs-quote">“{r?.kutipan?.teks}”</p>
+                  <div className="cs-quote-by">
+                    <strong>{r?.kutipan?.agen}</strong>
+                    {r?.kutipan?.jenis === "klaim" ? (
+                      <span className="cs-tag cs-tag-claim">Klaim agen, belum diverifikasi</span>
+                    ) : (
+                      <span className="cs-tag">Kutipan langsung</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </article>
           ))}
         </div>
@@ -230,35 +234,39 @@ export default function CaseStudyView({ data, banner }) {
           <div className="cs-eyebrow">Babak 4 · Titik balik</div>
           <h2 className="cs-h2">Apa yang menggeser sikap?</h2>
           <p className="cs-lead">
-            Tidak banyak yang berubah. {data.titikBalik.length} peserta bergeser, dan kubu kritikus bertahan dengan alasan baru.
+            {data?.titikBalik?.length
+              ? `Tidak banyak yang berubah. ${data?.titikBalik?.length} peserta bergeser, dan kubu kritikus bertahan dengan alasan baru.`
+              : "Tidak ada peserta yang berubah sikap."}
           </p>
         </div>
-        <div className="cs-row cs-row-20">
-          {data.titikBalik.map((t) => (
-            <div className="cs-card" key={t.agen + t.kapan}>
-              <div className="cs-shift-name">{t.agen}</div>
-              <div className="cs-shift-flow">
-                <span className={`cs-pill cs-${t.dari}`}>{cap(t.dari)}</span>
-                <span aria-hidden="true">→</span>
-                <span className={`cs-pill cs-${t.ke}`}>{cap(t.ke)}</span>
-                <span className="cs-when">{t.kapan}</span>
+        {data?.titikBalik?.length ? (
+          <div className="cs-row cs-row-20">
+            {data?.titikBalik?.map((t) => (
+              <div className="cs-card" key={t?.agen + t?.kapan}>
+                <div className="cs-shift-name">{t?.agen}</div>
+                <div className="cs-shift-flow">
+                  <span className={`cs-pill cs-${t?.dari}`}>{cap(t?.dari)}</span>
+                  <span aria-hidden="true">→</span>
+                  <span className={`cs-pill cs-${t?.ke}`}>{cap(t?.ke)}</span>
+                  <span className="cs-when">{t?.kapan}</span>
+                </div>
+                <p className="cs-shift-why">{t?.alasan}</p>
               </div>
-              <p className="cs-shift-why">{t.alasan}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
 
-        {data.buktiDiperdebatkan && data.buktiDiperdebatkan.length > 0 && (
+        {data?.buktiDiperdebatkan?.length > 0 && (
           <div className="cs-dispute">
             <div className="cs-dispute-head">
               <h3 className="cs-dispute-title">Bukti yang sama, tafsir berlawanan</h3>
               <span className="cs-tag cs-tag-claim">Klaim agen, belum diverifikasi</span>
             </div>
             <div className="cs-dispute-grid">
-              {data.buktiDiperdebatkan.map((b) => (
-                <div className="cs-dispute-item" key={b.agen}>
-                  <div className="cs-label">{b.agen}</div>
-                  <p>{b.teks}</p>
+              {data?.buktiDiperdebatkan?.map((b) => (
+                <div className="cs-dispute-item" key={b?.agen}>
+                  <div className="cs-label">{b?.agen}</div>
+                  <p>{b?.teks}</p>
                 </div>
               ))}
             </div>
@@ -275,40 +283,46 @@ export default function CaseStudyView({ data, banner }) {
             Bukan ramalan persentase, tapi pola “jika … maka …” dari sikap para peserta.
           </p>
         </div>
-        <div className="cs-row cs-row-20">
-          {data.skenario.map((s, i) => (
-            <div className="cs-card cs-sk" key={i}>
-              <div className="cs-sk-k">Jika</div>
-              <p className="cs-sk-jika">{s.jika}</p>
-              <div className="cs-sk-maka">
-                <div className="cs-sk-k is-maka">Maka</div>
-                <p>{s.maka}</p>
+        {data?.skenario?.length ? (
+          <div className="cs-row cs-row-20">
+            {data?.skenario?.map((s, i) => (
+              <div className="cs-card cs-sk" key={i}>
+                <div className="cs-sk-k">Jika</div>
+                <p className="cs-sk-jika">{s?.jika}</p>
+                <div className="cs-sk-maka">
+                  <div className="cs-sk-k is-maka">Maka</div>
+                  <p>{s?.maka}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="cs-lead">
+            Belum ada skenario yang bisa disusun dari data simulasi ini.
+          </p>
+        )}
       </section>
 
       {/* WHAT-IF */}
-      {data.whatif && (
+      {data?.whatif && (
         <section id="whatif" className="cs-wrap cs-section">
           <div className="cs-whatif">
             <div className="cs-head" style={{ gap: 10 }}>
               <div className="cs-eyebrow">Bonus · Uji kebijakan (what-if)</div>
-              <h2 className="cs-h2">{data.whatif.judul}</h2>
-              <p className="cs-lead">{data.whatif.deskripsi}</p>
+              <h2 className="cs-h2">{data.whatif?.judul}</h2>
+              <p className="cs-lead">{data.whatif?.deskripsi}</p>
             </div>
             <div className="cs-row" style={{ gap: 20 }}>
               <div className="cs-wi-col">
                 <div className="cs-wi-label">Sebelum · simulasi awal</div>
-                <StanceBar dist={data.whatif.sebelum} size="md" />
-                <p className="cs-wi-note">{distText(data.whatif.sebelum)}</p>
+                <StanceBar dist={data.whatif?.sebelum} size="md" />
+                <p className="cs-wi-note">{distText(data.whatif?.sebelum)}</p>
               </div>
-              {data.whatif.sesudah ? (
+              {data.whatif?.sesudah ? (
                 <div className="cs-wi-col">
                   <div className="cs-wi-label">Sesudah · dengan intervensi</div>
-                  <StanceBar dist={data.whatif.sesudah} size="md" />
-                  <p className="cs-wi-note">{distText(data.whatif.sesudah)}</p>
+                  <StanceBar dist={data.whatif?.sesudah} size="md" />
+                  <p className="cs-wi-note">{distText(data.whatif?.sesudah)}</p>
                 </div>
               ) : (
                 <div className="cs-wi-col is-empty">
