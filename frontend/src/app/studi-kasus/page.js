@@ -53,7 +53,9 @@ export default async function StudiKasusIndexPage() {
                     {preset.judul}
                   </Link>
                 </h2>
-                <div className="cs-small">{preset.peserta} peserta</div>
+                {preset.peserta ? (
+                  <div className="cs-small">{preset.peserta} peserta</div>
+                ) : null}
                 <div className="cs-btns">
                   <Link className="cs-btn" href={`/studi-kasus/${preset.id}`}>
                     Buka studi kasus
