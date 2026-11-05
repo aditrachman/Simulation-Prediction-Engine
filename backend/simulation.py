@@ -1081,13 +1081,17 @@ def run_simulation(
     except Exception as e:
         print(f"[RUN_STORE] save failed: {e}")
 
-    # Assemble CaseStudy (narator + computed) — tidak boleh gagalkan simulasi
+    # Assemble + simpan CaseStudy (narator + computed) — tidak boleh gagalkan simulasi
     try:
-        from .services.casestudy_assemble import assemble_case_study
-        _ = assemble_case_study(run_id)
-        print(f"[CASE_STUDY] assembled for run_id={run_id}")
-    except Exception as e:
-        print(f"[CASE_STUDY] assemble failed: {e}")
+        from .services.casestudy_assemble import assemble_case_study, save_case_study
+        case_dict = assemble_case_study(run_id)
+        save_case_study(run_id, case_dict)
+        print(f"[CASE_STUDY] assembled and saved for run_id={run_id}")
+    except Exception as exc:
+        print(
+            f"[CASE_STUDY] failed for run_id={run_id}: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
     return hasil_dict
 
