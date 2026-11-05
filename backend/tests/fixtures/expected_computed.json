@@ -148,17 +148,17 @@
   ],
   "skenario": [
     {
-      "jika": "bukti baru menunjukkan bantuan sampai ke penerima",
+      "jika": "muncul bukti baru yang menantang kubu Kritikus",
       "maka": "8 peserta Kritikus bisa bergeser ke netral.",
       "dasar_agen": "Jurnalis/Media"
     },
     {
-      "jika": "bukti baru memperkuat salah satu sisi",
-      "maka": "3 peserta Penengah menentukan arah mayoritas.",
+      "jika": "muncul bukti baru yang menantang kubu Penengah",
+      "maka": "3 peserta Penengah bisa memilih salah satu sisi.",
       "dasar_agen": "Warga Desa/Kelurahan"
     },
     {
-      "jika": "temuan masalah distribusi meluas",
+      "jika": "muncul bukti baru yang menantang kubu Pendukung",
       "maka": "1 peserta Pendukung bisa melemah.",
       "dasar_agen": "Ibu Hamil/Menyusui"
     }

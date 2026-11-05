@@ -366,19 +366,14 @@ def build_computed(run: dict) -> dict:
     alasan_top = [a for _, a in kandidat_alasan[:3]]
 
     # ── Skenario: hanya dari kubu yang benar-benar ada di run ─────────────
-    kondisi = {
-        "tolak": "bukti baru menunjukkan bantuan sampai ke penerima",
-        "netral": "bukti baru memperkuat salah satu sisi",
-        "dukung": "temuan masalah distribusi meluas",
-    }
     akibat = {
         "tolak": "{n} peserta Kritikus bisa bergeser ke netral.",
-        "netral": "{n} peserta Penengah menentukan arah mayoritas.",
+        "netral": "{n} peserta Penengah bisa memilih salah satu sisi.",
         "dukung": "{n} peserta Pendukung bisa melemah.",
     }
     skenario = [
         {
-            "jika": kondisi[k["tipe"]],
+            "jika": f"muncul bukti baru yang menantang kubu {k['nama']}",
             "maka": akibat[k["tipe"]].format(n=len(k["agen"])),
             "dasar_agen": k["agen"][0],
         }

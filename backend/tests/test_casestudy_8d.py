@@ -200,3 +200,13 @@ def test_pemicu_angka_hanya_dari_briefing():
 def test_pemicu_angka_tanpa_persen_adalah_null():
     out = build_computed(_run(briefing="Tidak ada angka persen di sini.", sumber=[]))
     assert out["situasi"]["pemicu"]["angka"] is None
+
+
+def test_kondisi_skenario_generik_tanpa_kata_mbg():
+    out = build_computed(_run_non_mbg())
+    assert out["skenario"]
+    for s in out["skenario"]:
+        kondisi = s["jika"].lower()
+        assert "kubu" in kondisi
+        for kata in ("mbg", "bantuan", "posyandu", "keracunan", "distribusi"):
+            assert kata not in kondisi
