@@ -25,7 +25,7 @@ def _atomic_write(path: Path, data: dict) -> None:
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    path.replace(tmp)  # atomik
+    tmp.replace(path)  # atomik
 
 
 def assemble_case_study(run_id: str) -> dict:
