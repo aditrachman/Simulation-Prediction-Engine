@@ -35,31 +35,31 @@ def computed(run_data):
 
 # ── Valid JSON response untuk mock ───────────────────────────────────────
 VALID_NARRATIVE = {
-    "vonis": "Mayoritas peserta menolak anggapan bahwa MBG sudah tepat sasaran.",
+    "vonis": "Sikap akhir: 8 dari 12 peserta menolak. Pertanyaan: Apakah program Makan Bergizi Gratis (MBG) sudah tepat sasaran?",
     "alasan": [
-        "Angka kepuasan 72,8% tidak mencerminkan realita distribusi.",
-        "Data konflik 78% naik vs turun menunjukkan pelaporan tidak standar.",
-        "Butuh transparansi distribusi dan audit independen."
+        '"Kontradiksi data membuktikan program tidak terkelola dengan baik."',
+        '"Data konflik: warga bilang naik, dokter bilang turun. Siapa yang jujur?"',
+        '"Data 78% naik vs turun menunjukkan sistem pelaporan belum terstandarisasi."'
     ],
     "situasi": {
         "pemicu": {"angka": "72,8%", "teks": "Survei 72,8% puas tapi pertanyaan distribusi muncul."},
         "bahan": ["Keracunan berulang", "Keluarga miskin terpinggirkan", "Kepuasan bukan bukti tepat sasaran"]
     },
     "kubu_catatan": {
-        "tolak": "Kepuasan survei bukan bukti program tepat sasaran.",
-        "netral": "Terbuka bukti tambahan, data 78% kontradiktif.",
-        "dukung": "Manfaat terlihat di posyandu."
+        "tolak": "8 peserta menolak.",
+        "netral": "3 peserta netral.",
+        "dukung": "1 peserta mendukung."
     },
     "ronde": [
-        {"no": 1, "judul": "Arti angka 72,8%", "ringkas": "Hampir semua mempertanyakan metodologi survei kepuasan."},
-        {"no": 2, "judul": "Isu bergeser distribusi", "ringkas": "Debat pindah ke siapa menerima bantuan di desa vs kota."},
-        {"no": 3, "judul": "Bukti lapangan kontradiktif", "ringkas": "Data 78% naik vs turun, tafsir berbeda per agen."}
+        {"no": 1, "judul": "Sikap peserta di ronde 1", "ringkas": "10 menolak, 1 netral, 1 mendukung."},
+        {"no": 2, "judul": "Sikap peserta di ronde 2", "ringkas": "9 menolak, 2 netral, 1 mendukung."},
+        {"no": 3, "judul": "Sikap peserta di ronde 3", "ringkas": "8 menolak, 3 netral, 1 mendukung."}
     ],
     "skenario": [
-        {"jika": "Jika pemerintah buka data distribusi", "maka": "Maka Oposisi Kritis jadi moderat", "dasar_agen": "Oposisi Kritis"},
-        {"jika": "Jika audit keracunan menurun", "maka": "Maka Pengusaha/UMKM beralih netral", "dasar_agen": "Pengusaha/UMKM"},
-        {"jika": "Jika data lapangan membaik", "maka": "Maka Jurnalis/Media ubah sikap", "dasar_agen": "Jurnalis/Media"},
-        {"jika": "Jika anak terpencil terpinggirkan", "maka": "Maka protes kubu kritis naik", "dasar_agen": "Mahasiswa"}
+        {"jika": "Jika muncul bukti baru yang menantang kubu Kritikus", "maka": "Maka 8 peserta Kritikus bisa bergeser ke netral.", "dasar_agen": "Jurnalis/Media"},
+        {"jika": "Jika muncul bukti baru yang menantang kubu Penengah", "maka": "Maka 3 peserta Penengah bisa memilih salah satu sisi.", "dasar_agen": "Warga Desa/Kelurahan"},
+        {"jika": "Jika muncul bukti baru yang menantang kubu Pendukung", "maka": "Maka 1 peserta Pendukung bisa melemah.", "dasar_agen": "Ibu Hamil/Menyusui"},
+        {"jika": "Jika muncul bukti baru yang menantang kubu Kritikus", "maka": "Maka 8 peserta Kritikus bisa bergeser ke netral.", "dasar_agen": "Jurnalis/Media"}
     ]
 }
 

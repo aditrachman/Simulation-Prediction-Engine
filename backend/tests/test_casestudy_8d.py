@@ -219,3 +219,61 @@ def test_bersihkan_awalan_jika_maka():
     assert _bersihkan_awalan("Jika Jika bersarang") == "bersarang"
     assert _bersihkan_awalan("tidak ada awalan") == "tidak ada awalan"
     assert _bersihkan_awalan("  Jika  spasi  ") == "spasi"
+
+
+def _run_sintetis(topik: str, agen_stances: list[tuple[str, str]], ronde: int = 1) -> dict:
+    """Bangun run sintetis dengan topik non-MBG dan stance eksplisit."""
+    agen = [{"nama": n} for n, _ in agen_stances]
+    agen_runde = []
+    for n, s in agen_stances:
+        score = {"menolak": -0.6, "netral": 0.0, "mendukung": 0.6}[s]
+        agen_runde.append({
+            "nama": n, "stance": s, "score": score,
+            "alasan": f"Alasan {n} untuk {s}.",
+            "sesuai_topik": True,
+        })
+    return {
+        "topik": topik,
+        "tanggal": "5 Nov 2026",
+        "agen": agen,
+        "ronde_detail": [{"ronde": 1, "agen": agen_runde} for _ in range(ronde)],
+    }
+
+
+def test_kanari_empat_topik_non_mbg(monkeypatch):
+    """4 run sintetis: semua mendukung, semua menolak, campuran, tanpa menolak."""
+    topik_data = [
+        ("Apakah ijazah presiden asli?", [("A", "mendukung"), ("B", "mendukung")]),
+        ("Apakah kenaikan UKT adil?", [("X", "menolak"), ("Y", "menolak")]),
+        ("Apakah motor listrik layak disubsidi?", [("P", "menolak"), ("Q", "netral"), ("R", "mendukung")]),
+        ("Apakah program kerja sama fair?", [("M", "netral"), ("N", "mendukung")]),  # tanpa menolak
+    ]
+    
+    leksikon_larang = [
+        "mbg", "gizi", "makan", "keracunan", "72,8", "72.8", "kepuasan",
+        "posyandu", "desa x", "miskin", "oposisi kritis", "tepat sasaran",
+        "survei", "mempertanyakan", "apa arti angka", "isu bergeser"
+    ]
+    
+    for topik, stances in topik_data:
+        run = _run_sintetis(topik, stances)
+        out = build_computed(run)
+        dump = json.dumps(out, ensure_ascii=False).lower()
+        
+        # Assert leksikon MBG = 0
+        for kata in leksikon_larang:
+            assert kata not in dump, f"Kata larang '{kata}' ditemukan di {topik}: {dump[:500]}"
+        
+        # Assert kubu disebut = kubu yang ada
+        kubu_nama = {k["nama"] for k in out["kubu"]}
+        for s in out["skenario"]:
+            teks = f"{s['jika']} {s['maka']}".lower()
+            kubu_disebut = [n for n in kubu_nama if n.lower() in teks]
+            assert len(kubu_disebut) <= 1, f"Terlalu banyak kubu disebut: {kubu_disebut}"
+        
+        # Assert angka di ringkas ronde = distribusi
+        for r in out["ronde"]:
+            dist = r["distribusi"]
+            ringkas = r["ringkas"]
+            for k in ("menolak", "netral", "mendukung"):
+                assert str(dist[k]) in ringkas, f"Angka {k} tidak di ringkas: {ringkas}"

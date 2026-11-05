@@ -241,6 +241,17 @@ def build_computed(run: dict) -> dict:
             f"{dist['menolak']} menolak, {dist['netral']} netral, "
             f"{dist['mendukung']} mendukung."
         )
+        # Tambah info pergeseran bila ada agen berubah stance di ronde ini
+        if rno > 1:
+            bergeser = []
+            for nama, stances in agen_stance_per_ronde.items():
+                if len(stances) >= rno:
+                    dari = stances[rno - 2]
+                    ke = stances[rno - 1]
+                    if dari != ke and not agen_fallback_per_ronde[nama][rno - 1]:
+                        bergeser.append(f"{nama} bergeser dari {dari} ke {ke}")
+            if bergeser:
+                ringkas += " " + "; ".join(bergeser) + "."
 
         runde_dict = {
             "no": rno,
@@ -379,21 +390,30 @@ def build_computed(run: dict) -> dict:
     }
 
     # ── Vonis ──────────────────────────────────────────────────────────────
+    total = sum(distribusi_akhir.values())
     if distribusi_akhir["menolak"] > distribusi_akhir["netral"] + distribusi_akhir["mendukung"]:
-        vonis = "Mayoritas peserta menolak usulan dalam topik ini."
+        vonis = f"Sikap akhir: {distribusi_akhir['menolak']} dari {total} peserta menolak. Pertanyaan: {run.get('topik', 'topik ini')}"
     elif distribusi_akhir["mendukung"] > distribusi_akhir["menolak"] + distribusi_akhir["netral"]:
-        vonis = "Mayoritas peserta mendukung usulan dalam topik ini."
+        vonis = f"Sikap akhir: {distribusi_akhir['mendukung']} dari {total} peserta mendukung. Pertanyaan: {run.get('topik', 'topik ini')}"
     else:
-        vonis = "Pendapat peserta tercampur, tidak ada mayoritas jelas."
+        vonis = f"Sikap akhir: pendapat tercampur ({distribusi_akhir['menolak']} menolak, {distribusi_akhir['netral']} netral, {distribusi_akhir['mendukung']} mendukung). Pertanyaan: {run.get('topik', 'topik ini')}"
 
     # ── Alasan (3 poin utama dari ronde terakhir non-fallback, |score| terbesar) ──
+    # Filter: non-fallback, sesuai_topik=true, stance = mayoritas ronde terakhir
+    stance_terakhir_list = [s[-1] for s in agen_stance_per_ronde.values()]
+    mayoritas = max(set(stance_terakhir_list), key=stance_terakhir_list.count)
     kandidat_alasan = []
     for a in runde_detail[-1].get("agen", []):
         if a.get("fallback"):
             continue
+        if not a.get("sesuai_topik", True):
+            continue
+        stance_a = a.get("stance") or _stance_from_score(a.get("score"))
+        if stance_a != mayoritas:
+            continue
         kandidat_alasan.append((abs(a.get("score", 0.0)), a.get("alasan", "")))
     kandidat_alasan.sort(key=lambda x: x[0], reverse=True)
-    alasan_top = [a for _, a in kandidat_alasan[:3]]
+    alasan_top = [f'"{a}"' for _, a in kandidat_alasan[:3]]
 
     # ── Skenario: hanya dari kubu yang benar-benar ada di run ─────────────
     akibat = {

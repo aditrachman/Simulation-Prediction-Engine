@@ -150,6 +150,7 @@ class CaseStudy(BaseModel):
     kualitas: Kualitas | None = None
     narator_fallback: bool | None = None
     narator_fallback_reason: Optional[str] = None
+    narator_fallback_detail: Optional[str] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

@@ -286,15 +286,16 @@ def _validate_narrative(nar: dict, computed: dict, run: dict) -> list[str]:
     # 2. Vonis konsisten dengan distribusi
     dist = computed["hasil"]["distribusi"]
     vonis = nar["vonis"].lower()
+    total = sum(dist.values())
     if dist["menolak"] > dist["netral"] + dist["mendukung"]:
-        if not ("menolak" in vonis and "mayoritas" in vonis):
-            errors.append("Vonis tidak sesuai: seharusnya 'Mayoritas peserta menolak...'")
+        if not ("menolak" in vonis and str(dist["menolak"]) in vonis):
+            errors.append("Vonis tidak sesuai: seharusnya menyebut jumlah menolak")
     elif dist["mendukung"] > dist["menolak"] + dist["netral"]:
-        if not ("mendukung" in vonis and "mayoritas" in vonis):
-            errors.append("Vonis tidak sesuai: seharusnya 'Mayoritas peserta mendukung...'")
+        if not ("mendukung" in vonis and str(dist["mendukung"]) in vonis):
+            errors.append("Vonis tidak sesuai: seharusnya menyebut jumlah mendukung")
     else:
-        if not ("terbelah" in vonis or "tercampur" in vonis):
-            errors.append("Vonis tidak sesuai: seharusnya 'Peserta terbelah...'")
+        if not ("tercampur" in vonis or "tercampur" in vonis):
+            errors.append("Vonis tidak sesuai: seharusnya menyebut pendapat tercampur")
 
     # 3. Dilarang kata "polarisasi" dan persentase baru (bukan dari data)
     full_text = json.dumps(nar, ensure_ascii=False).lower()
@@ -389,22 +390,39 @@ def generate_narrative(run: dict, computed: dict | None = None) -> dict:
         nar = json.loads(raw)
         errors = _validate_narrative(nar, computed, run)
         if not errors:
-            return {**nar, "narator_fallback": False, "narator_fallback_reason": None}
+            return {
+                **nar,
+                "narator_fallback": False,
+                "narator_fallback_reason": None,
+                "narator_fallback_detail": None,
+            }
         # Validasi gagal → coba retry sekali
         raise ValueError("validasi_gagal")
 
     except RateLimitError as e:
         err_str = str(e)
+        detail = f"RateLimitError: {err_str}"[:200]
         # TPD / daily limit → langsung fallback, JANGAN retry
         if "per day" in err_str or "TPD" in err_str or "daily" in err_str.lower():
             fb = _fallback_narrative(computed)
-            return {**fb, "narator_fallback": True, "narator_fallback_reason": "tpd_limit"}
+            return {
+                **fb,
+                "narator_fallback": True,
+                "narator_fallback_reason": "tpd_limit",
+                "narator_fallback_detail": detail,
+            }
         # Rate limit per menit → langsung fallback, JANGAN retry (percuma)
         fb = _fallback_narrative(computed)
-        return {**fb, "narator_fallback": True, "narator_fallback_reason": "rate_limit"}
+        return {
+            **fb,
+            "narator_fallback": True,
+            "narator_fallback_reason": "rate_limit",
+            "narator_fallback_detail": detail,
+        }
 
     except (json.JSONDecodeError, ValueError) as e:
         reason = "json_invalid" if isinstance(e, json.JSONDecodeError) else "validasi_gagal"
+        detail = f"{type(e).__name__}: {e}"[:200]
         # Coba retry sekali dengan instruksi lebih keras
         try:
             retry_prompt = prompt + "\n\nOUTPUT SEBELUMNYA TIDAK VALID. Ikuti semua aturan di atas dengan ketat. Output HANYA JSON."
@@ -420,13 +438,29 @@ def generate_narrative(run: dict, computed: dict | None = None) -> dict:
             nar = json.loads(raw)
             errors = _validate_narrative(nar, computed, run)
             if not errors:
-                return {**nar, "narator_fallback": False, "narator_fallback_reason": None}
-        except Exception:
-            pass
+                return {
+                    **nar,
+                    "narator_fallback": False,
+                    "narator_fallback_reason": None,
+                    "narator_fallback_detail": None,
+                }
+        except Exception as e2:
+            detail = f"{type(e2).__name__}: {e2}"[:200]
         fb = _fallback_narrative(computed)
-        return {**fb, "narator_fallback": True, "narator_fallback_reason": reason}
+        return {
+            **fb,
+            "narator_fallback": True,
+            "narator_fallback_reason": reason,
+            "narator_fallback_detail": detail,
+        }
 
     except Exception as e:
         # Error lain (network, dll) → langsung fallback
+        detail = f"{type(e).__name__}: {e}"[:200]
         fb = _fallback_narrative(computed)
-        return {**fb, "narator_fallback": True, "narator_fallback_reason": "error_lain"}
+        return {
+            **fb,
+            "narator_fallback": True,
+            "narator_fallback_reason": "error_lain",
+            "narator_fallback_detail": detail,
+        }
