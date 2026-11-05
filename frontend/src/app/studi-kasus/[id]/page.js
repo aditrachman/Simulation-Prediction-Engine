@@ -57,6 +57,15 @@ export default async function CaseStudyPage({ params }) {
 
   // 404 - not found
   if (result.status === 404) {
+    // TODO: hapus pengecualian ini setelah preset asli dibuat lewat make_preset
+    if (id === "mbg-tepat-sasaran") {
+      return (
+        <CaseStudyView
+          data={mbgStatic}
+          banner="Menampilkan data contoh: studi kasus ini belum dibuat di server."
+        />
+      );
+    }
     notFound();
   }
 
