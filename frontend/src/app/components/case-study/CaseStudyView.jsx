@@ -43,8 +43,9 @@ const STEPS = [
   { no: "3", name: "Jalannya debat", href: "#babak3" },
   { no: "4", name: "Titik balik", href: "#babak4" },
   { no: "5", name: "Ke depan", href: "#babak5" },
-  { no: "+", name: "Uji kebijakan", href: "#whatif" },
 ];
+
+const STEP_WHATIF = { no: "+", name: "Uji kebijakan", href: "#whatif" };
 
 export default function CaseStudyView({ data, banner }) {
   const { meta, hasil, situasi, kualitas, narator_fallback } = data ?? {};
@@ -127,7 +128,7 @@ export default function CaseStudyView({ data, banner }) {
       {/* STEPPER */}
       <div className="cs-stepper">
         <nav className="cs-wrap cs-stepper-in" aria-label="Babak studi kasus">
-          {STEPS.map((s) => (
+          {(data?.whatif ? [...STEPS, STEP_WHATIF] : STEPS).map((s) => (
             <a key={s.href} href={s.href}>
               <span className="cs-stepno">{s.no}</span>
               {s.name}
