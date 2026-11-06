@@ -1,631 +1,361 @@
-"use client";
 import Link from "next/link";
-import InfoTip from "./components/InfoTip";
+import "./landing.css";
 
-// ─── Feature Icons ────────────────────────────────────────────
-const IconNetwork = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#cc785c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="5" r="2.5" />
-    <circle cx="5" cy="19" r="2.5" />
-    <circle cx="19" cy="19" r="2.5" />
-    <line x1="12" y1="7.5" x2="5" y2="16.5" />
-    <line x1="12" y1="7.5" x2="19" y2="16.5" />
-    <line x1="7.5" y1="19" x2="16.5" y2="19" />
-  </svg>
-);
+// Contoh sesi nyata: run "Pajak barang mewah berlaku November 2026",
+// 12 persona, 3 ronde. Skor sikap -1 (menolak) sampai +1 (mendukung).
+const personas = [
+  { nama: "Oposisi Kritis", skor: -0.9, baris: 0 },
+  { nama: "Mahasiswa", skor: -0.8, baris: 1 },
+  { nama: "Jurnalis/Media", skor: -0.8, baris: 2 },
+  { nama: "Ibu Rumah Tangga", skor: -0.8, baris: 3 },
+  { nama: "Buruh Pabrik", skor: -0.8, baris: 4 },
+  { nama: "Penyedia Jasa Layanan Eksklusif", skor: -0.75, baris: 0 },
+  { nama: "Pekerja Kantoran", skor: -0.6, baris: 2 },
+  { nama: "Pengguna Mobil Mewah", skor: -0.6, baris: 4 },
+  { nama: "Pengusaha/UMKM", skor: 0, baris: 0 },
+  { nama: "Akademisi", skor: 0, baris: 2 },
+  { nama: "Guru", skor: 0, baris: 4 },
+  { nama: "Pemerintah", skor: 0.7, baris: 2 },
+];
 
-const IconChart = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#cc785c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <line x1="7" y1="16" x2="7" y2="12" />
-    <line x1="12" y1="16" x2="12" y2="8" />
-    <line x1="17" y1="16" x2="17" y2="10" />
-  </svg>
-);
+const stanceOf = (skor) =>
+  skor <= -0.25 ? "menolak" : skor >= 0.25 ? "mendukung" : "netral";
 
-const IconTarget = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#cc785c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="9" />
-    <circle cx="12" cy="12" r="5" />
-    <circle cx="12" cy="12" r="1.5" fill="#cc785c" />
-    <line x1="12" y1="3" x2="12" y2="7" />
-    <line x1="12" y1="17" x2="12" y2="21" />
-    <line x1="3" y1="12" x2="7" y2="12" />
-    <line x1="17" y1="12" x2="21" y2="12" />
-  </svg>
-);
+const stanceColor = {
+  menolak: "var(--lp-tolak)",
+  netral: "var(--lp-netral)",
+  mendukung: "var(--lp-dukung)",
+};
 
-const IconArrow = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12h14M12 5l7 7-7 7" />
-  </svg>
-);
+const specs = [
+  { value: "12", label: "persona tersedia, dari buruh sampai pemerintah" },
+  { value: "1–5", label: "ronde debat, bisa diatur per sesi" },
+  { value: "3", label: "format unduhan: PDF, CSV, Word" },
+  { value: "0", label: "langkah pendaftaran" },
+];
 
-const featureIcons = [IconNetwork, IconChart, IconTarget];
-
-// ─── Data — semuanya udah pake bahasa sederhana ──────────────────
-const features = [
+const steps = [
   {
-    title: "Simulasi Opini Kelompok",
-    desc: "Coba kita lihat gimana reaksi berbagai kelompok masyarakat sebelum suatu kebijakan atau isu diluncurkan ke publik. Kayak latihan drama — kita lihat dulu reaksi penonton sebelum pentas beneran.",
+    title: "Tulis topiknya",
+    desc: "Satu kalimat cukup, misalnya “Pemerintah menaikkan tarif PPN menjadi 12 persen”. Pilih kategori dan jumlah ronde kalau perlu.",
   },
   {
-    title: "Peta Sikap yang Berubah",
-    desc: "Pantaulah perubahan pendapat tiap kelompok dari awal sampai akhir diskusi. Siapa yang mendukung, siapa yang menolak, dan siapa yang masih bimbang — semuanya keliatan.",
+    title: "Agen berdebat",
+    desc: "Persona bicara bergiliran. Masing-masing punya peran, bobot pengaruh, dan skor sikap yang bergerak dari ronde ke ronde.",
   },
   {
-    title: "Saran Strategis",
-    desc: "Dari hasil simulasi, kita bisa lihat risiko apa yang perlu diwaspadai dan langkah apa yang bisa diambil. Kayak navigasi GPS — kita tau jalan mana yang mulus dan mana yang macet.",
+    title: "Baca risalahnya",
+    desc: "Transkrip tiap ronde, peta sikap akhir, prediksi arah opini, dan rekomendasi. Unduh sebagai PDF, CSV, atau Word.",
   },
 ];
 
-const metrics = [
-  { value: "91%", label: "Ketepatan simulasi" },
-  { value: "24+", label: "Jumlah peserta diskusi" },
-  { value: "5",   label: "Jenis topik yang didukung" },
-  { value: "<30d", label: "Waktu simulasi (detik)" },
+const outputs = [
+  {
+    key: "Peta sikap",
+    desc: "Skor tiap persona dan arah perubahannya di setiap ronde.",
+  },
+  {
+    key: "Transkrip",
+    desc: "Pendapat tiap persona, dikelompokkan per ronde.",
+  },
+  {
+    key: "Prediksi",
+    desc: "Peluang konsensus, polarisasi, atau status quo di akhir sesi.",
+  },
+  {
+    key: "Rekomendasi",
+    desc: "Aktor paling berpengaruh dan langkah yang disarankan.",
+  },
 ];
 
 const docs = [
   {
-    title: "Panduan Cepat",
-    desc: "Cara jalanin backend dan frontend sendiri di komputer, hubungkan API, dan coba simulasi pertama dalam hitungan menit.",
+    title: "Panduan cepat",
+    desc: "Menjalankan backend dan frontend di komputer sendiri.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#installation",
+    external: true,
   },
   {
     title: "Dokumentasi API",
-    desc: "Pelajari cara otomatisasi alur kerja simulasi lewat kode — buat yang pengen ngoprek lebih dalam.",
+    desc: "Endpoint dan contoh payload untuk otomasi.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#api-endpoints",
+    external: true,
   },
   {
-    title: "Pengaturan",
-    desc: "Sesuaiin model, variabel lingkungan, dan pengaturan sesuai kebutuhan kamu.",
+    title: "Konfigurasi",
+    desc: "Model, variabel lingkungan, dan batas pemakaian.",
     href: "https://github.com/aditrachman/Simulation-Prediction-Engine#configuration",
+    external: true,
+  },
+  {
+    title: "Studi kasus",
+    desc: "Contoh risalah dari sesi yang sudah dijalankan.",
+    href: "/studi-kasus",
+    external: false,
   },
 ];
 
-// ═══════════════════════════════════════════════════════════════
+function SwarmChart() {
+  return (
+    <>
+      <div className="lp-swarm" role="img" aria-label="Sebaran sikap dua belas persona pada sesi contoh">
+        <div className="lp-swarm-mid" aria-hidden="true" />
+        {personas.map((p, i) => {
+          const label = stanceOf(p.skor);
+          return (
+            <span
+              key={p.nama}
+              className="lp-swarm-dot"
+              title={`${p.nama}: ${label}`}
+              style={{
+                left: `${((p.skor + 1) / 2) * 100}%`,
+                top: `${8 + p.baris * 20}px`,
+                background: stanceColor[label],
+                animationDelay: `${i * 28}ms`,
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="lp-swarm-axis" aria-hidden="true">
+        <span>Menolak</span>
+        <span>Netral</span>
+        <span>Mendukung</span>
+      </div>
+    </>
+  );
+}
+
 export default function LandingPage() {
   return (
-    <div style={{ background: "#faf9f5" }}>
+    <div className="lp">
+      {/* ── Hero ───────────────────────────────────────── */}
+      <section className="lp-hero">
+        <div className="lp-wrap">
+          <div className="lp-hero-grid">
+            <div>
+              <p className="lp-eyebrow">Risalah uji kebijakan</p>
 
-      {/* ══════════════════════════════════════════════
-          HERO
-      ══════════════════════════════════════════════ */}
-      <section
-        style={{
-          background: "#faf9f5",
-          paddingTop: 96,
-          paddingBottom: 96,
-          borderBottom: "1px solid #e6dfd8",
-        }}
-      >
-        <div className="mx-auto max-w-5xl px-6">
-          {/* Two-col layout: text left, mockup card right */}
-          <div className="flex flex-col gap-12 lg:flex-row lg:items-center lg:gap-16">
-
-            {/* Left: copy */}
-            <div className="max-w-xl lg:flex-1">
-              <p
-                style={{
-                  fontFamily: "var(--font-body, sans-serif)",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  letterSpacing: "1.5px",
-                  textTransform: "uppercase",
-                  color: "#6c6a64",
-                  marginBottom: 20,
-                }}
-              >
-                VoxSwarm
-              </p>
-
-              <h1
-                style={{
-                  fontFamily: "var(--font-heading, sans-serif)",
-                  fontSize: "clamp(38px, 5vw, 60px)",
-                  fontWeight: 700,
-                  lineHeight: 1.05,
-                  letterSpacing: "-1.5px",
-                  color: "#141413",
-                  marginBottom: 24,
-                }}
-              >
-                Cobain reaksi publik<br />
-                <span style={{ color: "#141413" }}>sebelum kebijakan</span>{" "}
-                <span style={{ color: "#cc785c" }}>diluncurkan</span>
+              <h1 className="lp-h1">
+                Sidangkan kebijakan <em>sebelum</em> ia diumumkan.
               </h1>
 
-              <p
-                style={{
-                  fontFamily: "var(--font-body, sans-serif)",
-                  fontSize: 16,
-                  lineHeight: 1.75,
-                  color: "#3d3d3a",
-                  marginBottom: 40,
-                  maxWidth: 480,
-                }}
-              >
-                Mau tau gimana reaksi masyarakat kalau suatu kebijakan dikeluarkan?
-                Tinggal masukin topiknya — alat ini bakal simulasiin gimana berbagai
-                kelompok masyarakat bakal nanggapapi dan berdebat.
+              <p className="lp-lead">
+                Masukkan satu topik. Persona yang mewakili kelompok berbeda akan
+                berdebat tiga ronde, lalu kamu baca transkrip, peta sikap, dan
+                rekomendasinya.
               </p>
 
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                <Link
-                  href="/demo"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "#cc785c",
-                    color: "#ffffff",
-                    fontFamily: "var(--font-body, sans-serif)",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    padding: "12px 24px",
-                    borderRadius: 8,
-                    textDecoration: "none",
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#a9583e"}
-                  onMouseLeave={e => e.currentTarget.style.background = "#cc785c"}
-                >
-                  Coba Simulasi
+              <div className="lp-actions">
+                <Link href="/demo" className="lp-btn lp-btn-primary">
+                  Mulai simulasi
                 </Link>
-                <a
-                  href="https://github.com/aditrachman/Simulation-Prediction-Engine"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "#faf9f5",
-                    color: "#141413",
-                    fontFamily: "var(--font-body, sans-serif)",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    padding: "12px 24px",
-                    borderRadius: 8,
-                    border: "1px solid #e6dfd8",
-                    textDecoration: "none",
-                    transition: "border-color 0.15s",
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "#cc785c"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = "#e6dfd8"}
-                >
-                  Lihat di GitHub
-                </a>
-              </div>
-            </div>
-
-            {/* Right: dark mockup card */}
-            <div
-              style={{
-                background: "#181715",
-                borderRadius: 16,
-                padding: 28,
-                flexShrink: 0,
-                width: "100%",
-                maxWidth: 400,
-              }}
-            >
-              {/* Window chrome */}
-              <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#c64545", opacity: 0.7 }} />
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#d4a017", opacity: 0.7 }} />
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#5db872", opacity: 0.7 }} />
+                <Link href="/studi-kasus" className="lp-btn lp-btn-quiet">
+                  Lihat contoh risalah
+                </Link>
               </div>
 
-              {/* Simulated topic input */}
-              <div style={{ background: "#252320", borderRadius: 8, padding: "10px 14px", marginBottom: 16, border: "1px solid #333" }}>
-                <p style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)", fontSize: 12, color: "#a09d96", margin: 0 }}>
-                  Topik
-                </p>
-                <p style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)", fontSize: 13, color: "#faf9f5", margin: "4px 0 0" }}>
-                  Apakah kenaikan UMP 2025 menguntungkan buruh?
-                </p>
-              </div>
-
-              {/* Simulated agents — pake label sederhana */}
-              {[
-                { init: "JU", name: "Jurnalis/Media", sentiment: "Netral", color: "#6c6a64" },
-                { init: "BU", name: "Buruh/Pekerja", sentiment: "Setuju", color: "#5db872" },
-                { init: "UM", name: "Pengusaha/UMKM", sentiment: "Tidak Setuju", color: "#c64545" },
-              ].map((agent) => (
-                <div
-                  key={agent.name}
-                  style={{
-                    background: "#252320",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    marginBottom: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{
-                    width: 30, height: 30, borderRadius: "50%",
-                    background: agent.color + "22",
-                    border: `1px solid ${agent.color}44`,
-                    color: agent.color,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, fontWeight: 700, flexShrink: 0,
-                  }}>
-                    {agent.init}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, color: "#faf9f5", margin: 0, fontWeight: 500 }}>{agent.name}</p>
-                  </div>
-                  <span style={{
-                    fontSize: 12, fontWeight: 500,
-                    color: agent.color,
-                    background: agent.color + "18",
-                    border: `1px solid ${agent.color}33`,
-                    borderRadius: 9999, padding: "2px 8px", flexShrink: 0,
-                  }}>
-                    {agent.sentiment}
-                  </span>
-                </div>
-              ))}
-
-              {/* Status bar — pake bahasa sederhana */}
-              <div style={{
-                marginTop: 16,
-                background: "#cc785c18",
-                border: "1px solid #cc785c33",
-                borderRadius: 8,
-                padding: "8px 12px",
-                display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#cc785c", flexShrink: 0 }} />
-                <p style={{ fontSize: 12, color: "#cc785c", margin: 0, fontWeight: 500 }}>Simulasi selesai · Masyarakat Terbelah (65%)</p>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════
-          METRICS
-      ══════════════════════════════════════════════ */}
-      <section style={{ background: "#efe9de", paddingTop: 56, paddingBottom: 56, borderBottom: "1px solid #e6dfd8" }}>
-        <div className="mx-auto max-w-5xl px-6">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {metrics.map((m) => (
-              <div
-                key={m.label}
-                style={{
-                  background: "#faf9f5",
-                  border: "1px solid #e6dfd8",
-                  borderRadius: 12,
-                  padding: "24px 16px",
-                  textAlign: "center",
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: "var(--font-heading, sans-serif)",
-                    fontSize: 32,
-                    fontWeight: 600,
-                    letterSpacing: "-0.5px",
-                    color: "#141413",
-                    margin: "0 0 6px",
-                  }}
-                >
-                  {m.value}
-                </p>
-                <p
-                  style={{
-                    fontFamily: "var(--font-body, sans-serif)",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    letterSpacing: "0.3px",
-                    color: "#6c6a64",
-                    margin: 0,
-                  }}
-                >
-                  {m.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════
-          FEATURES — 3-up
-      ══════════════════════════════════════════════ */}
-      <section style={{ background: "#faf9f5", paddingTop: 96, paddingBottom: 96 }}>
-        <div className="mx-auto max-w-5xl px-6">
-
-          {/* Section header */}
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <p style={{
-              fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 12, fontWeight: 500,
-              letterSpacing: "1.5px", textTransform: "uppercase",
-              color: "#6c6a64", marginBottom: 16,
-            }}>
-              Kemampuan Utama
-            </p>
-            <h2
-              style={{
-                fontFamily: "var(--font-heading, sans-serif)",
-                fontSize: 36, fontWeight: 600,
-                letterSpacing: "-0.5px", lineHeight: 1.15,
-                color: "#141413", margin: "0 auto 16px",
-                maxWidth: 480,
-              }}
-            >
-              Apa yang bisa dilakukan alat ini
-            </h2>
-            <p style={{
-              fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 15, lineHeight: 1.7,
-              color: "#3d3d3a", maxWidth: 440, margin: "0 auto",
-            }}>
-              Tiga hal utama yang bisa kamu lakukan buat simulasi opini publik pake AI.
-            </p>
-          </div>
-
-          {/* Cards */}
-          <div className="grid gap-5 md:grid-cols-3">
-            {features.map((feature, i) => {
-              const Icon = featureIcons[i];
-              return (
-                <article
-                  key={feature.title}
-                  style={{
-                    background: "#efe9de",
-                    border: "1px solid #e6dfd8",
-                    borderRadius: 12,
-                    padding: 32,
-                  }}
-                >
-                  {/* Icon circle */}
-                  <div style={{
-                    width: 44, height: 44, borderRadius: "50%",
-                    background: "#cc785c18",
-                    border: "1px solid #cc785c30",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    marginBottom: 20,
-                  }}>
-                    <Icon />
-                  </div>
-
-                  <h3
-                    style={{
-                      fontFamily: "var(--font-heading, sans-serif)",
-                      fontSize: 20, fontWeight: 600,
-                      letterSpacing: "-0.3px", lineHeight: 1.3,
-                      color: "#141413", marginBottom: 10,
-                    }}
-                  >
-                    {feature.title}
-                  </h3>
-                  <p style={{
-                    fontFamily: "var(--font-body, sans-serif)",
-                    fontSize: 14, lineHeight: 1.7,
-                    color: "#3d3d3a", margin: 0,
-                  }}>
-                    {feature.desc}
-                  </p>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════
-          ABOUT — Dark card band
-      ══════════════════════════════════════════════ */}
-      <section style={{ background: "#efe9de", paddingTop: 96, paddingBottom: 96, borderTop: "1px solid #e6dfd8" }}>
-        <div className="mx-auto max-w-5xl px-6">
-          <div
-            style={{
-              background: "#181715",
-              borderRadius: 16,
-              padding: "48px 48px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 32,
-            }}
-          >
-            <div>
-              <p style={{
-                fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 12, fontWeight: 500,
-              letterSpacing: "1.5px", textTransform: "uppercase",
-              color: "#a09d96", marginBottom: 16,
-            }}>
-              Tentang Proyek
-              </p>
-              <h2
-                style={{
-                  fontFamily: "var(--font-heading, sans-serif)",
-                  fontSize: 32, fontWeight: 600,
-                  letterSpacing: "-0.5px", lineHeight: 1.2,
-                  color: "#faf9f5", marginBottom: 16, maxWidth: 480,
-                }}
-              >
-                Dibuat oleh Kami VoxSwarm
-              </h2>
-              <p style={{
-                fontFamily: "var(--font-body, sans-serif)",
-                fontSize: 15, lineHeight: 1.75,
-                color: "#a09d96", maxWidth: 560,
-              }}>
-                Alat ini dikembangkan buat ngebantu siapa aja yang pengen tau gimana reaksi
-                masyarakat terhadap suatu isu — sebelum isu itu jadi besar. Fokusnya: bersih,
-                cepat, dan beneran berguna.
+              <p className="lp-note" style={{ marginTop: 18 }}>
+                Tanpa akun. Hasil bisa diunduh sebagai PDF, CSV, atau Word.
               </p>
             </div>
 
-            {/* Stats row */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 40, borderTop: "1px solid #333", paddingTop: 32 }}>
-              {[
-                { value: "3",   label: "Kategori simulasi" },
-                { value: "∞",   label: "Skenario bisa dicoba" },
-                { value: "OSS", label: "Open source (gratis)" },
-              ].map((stat) => (
-                <div key={stat.label}>
-                  <p style={{
-                    fontFamily: "var(--font-heading, sans-serif)",
-                    fontSize: 28, fontWeight: 600,
-                    color: "#faf9f5", margin: "0 0 4px",
-                  }}>
-                    {stat.value}
-                  </p>
-                  <p style={{
-                    fontFamily: "var(--font-body, sans-serif)",
-                    fontSize: 12, fontWeight: 500,
-                    color: "#6c6a64", margin: 0, letterSpacing: "0.3px",
-                  }}>
-                    {stat.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+            {/* Contoh risalah */}
+            <aside className="lp-risalah" aria-label="Contoh ringkasan risalah">
+              <div className="lp-risalah-head">
+                <span>Contoh risalah</span>
+                <span>12 persona · 3 ronde</span>
+              </div>
 
-      {/* ══════════════════════════════════════════════
-          DOCS — 3-up
-      ══════════════════════════════════════════════ */}
-      <section style={{ background: "#faf9f5", paddingTop: 96, paddingBottom: 96 }}>
-        <div className="mx-auto max-w-5xl px-6">
+              <p className="lp-risalah-topik">
+                Pajak barang mewah berlaku November 2026
+              </p>
 
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <p style={{
-              fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 12, fontWeight: 500,
-              letterSpacing: "1.5px", textTransform: "uppercase",
-              color: "#6c6a64", marginBottom: 16,
-            }}>
-              Panduan
-            </p>
-            <h2
-              style={{
-                fontFamily: "var(--font-heading, sans-serif)",
-                fontSize: 36, fontWeight: 600,
-                  letterSpacing: "-0.5px", lineHeight: 1.15,
-                  color: "#141413", margin: 0,
-                }}
-              >
-                Semua yang kamu butuhin buat mulai
-            </h2>
-          </div>
+              <SwarmChart />
 
-          <div className="grid gap-5 md:grid-cols-3">
-            {docs.map((item) => (
-              <a
-                key={item.title}
-                href={item.href}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: "block",
-                  background: "#faf9f5",
-                  border: "1px solid #e6dfd8",
-                  borderRadius: 12,
-                  padding: 28,
-                  textDecoration: "none",
-                  transition: "border-color 0.15s",
-                }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "#cc785c"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#e6dfd8"}
-              >
-                <h3
-                  style={{
-                    fontFamily: "var(--font-heading, sans-serif)",
-                    fontSize: 18, fontWeight: 600,
-                    letterSpacing: "-0.2px",
-                    color: "#141413", marginBottom: 10,
-                  }}
-                >
-                  {item.title}
-                </h3>
-                <p style={{
-                  fontFamily: "var(--font-body, sans-serif)",
-                  fontSize: 14, lineHeight: 1.7,
-                  color: "#3d3d3a", margin: "0 0 16px",
-                }}>
-                  {item.desc}
-                </p>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  fontSize: 13, fontWeight: 500, color: "#cc785c",
-                }}>
-                  Baca panduan
-                  <IconArrow />
+              <div className="lp-counts">
+                <span>
+                  <i style={{ background: "var(--lp-tolak)" }} />8 menolak
                 </span>
-              </a>
+                <span>
+                  <i style={{ background: "var(--lp-netral)" }} />3 netral
+                </span>
+                <span>
+                  <i style={{ background: "var(--lp-dukung)" }} />1 mendukung
+                </span>
+              </div>
+
+              <div className="lp-verdict">
+                <div className="lp-verdict-item">
+                  <p className="lp-verdict-value">65</p>
+                  <p className="lp-verdict-label">Polarisasi</p>
+                </div>
+                <div className="lp-verdict-item">
+                  <p className="lp-verdict-value">15</p>
+                  <p className="lp-verdict-label">Konsensus</p>
+                </div>
+                <div className="lp-verdict-item">
+                  <p className="lp-verdict-value">20</p>
+                  <p className="lp-verdict-label">Status quo</p>
+                </div>
+              </div>
+
+              <blockquote className="lp-quote">
+                <p>
+                  “Pajak mewah cuma jadi beban, bro. Tanpa alokasi dana jelas,
+                  korupsi nambah.”
+                </p>
+                <cite>Mahasiswa · ronde 3</cite>
+              </blockquote>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Spesifikasi ────────────────────────────────── */}
+      <section className="lp-strip" aria-label="Ringkasan cara kerja">
+        <div className="lp-wrap">
+          <div className="lp-strip-grid">
+            {specs.map((s) => (
+              <div className="lp-strip-item" key={s.label}>
+                <p className="lp-strip-value">{s.value}</p>
+                <p className="lp-strip-label">{s.label}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════
-          CTA — Coral full-bleed band
-      ══════════════════════════════════════════════ */}
-      <section
-        style={{
-          background: "#cc785c",
-          paddingTop: 72,
-          paddingBottom: 72,
-        }}
-      >
-        <div className="mx-auto max-w-5xl px-6">
-          <div style={{ maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
-            <h2
-              style={{
-                fontFamily: "var(--font-heading, sans-serif)",
-                fontSize: 36, fontWeight: 600,
-                  letterSpacing: "-0.5px", lineHeight: 1.15,
-                  color: "#ffffff", marginBottom: 16,
-                }}
-              >
-                Siap nyoba simulasi?
-            </h2>
-            <p style={{
-              fontFamily: "var(--font-body, sans-serif)",
-              fontSize: 16, lineHeight: 1.75,
-              color: "rgba(255,255,255,0.8)",
-              marginBottom: 36,
-            }}>
-              Tinggal masukin topik, lihat reaksi — gratis, tanpa perlu daftar.
-            </p>
-            <Link
-              href="/demo"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                background: "#faf9f5",
-                color: "#141413",
-                fontFamily: "var(--font-body, sans-serif)",
-                fontSize: 14,
-                fontWeight: 500,
-                padding: "12px 28px",
-                borderRadius: 8,
-                textDecoration: "none",
-                transition: "opacity 0.15s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = "0.9"}
-              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-            >
-              Mulai Simulasi
-            </Link>
+      {/* ── Cara kerja ─────────────────────────────────── */}
+      <section className="lp-section">
+        <div className="lp-wrap">
+          <div className="lp-split">
+            <div className="lp-split-aside">
+              <p className="lp-eyebrow">Cara kerja</p>
+              <h2 className="lp-h2">Tiga langkah, satu risalah.</h2>
+              <p className="lp-body" style={{ marginTop: 16, maxWidth: "30ch" }}>
+                Tidak ada dasbor yang perlu dipelajari. Alurnya sama seperti
+                menyiapkan bahan sidang.
+              </p>
+            </div>
+
+            <div className="lp-steps">
+              {steps.map((step, i) => (
+                <div className="lp-step" key={step.title}>
+                  <p className="lp-step-num">
+                    {String(i + 1).padStart(2, "0")}
+                  </p>
+                  <div>
+                    <h3 className="lp-h3">{step.title}</h3>
+                    <p className="lp-body">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
+      {/* ── Isi risalah ────────────────────────────────── */}
+      <section className="lp-section">
+        <div className="lp-wrap">
+          <div className="lp-split">
+            <div className="lp-split-aside">
+              <p className="lp-eyebrow">Isi risalah</p>
+              <h2 className="lp-h2">Yang kamu baca setelah sesi selesai.</h2>
+            </div>
+
+            <div className="lp-outputs">
+              {outputs.map((o) => (
+                <div className="lp-output" key={o.key}>
+                  <p className="lp-output-key">{o.key}</p>
+                  <p className="lp-body">{o.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Bahan bacaan ───────────────────────────────── */}
+      <section className="lp-section">
+        <div className="lp-wrap">
+          <div className="lp-split">
+            <div className="lp-split-aside">
+              <p className="lp-eyebrow">Bahan bacaan</p>
+              <h2 className="lp-h2">Kalau mau menjalankan sendiri.</h2>
+            </div>
+
+            <div className="lp-docs">
+              {docs.map((doc) => (
+                <Link
+                  key={doc.title}
+                  href={doc.href}
+                  className="lp-doc"
+                  {...(doc.external
+                    ? { target: "_blank", rel: "noreferrer" }
+                    : {})}
+                >
+                  <span>
+                    <span className="lp-doc-title">{doc.title}</span>
+                    <span className="lp-doc-desc" style={{ display: "block" }}>
+                      {doc.desc}
+                    </span>
+                  </span>
+                  <span className="lp-doc-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Penutup ────────────────────────────────────── */}
+      <section className="lp-close">
+        <div className="lp-wrap">
+          <div className="lp-close-grid">
+            <div>
+              <p className="lp-eyebrow">Mulai</p>
+              <h2 className="lp-h2" style={{ maxWidth: "16ch" }}>
+                Mulai dari satu topik.
+              </h2>
+              <p className="lp-lead" style={{ marginTop: 18 }}>
+                Isi topik, pilih kategori dan jumlah ronde. Risalahnya bisa
+                dibaca, diunduh, dan dibuka lagi kapan saja.
+              </p>
+
+              <div className="lp-actions">
+                <Link href="/demo" className="lp-btn lp-btn-primary">
+                  Jalankan simulasi
+                </Link>
+                <Link href="/studi-kasus" className="lp-btn lp-btn-quiet">
+                  Baca contoh dulu
+                </Link>
+              </div>
+            </div>
+
+            <ol className="lp-close-list">
+              <li>
+                <span className="lp-close-num">1</span>Isi topik dan kategori
+              </li>
+              <li>
+                <span className="lp-close-num">2</span>Tunggu tiga ronde selesai
+              </li>
+              <li>
+                <span className="lp-close-num">3</span>Unduh atau bagikan risalah
+              </li>
+            </ol>
+          </div>
+
+          <p className="lp-disclaimer">
+            VoxSwarm mensimulasikan reaksi kelompok berdasarkan persona dan
+            data berita. Hasilnya bahan pertimbangan, bukan pengganti riset
+            lapangan atau survei.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

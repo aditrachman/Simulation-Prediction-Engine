@@ -14,7 +14,7 @@ export default function Navbar() {
 
   return (
     <header className="h-16 border-b border-[#e6dfd8] bg-[#faf9f5]">
-      <div className="mx-auto flex h-full max-w-[1200px] items-center justify-between px-6">
+      <div className="mx-auto flex h-full max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 no-underline">
           <span
             className="text-lg tracking-tight"
@@ -48,7 +48,7 @@ export default function Navbar() {
 
         <Link
           href="/demo"
-          className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#cc785c] px-5 text-[14px] font-medium text-white no-underline transition-all hover:bg-[#a9583e]"
+          className="inline-flex h-10 flex-none items-center justify-center whitespace-nowrap rounded-[8px] bg-[#cc785c] px-4 text-[13px] font-medium text-white no-underline transition-all hover:bg-[#a9583e] sm:px-5 sm:text-[14px]"
           style={{ fontFamily: "var(--font-body), sans-serif", lineHeight: 1 }}
         >
           Coba Simulasi
