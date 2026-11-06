@@ -548,7 +548,7 @@ export default function DemoPage() {
         {/* Hero + Form */}
         <section className="pt-10 pb-6">
           <p className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#6c6a64] mb-4">
-            Simulasi Opini Publik
+            VoxSwarm
           </p>
           <h1 className="display-xl mb-3" style={{ fontWeight: 400 }}>
             Simulasi Reaksi Kebijakan

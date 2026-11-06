@@ -20,7 +20,7 @@ export default function Navbar() {
             className="text-lg tracking-tight"
             style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, color: "#141413", letterSpacing: "-0.02em" }}
           >
-            Simulasi Opini
+            VoxSwarm
           </span>
         </Link>
 

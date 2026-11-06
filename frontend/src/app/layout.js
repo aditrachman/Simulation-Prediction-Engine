@@ -34,9 +34,9 @@ const publicSans = Public_Sans({
 });
 
 export const metadata = {
-  title: "Simulasi Opini — Cobain reaksi publik sebelum kebijakan diluncurkan",
+  title: "VoxSwarm — Simulasi Reaksi Kebijakan",
   description:
-    "Simulasi opini publik: cobain gimana reaksi berbagai kelompok masyarakat terhadap suatu isu sebelum diluncurkan. Buat tugas akhir - alat simulasi opini.",
+    "VoxSwarm: simulasi reaksi berbagai kelompok masyarakat terhadap kebijakan sebelum diluncurkan. Alat bantu pengambilan keputusan berbasis data.",
 };
 
 export default function RootLayout({ children }) {

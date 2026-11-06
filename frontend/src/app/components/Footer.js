@@ -12,11 +12,11 @@ export default function Footer() {
                 className="text-lg tracking-tight text-[#faf9f5]"
                 style={{ fontFamily: "var(--font-logo), sans-serif", fontWeight: 700, letterSpacing: "-0.02em" }}
               >
-                Simulasi Opini
+                VoxSwarm
               </span>
             </Link>
             <p className="mt-3 text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>
-              Alat simulasi reaksi publik terhadap kebijakan atau isu — dikembangkan buat tugas akhir.
+              Alat simulasi reaksi publik terhadap kebijakan atau isu — dikembangkan oleh tim VoxSwarm.
             </p>
           </div>
 
@@ -50,7 +50,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-16 border-t border-[#252320] pt-8 text-[14px] leading-[1.55] text-[#a09d96]" style={{ letterSpacing: "0.15px" }}>
-          <p>© 2026 Simulasi Opini — Tugas Akhir.</p>
+          <p>© 2026 VoxSwarm — Tugas Akhir.</p>
         </div>
       </div>
     </footer>

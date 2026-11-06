@@ -117,7 +117,7 @@ export default function LandingPage() {
                   marginBottom: 20,
                 }}
               >
-                Simulasi Opini Publik
+                VoxSwarm
               </p>
 
               <h1
@@ -453,7 +453,7 @@ export default function LandingPage() {
                   color: "#faf9f5", marginBottom: 16, maxWidth: 480,
                 }}
               >
-                Dibuat oleh Adit Rachman
+                Dibuat oleh Kami VoxSwarm
               </h2>
               <p style={{
                 fontFamily: "var(--font-body, sans-serif)",
