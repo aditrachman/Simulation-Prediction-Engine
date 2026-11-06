@@ -33,6 +33,15 @@ const INSIGHT_LABEL = {
   "Status Quo": "Status quo",
 };
 
+const DESKRIPSI_SKENARIO = {
+  "Konsensus": "Kelompok cenderung sepakat, ruang debat menyempit.",
+  "Polarisasi": "Dua kubu menguat dan saling menjauh, titik temu sulit.",
+  "Status Quo": "Tidak ada perubahan arah berarti, posisi awal bertahan.",
+  "Semua Setuju": "Hampir semua persona sepakat tanpa sisa perbedaan.",
+  "Masyarakat Terpecah": "Suara terbelah tanpa kubu yang dominan.",
+  "Tidak Ada Perubahan": "Sikap akhir mirip dengan sikap awal.",
+};
+
 const AGENT_COLORS = ["#cc785c", "#1b8a4a", "#e8a55a", "#b83a3a", "#1b8a7a", "#6c6a64", "#252523"];
 
 function bacaData(payload, pesan = "Data tidak ditemukan.") {
