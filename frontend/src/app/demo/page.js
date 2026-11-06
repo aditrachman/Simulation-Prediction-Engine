@@ -124,6 +124,44 @@ const beresinTeksAkhir = (teks) => {
     .replace(/Sentimen\s*akhir\s*netral\s*\(([^)]+)\)/gi, "Kelompok ini bersikap netral");
 };
 
+// ── Loading Overlay ──
+const LoadingOverlay = ({ tahap, onCancel }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm">
+    <div className="rounded-xl border border-[#e6dfd8] bg-white p-8 max-w-md w-full mx-4 shadow-xl">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="h-10 w-10 rounded-full border-3 border-[#e6dfd8] border-t-[#cc785c] animate-spin" />
+        <div>
+          <p className="text-lg font-semibold text-[#141413]">Sedang Memproses</p>
+          <p className="text-sm text-[#6c6a64]">Mohon tunggu, simulasi berjalan...</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {[
+          "Menghubungkan ke server...",
+          "Mengirim topik ke simulasi...",
+          "Memproses respons server...",
+          "Menganalisis hasil simulasi..."
+        ].map((step, i) => (
+          <div key={step} className="flex items-center gap-3 text-sm">
+            <div className={`h-2 w-2 rounded-full transition-colors ${
+              tahap === step ? "bg-[#cc785c] animate-pulse" :
+              tahap === "" || (i > 0 && tahap !== step && !tahap.startsWith(step.split(" ")[0])) ? "bg-[#e6dfd8]" : "bg-[#1b8a4a]"
+            }`} />
+            <span className={`text-[#3d3d3a] ${tahap === step ? "font-medium text-[#cc785c]" : "text-[#6c6a64]"}`}>
+              {step}
+            </span>
+          </div>
+        ))}
+      </div>
+      {onCancel && (
+        <button onClick={onCancel} className="mt-6 w-full rounded-md border border-[#e6dfd8] bg-white px-4 py-2 text-sm font-medium text-[#6c6a64] hover:bg-[#efe9de] transition">
+          Batalkan
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 // ── Section labels ──
 const SECTION_LABEL = {
   insight: "Kesimpulan",
@@ -434,6 +472,7 @@ export default function DemoPage() {
   const [jumlahRonde, setJumlahRonde] = useState(3);
   const [hasil, setHasil] = useState(null);
   const [memuat, setMemuat] = useState(false);
+  const [tahapMemuat, setTahapMemuat] = useState("");
   const [tier, setTier] = useState("free");
   const [warningTopik, setWarningTopik] = useState(null);
   const [rondeAktif, setRondeAktif] = useState(0);
@@ -447,6 +486,7 @@ export default function DemoPage() {
   const mulaiAnalisis = async () => {
     if (!topik.trim()) { inputRef.current?.focus(); return; }
     setMemuat(true);
+    setTahapMemuat("Menghubungkan ke server...");
     setHasil(null);
     setRondeAktif(0);
     setRingkasanPenuh(false);
@@ -454,17 +494,21 @@ export default function DemoPage() {
     setCaseStudyId(null);
     try {
       const body = { topik: topik.trim(), kategori, jumlah_ronde: jumlahRonde, tier };
+      setTahapMemuat("Mengirim topik ke simulasi...");
       const res = await fetch(`${apiBase}/start-simulation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      setTahapMemuat("Memproses respons server...");
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setErrorSimulasi(err.detail || "Permintaan gagal.");
         setMemuat(false);
+        setTahapMemuat("");
         return;
       }
+      setTahapMemuat("Menganalisis hasil simulasi...");
       const data = await res.json();
       setHasil(bacaData(data, "Respons tidak berisi data."));
       if (data.case_study_id) setCaseStudyId(data.case_study_id);
@@ -475,6 +519,7 @@ export default function DemoPage() {
       setErrorSimulasi(err.message || "Server tidak dapat dihubungi.");
     }
     setMemuat(false);
+    setTahapMemuat("");
   };
 
   const daftarRonde = hasil?.ronde_detail ?? [];
@@ -543,6 +588,7 @@ export default function DemoPage() {
 
   return (
     <div className="flex flex-col bg-[#faf9f5] min-h-screen">
+      {memuat && <LoadingOverlay tahap={tahapMemuat} onCancel={() => { setMemuat(false); setTahapMemuat(""); }} />}
       <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
 
         {/* Hero + Form */}
