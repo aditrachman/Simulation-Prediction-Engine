@@ -11,7 +11,7 @@ import json
 import hashlib
 import math
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 import urllib.request
@@ -38,6 +38,11 @@ RSS_SOURCES = [
     {"nama": "Tempo",         "url": "https://rss.tempo.co/nasional",                        "bahasa": "id"},
     {"nama": "Antara",        "url": "https://www.antaranews.com/rss/terkini.xml",           "bahasa": "id"},
     {"nama": "CNN Indonesia", "url": "https://www.cnnindonesia.com/rss",                     "bahasa": "id"},
+    # Feed ekonomi — topik pajak/upah/UMKM jarang muncul di feed umum.
+    {"nama": "Detik Finance", "url": "https://finance.detik.com/rss",                        "bahasa": "id"},
+    {"nama": "Antara Ekonomi","url": "https://www.antaranews.com/rss/ekonomi.xml",           "bahasa": "id"},
+    {"nama": "CNN Ekonomi",   "url": "https://www.cnnindonesia.com/ekonomi/rss",            "bahasa": "id"},
+    {"nama": "CNBC Indonesia","url": "https://www.cnbcindonesia.com/rss",                    "bahasa": "id"},
     # ponytail: Kompas & Tirto removed — both dead (Kompas 404 all paths, Tirto 403 blocks all)
 ]
 
@@ -60,6 +65,90 @@ TIMEOUT = 8  # detik
 # ---------------------------------------------------------------------------
 
 SIMILARITY_THRESHOLD = 0.15  # ponytail: 0.15 works for short headlines; tune up if too many false clusters
+
+# Google News Search filters
+GOOGLE_NEWS_MAX_AGE_DAYS = 120  # maksimal umur artikel (hari)
+
+def _extract_registrable_domain(url: str) -> str:
+    """Ekstrak domain registrable (eTLD+1) dari URL.
+    Contoh: kaltim.antaranews.com -> antaranews.com
+            jambi.antaranews.com -> antaranews.com
+            www.kemenkum.go.id -> kemenkum.go.id
+            kemenkum.go.id -> kemenkum.go.id
+    """
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        if not host:
+            return ""
+        # Hapus port jika ada
+        host = host.split(":")[0]
+        # Hapus www prefix
+        if host.startswith("www."):
+            host = host[4:]
+        # Daftar TLD Indonesia dua bagian
+        parts = host.split(".")
+        if len(parts) <= 2:
+            return host
+        # Cek TLD Indonesia dua bagian
+        tld_2part = {"co.id", "go.id", "ac.id", "or.id", "web.id", "sch.id", "mil.id", "biz.id"}
+        if len(parts) >= 3 and ".".join(parts[-2:]) in {"co.id", "go.id", "ac.id", "or.id", "web.id", "sch.id", "mil.id", "biz.id"}:
+            return ".".join(parts[-3:])
+        # Default: ambil 2 bagian terakhir
+        return ".".join(parts[-2:])
+    except Exception:
+        return ""
+
+def _domain_from_source(source: str, title: str, source_url: str = "") -> str:
+    """Ekstrak domain dari source_url jika ada, fallback ke judul/sumber."""
+    # Prioritas 1: source_url dari Google News RSS
+    if source_url:
+        domain = _extract_registrable_domain(source_url)
+        if domain:
+            return domain
+    # Prioritas 2: fallback ke parsing judul/sumber (untuk backward compat)
+    if source != "google_news_search":
+        return source.lower()
+    # Untuk google_news_search tanpa source_url, fallback ke parsing judul
+    import re
+    match = re.search(r'[-–|]\s*([A-Za-z0-9.]+(?:[.\-][A-Za-z0-9]+)*)\s*$', title)
+    if match:
+        domain = match.group(1).lower()
+        # Normalisasi domain
+        if 'antara' in domain:
+            return 'antaranews.com'
+        if 'detik' in domain:
+            return 'detik.com'
+        if 'rri' in domain:
+            return 'rri.co.id'
+        if 'tempo' in domain:
+            return 'tempo.co'
+        if 'cnn' in domain:
+            return 'cnnindonesia.com'
+        if 'cnbc' in domain:
+            return 'cnbcindonesia.com'
+        if 'balipost' in domain:
+            return 'balipost.com'
+        if 'mercusuar' in domain:
+            return 'mercusuar.merdeka.com'
+        if 'pont' in domain:
+            return 'pontianakpost.com'
+        if 'jati' in domain:
+            return 'jati.or.id'
+        if 'reda' in domain:
+            return 'reda.co.id'
+        if 'balipost' in domain:
+            return 'balipost.com'
+        if any(x in domain for x in ['kalimantan', 'kalbar', 'kaltim', 'sulteng', 'sulawesi', 'sumatera', 'papua']):
+            return 'antaranews.com'
+        return domain
+    return source.lower()
+
+def _is_kemenkum_domain(domain: str) -> bool:
+    return 'kemenkum.go.id' in domain
 
 COMMENT_DELAY = 2.0  # seconds between fetch_article_comments calls
 
@@ -96,7 +185,8 @@ def _load_polling_data() -> dict:
         _POLLING_DATA = json.loads(_POLLING_FILE.read_text(encoding="utf-8"))
         _POLLING_DATA_HASH = current_hash
         print(f"[polling] Loaded {len(_POLLING_DATA)} polling entries (hash={current_hash})")
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] _load_polling_data error={type(e).__name__}: {e}")
         _POLLING_DATA = {}
         _POLLING_DATA_HASH = current_hash
     return _POLLING_DATA
@@ -137,7 +227,8 @@ def baca_komentar_cache(article_url: str) -> list[str]:
             if text and len(text) > 10:
                 comments.append(text)
         return comments
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] baca_komentar_cache error={type(e).__name__}: {e}")
         return []
 
 # ---------------------------------------------------------------------------
@@ -161,7 +252,8 @@ def append_to_diversity_window(articles: list[dict]) -> None:
             for art in articles:
                 art["_window_ts"] = now
                 f.write(json.dumps(art, ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] append_to_diversity_window error={type(e).__name__}: {e}")
         pass
 
 
@@ -185,7 +277,8 @@ def load_diversity_window() -> list[dict]:
             if aid:
                 seen[aid] = art
         return list(seen.values()) if seen else articles
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] load_diversity_window error={type(e).__name__}: {e}")
         return []
 
 
@@ -221,7 +314,8 @@ def prune_diversity_window() -> int:
         with open(_DIVERSITY_WINDOW_FILE, "w", encoding="utf-8") as f:
             for art in kept:
                 f.write(json.dumps(art, ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] prune_diversity_window write error={type(e).__name__}: {e}")
         pass
 
     return pruned
@@ -238,7 +332,7 @@ _CACHE_TTL  = int(os.getenv("CONTEXT_CACHE_TTL_MINUTES", "30")) * 60   # detik
 _CACHE_MAX  = int(os.getenv("CONTEXT_CACHE_MAX_ENTRIES", "100"))        # maks topik disimpan
 
 # ponytail: bump tiap kali logic relevansi/filter berubah → force refetch cache
-CACHE_SCHEMA_VERSION = "v4-content-overlap"
+CACHE_SCHEMA_VERSION = "v5-topic-keywords"
 
 
 def _get_polling_reference_hash() -> str:
@@ -247,7 +341,8 @@ def _get_polling_reference_hash() -> str:
         return "no-file"
     try:
         return hashlib.md5(_POLLING_FILE.read_bytes()).hexdigest()[:12]
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] _get_polling_reference_hash error={type(e).__name__}: {e}")
         return "no-file"
 
 
@@ -283,7 +378,8 @@ def _load_cache() -> dict:
             print(f"[Cache] Schema mismatch (have={cache.get(_META_KEY)!r}, need={expected!r}) — force refetch")
             return {}
         return cache
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] _load_cache error={type(e).__name__}: {e}")
         return {}
 
 
@@ -410,7 +506,8 @@ def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT) -> Optional[s
                 return raw.decode("utf-8")
             except UnicodeDecodeError:
                 return raw.decode("latin-1", errors="replace")
-    except Exception:
+    except Exception as e:
+        print(f"[SOURCES] fetch_exception url={url} error={type(e).__name__}: {e}")
         return None
 
 
@@ -433,6 +530,37 @@ def _artikel_id(url: str) -> str:
     return hashlib.md5(url.encode()).hexdigest()[:10]
 
 
+def _parse_rss_date(date_str: str) -> datetime | None:
+    """Parse berbagai format tanggal RSS ke datetime UTC.
+    Support: RFC 2822 (RFC 822), RFC 3339, ISO 8601, dan format umum RSS."""
+    if not date_str:
+        return None
+    date_str = date_str.strip()
+    # Format umum yang sering dipakai RSS
+    formats = [
+        "%a, %d %b %Y %H:%M:%S %z",      # RFC 2822: Mon, 02 Jan 2023 15:04:05 +0700
+        "%a, %d %b %Y %H:%M:%S %Z",      # RFC 2822 dengan zona nama: Mon, 02 Jan 2023 15:04:05 GMT
+        "%a, %d %b %Y %H:%M:%S",         # Tanpa zona
+        "%d %b %Y %H:%M:%S %z",          # 02 Jan 2023 15:04:05 +0700
+        "%d %b %Y %H:%M:%S %Z",
+        "%d %b %Y %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%z",           # ISO 8601: 2023-01-02T15:04:05+07:00
+        "%Y-%m-%dT%H:%M:%SZ",            # ISO 8601 UTC: 2023-01-02T15:04:05Z
+        "%Y-%m-%dT%H:%M:%S.%f%z",        # ISO dengan microsecond
+        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%d %H:%M:%S",             # 2023-01-02 15:04:05
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
 # ---------------------------------------------------------------------------
 # RSS Parser
 # ---------------------------------------------------------------------------
@@ -452,7 +580,8 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
         else:
             items = root.findall(".//item")
 
-        for item in items[:10]:
+        print(f"[SOURCES] _parse_rss sumber={sumber} format={'atom' if is_atom else 'rss'} items_found={len(items)}")
+        for item in items[:30]:
             if is_atom:
                 judul     = item.findtext("atom:title", "", ns) or item.findtext("title", "")
                 link_el   = item.find("atom:link", ns) or item.find("link")
@@ -469,6 +598,10 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
                 ringkasan = item.findtext("description", "") or item.findtext("content:encoded", "")
                 tanggal   = item.findtext("pubDate", "")
 
+                # Google News RSS has <source url="..."> element
+                source_el = item.find("source")
+                source_url = source_el.get("url", "") if source_el is not None else ""
+
             judul     = _clean_html(judul)
             ringkasan = _clean_html(ringkasan)[:400]
 
@@ -476,16 +609,19 @@ def _parse_rss(xml_text: str, sumber: str) -> list[dict]:
                 continue
 
             articles.append({
-                "id":        _artikel_id(link or judul),
-                "judul":     judul,
-                "ringkasan": ringkasan,
-                "link":      link,
-                "sumber":    sumber,
-                "tanggal":   tanggal,
-                "tipe":      "berita",
+                "id":         _artikel_id(link or judul),
+                "judul":      judul,
+                "ringkasan":  ringkasan,
+                "link":       link,
+                "sumber":     sumber,
+                "tanggal":    tanggal,
+                "tipe":       "berita",
+                "source_url": source_url if not is_atom else "",
             })
-    except ET.ParseError:
-        pass
+    except ET.ParseError as e:
+        print(f"[SOURCES] _parse_rss parse_error sumber={sumber} error={e}")
+    except Exception as e:
+        print(f"[SOURCES] _parse_rss exception sumber={sumber} error={type(e).__name__}: {e}")
     return articles
 
 
@@ -508,6 +644,127 @@ _CONTENT_STOPWORDS = frozenset({
 })
 
 _CONTENT_MIN_WORD_LEN = 3  # minimal panjang kata buat dianggap content word
+
+# Kata yang terlalu umum di topik kebijakan — bikin hampir semua berita "cocok".
+_GENERIC_TOPIC_WORDS = frozenset({
+    "apakah", "bagaimana", "mengapa", "kenapa", "kapan", "dimana", "siapa",
+    "berapa", "pemerintah", "pemda", "negara", "pusat", "daerah", "kebijakan",
+    "program", "aturan", "dampak", "dampaknya", "pengaruh", "pengaruhnya",
+    "akibat", "akibatnya", "solusi", "langkah", "upaya", "masalah", "isu",
+    "topik", "menurut", "terhadap", "mengenai", "sebaiknya", "harus", "perlu",
+    "bisa", "dapat", "akan", "tidak", "belum", "sudah", "lebih", "kurang",
+    "sangat", "paling", "para", "bagi", "untuk", "dalam", "dengan", "atau",
+})
+
+
+def _topic_keywords(topik: str) -> set[str]:
+    """Content word topik tanpa kata umum — fokus ke kata yang benar-benar khas."""
+    words = _extract_content_words(topik)
+    specific = {w for w in words if w not in _GENERIC_TOPIC_WORDS}
+    return specific or words
+
+
+# ---------------------------------------------------------------------------
+# Google News Search Query Generator
+# ---------------------------------------------------------------------------
+
+def buat_query_pencarian(topik: str) -> list[str]:
+    """
+    Bangun 2-4 query pendek (2-4 kata kunci) untuk Google News RSS search.
+    Pakai LLM (call_llm) dengan fallback rule-based dari _topic_keywords.
+
+    Args:
+        topik: Topik simulasi (kalimat penuh).
+
+    Returns:
+        List query string (max 3), siap untuk URL-encode ke Google News.
+    """
+    # Coba LLM dulu
+    try:
+        from backend.llm import call_llm
+    except Exception:
+        call_llm = None
+
+    system_prompt = (
+        "Kamu menghasilkan query pencarian Google News untuk topik kebijakan Indonesia. "
+        "Aturan keras:\n"
+        "1. Output HANYA JSON object dengan key \"queries\" yang berisi array string, tanpa teks lain.\n"
+        "2. Setiap query 2-4 kata kunci pendek (bukan kalimat).\n"
+        "3. Hapus kata generik: pemerintah, program, kebijakan, aturan, dampak, "
+        "solusi, langkah, upaya, masalah, isu, topik, menurut, terhadap, mengenai.\n"
+        "4. Fokus pada entitas spesifik, nama program, angka, singkatan, atau aksi konkret.\n"
+        "5. Maksimal 3 query.\n"
+        "Contoh: topik 'Pemerintah menggratiskan biaya pendaftaran 19 jenis hak cipta' -> "
+        '{"queries": ["pendaftaran hak cipta gratis", "PNBP hak cipta 19 jenis", "Kemenkum hak cipta gratis"]}'
+    )
+    user_prompt = f"Topik: {topik}"
+
+    if call_llm:
+        try:
+            raw = call_llm(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=200,
+                use_analysis_chain=False,
+                use_cache=True,
+                response_format={"type": "json_object"},
+            )
+            import json
+            parsed = json.loads(raw)
+            # Support both {"queries": [...]} and [...]
+            queries = parsed.get("queries") if isinstance(parsed, dict) else parsed
+            if isinstance(queries, list):
+                # Clean and validate
+                cleaned = []
+                for q in queries:
+                    q = str(q).strip()
+                    if 2 <= len(q.split()) <= 4 and len(q) <= 60:
+                        cleaned.append(q)
+                if cleaned:
+                    print(f"[SOURCES] buat_query_pencarian LLM queries={cleaned}")
+                    return cleaned[:3]
+        except Exception as e:
+            print(f"[SOURCES] buat_query_pencarian LLM error={type(e).__name__}: {e}, fallback rule-based")
+
+    # Fallback rule-based: ambil kata kunci terkuat dari _topic_keywords
+    keywords = sorted(_topic_keywords(topik), key=lambda w: -len(w))
+    # Buat kombinasi 2-3 kata dari 4-5 kata teratas
+    queries = []
+    if len(keywords) >= 2:
+        queries.append(" ".join(keywords[:2]))
+    if len(keywords) >= 3:
+        queries.append(" ".join(keywords[:3]))
+    if len(keywords) >= 4:
+        queries.append(" ".join(keywords[1:3]))  # variasi
+    queries = [q for q in queries if q][:3]
+    print(f"[SOURCES] buat_query_pencarian rule-based queries={queries}")
+    return queries
+
+
+# Kata sifat/penilaian yang terlalu lemah buat jadi satu-satunya alasan cocok.
+_WEAK_ANCHOR_WORDS = frozenset({
+    "gratis", "tepat", "sasaran", "baik", "buruk", "besar", "kecil", "baru",
+    "lama", "tinggi", "rendah", "naik", "turun", "naiknya", "kenaikan",
+    "meningkat", "menurun", "menguntungkan", "merugikan", "penting", "cukup",
+    "layak", "efektif", "efisien", "sesuai", "berhasil", "gagal",
+})
+
+
+def _extract_anchor_keywords(query_keywords: set[str]) -> set[str]:
+    """Ambil kata kunci jangkar (anchor) dari query keywords.
+    Jangkar = kata kunci yang cukup spesifik, BUKAN generik/lemah.
+    Filter: tidak ada di _GENERIC_TOPIC_WORDS, tidak ada di _WEAK_ANCHOR_WORDS,
+    panjang >= 4, bukan angka.
+    """
+    anchors = set()
+    for kw in query_keywords:
+        kw_clean = kw.strip().lower()
+        if (len(kw_clean) >= 4
+                and kw_clean not in _GENERIC_TOPIC_WORDS
+                and kw_clean not in _WEAK_ANCHOR_WORDS
+                and not kw_clean.isdigit()):
+            anchors.add(kw_clean)
+    return anchors
 
 
 def _is_numeric_token(token: str) -> bool:
@@ -551,14 +808,19 @@ def _hitung_relevansi_tfidf(topik: str, items: list[dict], maks: int = 15) -> li
 
     Fallback ke keyword counting sederhana jika sklearn tidak tersedia.
     """
+    print(f"[SOURCES] _hitung_relevansi_tfidf start topik={topik!r} items={len(items)} threshold={SIMILARITY_THRESHOLD:.2f} sklearn_ok={_SKLEARN_OK}")
     if not items:
         return []
 
     if not _SKLEARN_OK:
+        print(f"[SOURCES] _hitung_relevansi_tfidf sklearn_not_available fallback_keyword")
         return _hitung_relevansi_keyword(topik, items, maks)
 
-    # Build corpus: topic first, then each item's text
-    topic_clean = _bersih_teks(topik)
+    # Build corpus: topic first, then each item's text.
+    # Pakai kata kunci topik saja (tanpa "apakah/tidak/pemerintah"), supaya
+    # kemiripan tidak tenggelam oleh kata umum.
+    topic_content = _topic_keywords(topik)
+    topic_clean = _bersih_teks(" ".join(sorted(topic_content)) if topic_content else topik)
     texts = [topic_clean]
 
     for item in items:
@@ -588,39 +850,42 @@ def _hitung_relevansi_tfidf(topik: str, items: list[dict], maks: int = 15) -> li
         items.sort(key=lambda x: -x.get("relevansi", 0))
 
         # ── Content-word overlap filter ──────────────────────────────────
-        # Prevent false positive where only numeric token (tahun) matches.
-        # Article must share at least 2 content words with topic (if topic
-        # has >= 2 content words), or at least 1 (if topic has 1).
-        # Skip check if topic has 0 content words (all stopwords/numbers).
-        topic_content = _extract_content_words(topik)
-        if len(topic_content) >= 2:
-            min_overlap = 2
-        elif len(topic_content) == 1:
-            min_overlap = 1
-        else:
-            min_overlap = 0  # no content words to match — skip check
+        # Kata umum sudah dibuang dari topic_content. Minimal harus ada satu
+        # kata kunci kuat yang sama, supaya berita cuma cocok di "gratis"
+        # atau "pemerintah" tidak lolos.
+        strong_anchors = topic_content - _WEAK_ANCHOR_WORDS
 
         passed = []
         for it in items:
             if it.get("relevansi", 0) < SIMILARITY_THRESHOLD:
                 continue
-            if min_overlap > 0:
+            if topic_content:
                 article_text = it.get("judul", "") + " " + it.get("ringkasan", "")
-                overlap = _count_content_overlap(topic_content, article_text)
-                if overlap < min_overlap:
+                overlap = topic_content & _extract_content_words(article_text)
+                if not overlap:
+                    continue
+                if len(overlap) < 2 and strong_anchors and not (overlap & strong_anchors):
                     continue
             passed.append(it)
+
+        print(f"[SOURCES] tfidf_done topic_keywords={sorted(topic_content)} threshold={SIMILARITY_THRESHOLD:.2f} passed={len(passed)}")
+        if passed:
+            top5 = [(p.get("relevansi", 0), p.get("judul", "")[:80], p.get("sumber", "")) for p in passed[:5]]
+            for score, title, src in top5:
+                print(f"[SOURCES]   top relevansi={score:.4f} sumber={src} judul={title}")
 
         return passed[:maks]
 
     except Exception as exc:
-        print(f"[scraper] TF-IDF relevance error: {exc}, fallback keyword")
+        print(f"[SOURCES] _hitung_relevansi_tfidf exception error={type(exc).__name__}: {exc}, fallback_keyword")
         return _hitung_relevansi_keyword(topik, items, maks)
 
 
 def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> list[dict]:
     """Fallback: keyword counting sederhana."""
+    print(f"[SOURCES] _hitung_relevansi_keyword start topik={topik!r} items={len(items)}")
     kata_kunci = [k.lower() for k in topik.split() if len(k) > 3]
+    print(f"[SOURCES] keyword_fallback kata_kunci={kata_kunci}")
     for item in items:
         teks = (item.get("judul", "") + " " + item.get("ringkasan", item.get("selftext", ""))).lower()
         item["relevansi"] = sum(1 for k in kata_kunci if k in teks)
@@ -633,6 +898,7 @@ def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> 
         if idd not in seen:
             seen.add(idd)
             hasil.append(it)
+    print(f"[SOURCES] keyword_fallback hasil={len(hasil)}")
     return hasil[:maks]
 
 
@@ -640,9 +906,34 @@ def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> 
 # Fetch News (RSS)
 # ---------------------------------------------------------------------------
 
+def fetch_google_news_search(query: str) -> list[dict]:
+    """
+    Ambil hasil Google News RSS search untuk satu query.
+    URL: https://news.google.com/rss/search?q=<QUERY>&hl=id&gl=ID&ceid=ID:id
+
+    Returns:
+        List artikel dict dengan sumber="google_news_search" dan query_origin.
+    """
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=id&gl=ID&ceid=ID:id"
+    print(f"[SOURCES] google_news_search query={query!r} url={url}")
+    xml = _fetch(url)
+    if not xml:
+        print(f"[SOURCES] google_news_search fetch_failed query={query!r}")
+        return []
+    # Parse dengan _parse_rss yang sudah ada
+    articles = _parse_rss(xml, "google_news_search")
+    # Tandai sumber dan query asal
+    for art in articles:
+        art["sumber"] = "google_news_search"
+        art["query_origin"] = query
+    print(f"[SOURCES] google_news_search parsed query={query!r} items={len(articles)}")
+    return articles
+
+
 def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     """
-    Ambil berita terkini dari semua RSS source.
+    Ambil berita terkini dari semua RSS source + Google News search.
     Filter relevan dengan TF-IDF (fallback keyword counting).
 
     Returns dict:
@@ -651,14 +942,35 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
           total_unik       — total semua kandidat UNIK sebelum filter
           total_filtered   — jumlah artikel yg lolos threshold
     """
+    print(f"[SOURCES] fetch_berita start topik={topik!r} sources={len(RSS_SOURCES)}")
     semua = []
+    raw_counts = {}
 
+    # 1. Portal RSS tradisional
     for src in RSS_SOURCES:
-        xml = _fetch(src["url"])
+        url = src["url"]
+        print(f"[SOURCES] fetching url={url} sumber={src['nama']}")
+        xml = _fetch(url)
         if not xml:
+            print(f"[SOURCES] fetch_failed url={url} sumber={src['nama']}")
             continue
         articles = _parse_rss(xml, src["nama"])
+        raw_counts[src["nama"]] = len(articles)
+        print(f"[SOURCES] parsed sumber={src['nama']} items={len(articles)}")
         semua.extend(articles)
+
+    # 2. Google News Search untuk tiap query
+    queries = buat_query_pencarian(topik)
+    google_items = []
+    for query in queries:
+        g_items = fetch_google_news_search(query)
+        google_items.extend(g_items)
+    if google_items:
+        raw_counts["google_news_search"] = len(google_items)
+        print(f"[SOURCES] google_news_search total_items={len(google_items)} queries={queries}")
+        semua.extend(google_items)
+
+    print(f"[SOURCES] raw_items={sum(raw_counts.values())} per_source={raw_counts}")
 
     # Dedup by ID
     seen = set()
@@ -669,10 +981,276 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
             unik.append(art)
 
     total_unik = len(unik)
+    print(f"[SOURCES] after_dedup unik={total_unik}")
     if not unik:
         return {"articles": [], "total_unik": 0, "total_filtered": 0}
 
-    filtered = _hitung_relevansi_tfidf(topik, unik, maks=15)
+    # Pisahkan item portal dan google_news_search
+    portal_items = [a for a in unik if a.get("sumber") != "google_news_search"]
+    google_items = [a for a in unik if a.get("sumber") == "google_news_search"]
+
+    # Filter portal items dengan TF-IDF + threshold (seperti biasa)
+    portal_filtered = _hitung_relevansi_tfidf(topik, portal_items, maks=15)
+    print(f"[SOURCES] portal after_relevance_filter={len(portal_filtered)} threshold={SIMILARITY_THRESHOLD:.2f}")
+
+    # Ambil query keywords dan anchor keywords SEBELUM filter portal (dibutuhkan oleh keduanya)
+    query_keywords = set()
+    for q in buat_query_pencarian(topik):
+        for kw in q.split()[:3]:
+            if len(kw) > 2:
+                query_keywords.add(kw.lower())
+    print(f"[SOURCES] shared query_keywords={sorted(query_keywords)}")
+
+    # Ekstrak anchor keywords (spesifik, bukan generik/lemah)
+    anchor_keywords = _extract_anchor_keywords(query_keywords)
+    print(f"[SOURCES] shared anchor_keywords={sorted(anchor_keywords)}")
+
+    # Terapkan anchor filter yang sama ke portal: min 1 anchor + min 2 query keyword
+    portal_kept = []
+    portal_removed_no_anchor = 0
+    portal_removed_no_kw = 0
+    for art in portal_filtered:
+        judul_lower = art.get("judul", "").lower()
+        has_anchor = any(ak in judul_lower for ak in anchor_keywords) if anchor_keywords else False
+        kw_matches = [kw for kw in query_keywords if kw in judul_lower]
+        kw_count = len(kw_matches)
+
+        if not has_anchor:
+            print(f"[SOURCES] portal removed (no anchor) judul={art.get('judul','')[:80]} | sumber={art.get('sumber','')}")
+            portal_removed_no_anchor += 1
+            continue
+        if kw_count < 2:
+            print(f"[SOURCES] portal removed (kw_count={kw_count} < 2) judul={art.get('judul','')[:80]} | sumber={art.get('sumber','')}")
+            portal_removed_no_kw += 1
+            continue
+        portal_kept.append(art)
+
+    print(f"[SOURCES] portal anchor_filter: kept={len(portal_kept)} removed_no_anchor={portal_removed_no_anchor} removed_no_kw={portal_removed_no_kw} from {len(portal_filtered)}")
+    portal_filtered = portal_kept
+
+    # Google News items: filter ketat dengan anchor keyword + tanggal + limit
+    # Ambil query keywords dari buat_query_pencarian
+    print(f"[SOURCES] google_news query_keywords={sorted(query_keywords)}")
+    print(f"[SOURCES] google_news anchor_keywords={sorted(anchor_keywords)}")
+
+    # Cutoff tanggal
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=GOOGLE_NEWS_MAX_AGE_DAYS)
+    print(f"[SOURCES] google_news date_cutoff={cutoff_dt.date()} (max {GOOGLE_NEWS_MAX_AGE_DAYS} hari)")
+
+    google_filtered = []
+    removed_no_anchor = 0
+    removed_old = 0
+    removed_no_kw = 0
+
+    for art in google_items:
+        judul_lower = art.get("judul", "").lower()
+
+        # Cek minimal 1 anchor keyword
+        has_anchor = any(ak in judul_lower for ak in anchor_keywords) if anchor_keywords else False
+
+        # Cek minimal 2 query keywords total
+        kw_matches = [kw for kw in query_keywords if kw in judul_lower]
+        kw_count = len(kw_matches)
+
+        # Parse tanggal
+        pub_dt = _parse_rss_date(art.get("tanggal", ""))
+        art["_pub_dt"] = pub_dt
+        is_recent = pub_dt is not None and pub_dt >= cutoff_dt
+
+        if not has_anchor:
+            print(f"[SOURCES] google_news removed (no anchor) judul={art.get('judul','')[:80]}")
+            removed_no_anchor += 1
+            continue
+        if kw_count < 2:
+            print(f"[SOURCES] google_news removed (kw_count={kw_count} < 2) judul={art.get('judul','')[:80]}")
+            removed_no_kw += 1
+            continue
+        if not is_recent:
+            pub_str = pub_dt.date().isoformat() if pub_dt else "no-date"
+            print(f"[SOURCES] google_news removed (old, {pub_str}) judul={art.get('judul','')[:80]}")
+            removed_old += 1
+            continue
+
+        google_filtered.append(art)
+
+    print(f"[SOURCES] google_news filtered: kept={len(google_filtered)} removed_no_anchor={removed_no_anchor} removed_old={removed_old} removed_no_kw={removed_no_kw} from {len(google_items)}")
+
+    # ====== Diversity Selection for Google News ======
+    from difflib import SequenceMatcher
+
+    def _normalize_title_for_dedup(title: str) -> str:
+        """Hapus nama kantor wilayah/daerah dari judul untuk dedup."""
+        import re
+        # Hapus pola: "Kemenkum X", "Kanwil X", "X Barat", "X Timur", "X Utara", "X Selatan", "X Tengah"
+        # "Kaltim", "DIY", "Sulteng", "Kalbar", "Jatim", "Lampung", "Bali", "Pontianak", "Malang", "Palu"
+        normalized = re.sub(r'\b(Kemenkum|Kanwil|Kemenkumham)\s+[A-Za-z]+\b', 'Kemenkum', title, flags=re.IGNORECASE)
+        normalized = re.sub(r'\b(Kaltim|DIY|Sulteng|Kalbar|Jatim|Lampung|Bali|Pontianak|Malang|Palu|Banten|Jabar|Jateng|Jateng|NTB|NTT|Papua|Sulawesi|Sumatera|Kalimantan)\b', '', normalized, flags=re.IGNORECASE)
+        normalized = re.sub(r'\b(buka|gelar|ajak|dorong|dampingi|perluas|gratis|gratis|gratis)\b', '', normalized, flags=re.IGNORECASE)
+        # Hapus kata generik pendek
+        normalized = re.sub(r'\b(untuk|dan|di|ke|dari|yang|dengan|pada|adalah|akan|telah|sudah|bisa|dapat|tidak|ada|juga|atau|karena|oleh|sebagai|serta|saat|dalam|secara|lebih|sangat|antara|setelah|seperti|hanya|mereka|kami|kita|saya|dia|ia|anda|bahwa|namun|tetapi|sedangkan|sementara|jika|kalau|maka|sehingga|mengapa|bagaimana|apa|siapa|mana|kapan|banyak|beberapa|seluruh|semua|para|si|sang|para|ia|pun|pernah|belum|agar|supaya|sebab|meski|walaupun|biar|hendak|mau|ingin)\b', '', normalized, flags=re.IGNORECASE)
+        # Normalisasi whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        return normalized
+
+
+
+    def _similarity(a: str, b: str) -> float:
+        return SequenceMatcher(None, a, b).ratio()
+
+    def _priority_keywords(title: str) -> int:
+        """Skor prioritas untuk keyword khusus."""
+        priority_terms = ['pengamat', 'kritik', 'royalti', 'pp', 'pnbp', 'menkum', 'hak cipta', 'kekayaan intelektual', 'ki']
+        title_lower = title.lower()
+        score = sum(1 for term in priority_terms if term in title_lower)
+        return score
+
+    # 1. Dedup berdasarkan judul yang dinormalisasi
+    # Urutkan berdasarkan tanggal terbaru dulu
+    google_filtered.sort(key=lambda a: a.get("_pub_dt") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    seen_titles = {}  # normalized_title -> item terbaru
+    dedup_removed = 0
+    unique_items = []
+
+    for art in google_filtered:
+        norm_title = _normalize_title_for_dedup(art.get("judul", ""))
+        if norm_title in seen_titles:
+            # Sudah ada, bandingkan tanggal
+            existing = seen_titles[norm_title]
+            if art.get("_pub_dt") and existing.get("_pub_dt"):
+                if art["_pub_dt"] > existing["_pub_dt"]:
+                    print(f"[SOURCES] google_news dedup removed (newer kept): {art.get('judul','')[:80]} (existing: {existing.get('judul','')[:60]})")
+                    dedup_removed += 1
+                    seen_titles[norm_title] = art
+                else:
+                    print(f"[SOURCES] google_news dedup removed (older): {art.get('judul','')[:80]}")
+                    dedup_removed += 1
+            else:
+                print(f"[SOURCES] google_news dedup removed (no date): {art.get('judul','')[:80]}")
+                dedup_removed += 1
+        else:
+            seen_titles[norm_title] = art
+            unique_items.append(art)
+
+    print(f"[SOURCES] google_news dedup: kept={len(unique_items)} removed={dedup_removed}")
+
+    # 2. Seleksi akhir: 8 item <30 hari terbaru + 4 item >=30 hari skor tertinggi
+    now_utc    = datetime.now(timezone.utc)
+    cutoff_30  = now_utc - timedelta(days=30)
+    cutoff_120 = now_utc - timedelta(days=GOOGLE_NEWS_MAX_AGE_DAYS)
+
+    def _domain_key(art: dict) -> str:
+        """Domain induk; item tanpa domain jelas dapat kunci unik sendiri."""
+        d = _domain_from_source(art.get("sumber", ""), art.get("judul", ""), art.get("source_url", ""))
+        if not d or d == "google_news_search":
+            return f"unknown:{art.get('id', '')}"
+        return d
+
+    def _domain_cap(domain: str) -> int:
+        return 3 if _is_kemenkum_domain(domain) else 2
+
+    pool = [a for a in unique_items if a.get("_pub_dt") and a["_pub_dt"] >= cutoff_120]
+    recent_pool = sorted(
+        [a for a in pool if a["_pub_dt"] >= cutoff_30],
+        key=lambda a: a["_pub_dt"],
+        reverse=True,
+    )
+    older_pool = sorted(
+        [a for a in pool if a["_pub_dt"] < cutoff_30],
+        key=lambda a: (-_priority_keywords(a.get("judul", "")), -a["_pub_dt"].timestamp()),
+    )
+
+    selected = []
+    selected_ids = set()
+    domain_counts = {}
+    drop_reason = {}
+
+    def _take(candidates: list, kuota: int) -> None:
+        for art in candidates:
+            if kuota <= 0:
+                return
+            if id(art) in selected_ids:
+                continue
+            domain = _domain_key(art)
+            if domain_counts.get(domain, 0) >= _domain_cap(domain):
+                drop_reason[id(art)] = f"domain_cap: _domain_cap({domain})={_domain_cap(domain)}"
+                continue
+            domain_counts[domain] = domain_counts.get(domain, 0) + 1
+            selected.append(art)
+            selected_ids.add(id(art))
+            kuota -= 1
+
+    _take(recent_pool, 8)
+    for art in recent_pool:
+        if id(art) not in selected_ids and id(art) not in drop_reason:
+            drop_reason[id(art)] = "kuota_habis: _take(recent_pool, 8)"
+
+    _take(older_pool, 4)
+    for art in older_pool:
+        if id(art) not in selected_ids and id(art) not in drop_reason:
+            drop_reason[id(art)] = "kuota_habis: _take(older_pool, 4)"
+
+    # Kekurangan slot di salah satu kategori diisi kandidat berikutnya dari pool
+    if len(selected) < 12:
+        sisa = [a for a in recent_pool + older_pool if id(a) not in selected_ids]
+        _take(sisa, 12 - len(selected))
+
+    for art in pool:
+        if id(art) not in selected_ids and id(art) not in drop_reason:
+            drop_reason[id(art)] = "tidak_masuk_pool: _take(sisa, 12 - len(selected))"
+
+    if len(pool) >= 12:
+        assert len(selected) == 12, f"seleksi akhir harus 12 item, dapat {len(selected)}"
+    for domain, count in domain_counts.items():
+        assert count <= _domain_cap(domain), f"domain {domain} melebihi batas: {count}"
+
+    # Kandidat skor tinggi yang tetap tidak masuk final: sebutkan aturannya
+    for art in pool:
+        prio = _priority_keywords(art.get("judul", ""))
+        if id(art) in selected_ids or prio < 3:
+            continue
+        print(
+            f"[SOURCES] google_news WARNING high_priority_dropped skor={prio} "
+            f"domain={_domain_key(art)} alasan={drop_reason.get(id(art), 'tidak diketahui')} "
+            f"judul={art.get('judul','')[:80]}"
+        )
+
+    # Log yang dibuang
+    for art in pool:
+        if id(art) in selected_ids:
+            continue
+        age = (now_utc - art["_pub_dt"]).days
+        print(
+            f"[SOURCES] google_news diversity_removed: {art.get('judul','')[:80]} | age={age} days "
+            f"| priority={_priority_keywords(art.get('judul',''))} | alasan={drop_reason.get(id(art), 'tidak diketahui')}"
+        )
+
+    google_filtered = selected
+
+    print(f"[SOURCES] google_news final_kept={len(google_filtered)} (recent={len([a for a in google_filtered if a.get('_pub_dt') and a['_pub_dt'] >= cutoff_30])}, older={len([a for a in google_filtered if a.get('_pub_dt') and a.get('_pub_dt') < cutoff_30 and a['_pub_dt'] >= datetime.now(timezone.utc) - timedelta(days=120)])})")
+
+    # Log 3 kolom untuk 12 item Google News: judul | pubDate mentah | parsed date
+    print(f"[SOURCES] google_news date_verification (judul | pubDate_raw | parsed):")
+    for art in google_filtered:
+        judul = art.get("judul", "")[:80]
+        pub_raw = art.get("tanggal", "no-date")
+        dt = art.get("_pub_dt")
+        parsed_str = dt.date().isoformat() if dt else "no-date"
+        print(f"[SOURCES]   {judul} | {pub_raw} | {parsed_str}")
+
+    # Gabungkan: portal_filtered + google_filtered
+    filtered = portal_filtered + google_filtered
+
+    print(f"[SOURCES] after_relevance_filter total_filtered={len(filtered)} (portal={len(portal_filtered)}, google={len(google_filtered)})")
+    if filtered:
+        top5 = [(f.get("relevansi", 0), f.get("judul", "")[:80], f.get("sumber", "")) for f in filtered[:5]]
+        for score, title, src in top5:
+            print(f"[SOURCES]   top relevansi={score:.4f} sumber={src} judul={title}")
+    # _pub_dt hanya dipakai untuk seleksi di dalam fungsi ini; datetime
+    # tidak JSON-serializable dan memecahkan cache + diversity window.
+    for art in filtered:
+        art.pop("_pub_dt", None)
+
     return {
         "articles": filtered,
         "total_unik": total_unik,
@@ -733,10 +1311,12 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
             "from_cache": bool,
         }
     """
+    print(f"[SOURCES] query_dikirim={topik!r} force_refresh={force_refresh} topik_asli={topik_asli!r}")
     # ── Cache lookup ──────────────────────────────────────────────────────
     if not force_refresh:
         cached = _get_cached(topik)
         if cached:
+            print(f"[SOURCES] cache_hit=true topik={topik!r}")
             cached["from_cache"] = True
             # ponytail: inject data_transparency if missing (old cache before field existed)
             if "data_transparency" not in cached:
@@ -775,8 +1355,11 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
                         "note": f"{rss_passed} artikel RSS relevan + data survei tersedia.",
                     }
             return cached
+        else:
+            print(f"[SOURCES] cache_hit=false topik={topik!r}")
     # ─────────────────────────────────────────────────────────────────────
 
+    print(f"[SOURCES] fetching_rss start topik={topik!r}")
     # Fetch berita dari RSS — 0 biaya, 0 API key
     fetch_result = fetch_berita(topik)
     berita = fetch_result["articles"]
@@ -911,7 +1494,8 @@ def cluster_articles_by_topic(
             vec = TfidfVectorizer(max_features=1000, ngram_range=(1, 2), sublinear_tf=True)
             matrix = vec.fit_transform(texts)
             sims = cosine_similarity(matrix)
-        except Exception:
+        except Exception as e:
+            print(f"[SOURCES] cluster_articles_by_topic tfidf error={type(e).__name__}: {e}, fallback_jaccard")
             sims = _jaccard_similarity_matrix(texts)
     else:
         sims = _jaccard_similarity_matrix(texts)
