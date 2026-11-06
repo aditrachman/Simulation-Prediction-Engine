@@ -286,11 +286,41 @@ const MeteranSikap = ({ sentimenAgr, daftarRonde }) => {
     return { nama, skorLabel, skorRonde, warna: WARNA_AGEN[i % WARNA_AGEN.length], awal, akhir, selisih: akhir - awal };
   });
   const isSingleRound = totalRonde === 1;
+
+  // Ringkasan simpel: berapa peserta di tiap kubu pada ronde terakhir.
+  const rondeTerakhir = daftarRonde?.[daftarRonde.length - 1];
+  const ringkasan = { positif: 0, netral: 0, negatif: 0 };
+  (rondeTerakhir?.agen ?? []).forEach((a) => {
+    const label = a.sentimen?.label;
+    if (ringkasan[label] !== undefined) ringkasan[label] += 1;
+  });
+  const totalPeserta = ringkasan.positif + ringkasan.netral + ringkasan.negatif;
+
   return (
     <section>
       {/* ANALOGI */}
       <p className="text-[12px] text-[#6c6a64] italic mb-6 leading-relaxed">{ANALOGI.meteranSikap}</p>
       <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>📊 <InfoTip istilah="meteranSikap" ukuran="xs" /></h2>
+
+      {totalPeserta > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <span className="text-[11px] font-medium text-[#6c6a64]">
+            Posisi akhir {totalPeserta} peserta:
+          </span>
+          <span className="rounded-[9999px] px-2.5 py-0.5 text-[11px] font-medium"
+            style={{ color: SENTIMEN.positif.warna, backgroundColor: SENTIMEN.positif.warna + "15", border: `1px solid ${SENTIMEN.positif.warna}30` }}>
+            👍 {ringkasan.positif} setuju
+          </span>
+          <span className="rounded-[9999px] px-2.5 py-0.5 text-[11px] font-medium"
+            style={{ color: SENTIMEN.netral.warna, backgroundColor: SENTIMEN.netral.warna + "15", border: `1px solid ${SENTIMEN.netral.warna}30` }}>
+            😐 {ringkasan.netral} netral
+          </span>
+          <span className="rounded-[9999px] px-2.5 py-0.5 text-[11px] font-medium"
+            style={{ color: SENTIMEN.negatif.warna, backgroundColor: SENTIMEN.negatif.warna + "15", border: `1px solid ${SENTIMEN.negatif.warna}30` }}>
+            👎 {ringkasan.negatif} tidak setuju
+          </span>
+        </div>
+      )}
       
       {/* LEGEND WARNA — biar orang awam paham arti warna */}
       <div className="flex flex-wrap items-center gap-3 mb-5 text-[11px] text-[#6c6a64]">
@@ -576,6 +606,8 @@ export default function HalamanSimulasi() {
   const [warningTopik,    setWarningTopik]    = useState(null);
   const [rondeAktif,      setRondeAktif]      = useState(0);
   const [ringkasanPenuh,  setRingkasanPenuh]  = useState(false);
+  const [errorSimulasi,   setErrorSimulasi]   = useState("");
+  const [caseStudyId,     setCaseStudyId]     = useState(null);
 
   const inputRef = useRef(null);
   const hasilRef = useRef(null);
@@ -587,6 +619,7 @@ export default function HalamanSimulasi() {
     setHasil(null);
     setRondeAktif(0);
     setRingkasanPenuh(false);
+    setErrorSimulasi("");
     try {
       const body = { topik: topik.trim(), kategori, jumlah_ronde: jumlahRonde, tier };
       const res = await fetch(`${apiBase}/start-simulation`, {
@@ -596,17 +629,18 @@ export default function HalamanSimulasi() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert("❌ " + (err.detail || "Permintaan gagal."));
+        setErrorSimulasi(err.detail || "Permintaan gagal.");
         setMemuat(false);
         return;
       }
       const data = await res.json();
       setHasil(bacaData(data, "Respons tidak berisi data."));
+      if (data.case_study_id) setCaseStudyId(data.case_study_id);
       if (data.warning) setWarningTopik(data.warning);
       else setWarningTopik(null);
       setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth" }), 200);
     } catch (err) {
-      alert("❌ " + (err.message || "Server tidak dapat dihubungi."));
+      setErrorSimulasi(err.message || "Server tidak dapat dihubungi.");
     }
     setMemuat(false);
   };
@@ -757,6 +791,13 @@ export default function HalamanSimulasi() {
               </div>
             </div>
           </div>
+
+          {errorSimulasi && (
+            <div className="mt-3 rounded-[10px] border border-[#c64545]/30 bg-[#c64545]/5 px-4 py-3 text-sm text-[#c64545]">
+              <strong className="font-semibold">Simulasi gagal dijalankan.</strong>{" "}
+              <span className="text-[#3d3d3a]">{errorSimulasi}</span>
+            </div>
+          )}
         </section>
 
       </div>{/* end shared wrapper */}
@@ -864,6 +905,13 @@ export default function HalamanSimulasi() {
               );
             })()}
           </div>
+
+          {hasil?.data_transparency && hasil.data_transparency.briefing_status !== "full" && (
+            <p className="text-[11px] text-[#6c6a64] leading-relaxed">
+              {hasil.data_transparency.briefing_status === "empty" ? "⚠ " : "📋 "}
+              {hasil.data_transparency.note}
+            </p>
+          )}
 
           {/* Ringkasan */}
           {ringkasan && (
@@ -991,13 +1039,23 @@ export default function HalamanSimulasi() {
                   {label}
                 </button>
               ))}
+              {caseStudyId && (
+                <a href={`/studi-kasus/${caseStudyId}`}
+                  className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#e6dfd8] bg-white px-3 py-1.5 text-xs font-medium text-[#3d3d3a] hover:border-[#cc785c]/40 hover:bg-[#cc785c]/5 hover:text-[#cc785c] transition-all">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  Lihat Studi Kasus
+                </a>
+              )}
             </div>
           </div>
 
           {/* Reset */}
           <div className="pb-6 text-center print-hidden">
             <button
-              onClick={() => { setHasil(null); setTopik(""); setRondeAktif(0); setTimeout(() => { inputRef.current?.focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }, 100); }}
+              onClick={() => { setHasil(null); setTopik(""); setRondeAktif(0); setCaseStudyId(null); setTimeout(() => { inputRef.current?.focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }, 100); }}
               className="text-xs text-[#6c6a64] underline underline-offset-4 hover:text-[#141413] transition">
             Mulai analisis baru
             </button>
