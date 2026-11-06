@@ -124,44 +124,6 @@ const beresinTeksAkhir = (teks) => {
     .replace(/Sentimen\s*akhir\s*netral\s*\(([^)]+)\)/gi, "Kelompok ini bersikap netral");
 };
 
-// ── Loading Overlay ──
-const LoadingOverlay = ({ tahap, onCancel }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm">
-    <div className="rounded-xl border border-[#e6dfd8] bg-white p-8 max-w-md w-full mx-4 shadow-xl">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="h-10 w-10 rounded-full border-3 border-[#e6dfd8] border-t-[#cc785c] animate-spin" />
-        <div>
-          <p className="text-lg font-semibold text-[#141413]">Sedang Memproses</p>
-          <p className="text-sm text-[#6c6a64]">Mohon tunggu, simulasi berjalan...</p>
-        </div>
-      </div>
-      <div className="space-y-3">
-        {[
-          "Menghubungkan ke server...",
-          "Mengirim topik ke simulasi...",
-          "Memproses respons server...",
-          "Menganalisis hasil simulasi..."
-        ].map((step, i) => (
-          <div key={step} className="flex items-center gap-3 text-sm">
-            <div className={`h-2 w-2 rounded-full transition-colors ${
-              tahap === step ? "bg-[#cc785c] animate-pulse" :
-              tahap === "" || (i > 0 && tahap !== step && !tahap.startsWith(step.split(" ")[0])) ? "bg-[#e6dfd8]" : "bg-[#1b8a4a]"
-            }`} />
-            <span className={`text-[#3d3d3a] ${tahap === step ? "font-medium text-[#cc785c]" : "text-[#6c6a64]"}`}>
-              {step}
-            </span>
-          </div>
-        ))}
-      </div>
-      {onCancel && (
-        <button onClick={onCancel} className="mt-6 w-full rounded-md border border-[#e6dfd8] bg-white px-4 py-2 text-sm font-medium text-[#6c6a64] hover:bg-[#efe9de] transition">
-          Batalkan
-        </button>
-      )}
-    </div>
-  </div>
-);
-
 // ── Section labels ──
 const SECTION_LABEL = {
   insight: "Kesimpulan",
@@ -173,6 +135,56 @@ const SECTION_LABEL = {
   meteranSikap: "Perubahan Sikap",
   transkrip: "Catatan Diskusi",
   wordcloud: "Kata Kunci",
+};
+
+// ── Loading Overlay ──
+const LoadingOverlay = ({ tahap, onCancel }) => {
+  const steps = [
+    "Menghubungkan ke server...",
+    "Mengirim topik ke simulasi...",
+    "Memproses respons server...",
+    "Menganalisis hasil simulasi..."
+  ];
+  const getStepColor = (step, i) => {
+    if (tahap === step) return "bg-[#cc785c] animate-pulse";
+    if (tahap === "" || (i > 0 && tahap !== step && !tahap.startsWith(step.split(" ")[0]))) return "bg-[#e6dfd8]";
+    return "bg-[#1b8a4a]";
+  };
+  const getStepTextColor = (step) => {
+    if (tahap === step) return "font-medium text-[#cc785c]";
+    return "text-[#6c6a64]";
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm">
+      <div className="rounded-xl border border-[#e6dfd8] bg-white p-8 max-w-md w-full mx-4 shadow-xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-10 w-10 rounded-full border-3 border-[#e6dfd8] border-t-[#cc785c] animate-spin" />
+          <div>
+            <p className="text-lg font-semibold text-[#141413]">Sedang Memproses</p>
+            <p className="text-sm text-[#6c6a64]">Mohon tunggu, simulasi berjalan...</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {steps.map((step, i) => (
+            <div key={step} className="flex items-center gap-3 text-sm">
+              <div className={`h-2 w-2 rounded-full transition-colors ${
+                tahap === step ? "bg-[#cc785c] animate-pulse" :
+                tahap === "" || (i > 0 && tahap !== step && !tahap.startsWith(step.split(" ")[0])) ? "bg-[#e6dfd8]" : "bg-[#1b8a4a]"
+              }`} />
+              <span className={`text-[#3d3d3a] ${tahap === step ? "font-medium text-[#cc785c]" : "text-[#6c6a64]"}`}>
+                {step}
+              </span>
+            </div>
+          ))}
+        </div>
+        {onCancel && (
+          <button onClick={onCancel} className="mt-6 w-full rounded-md border border-[#e6dfd8] bg-white px-4 py-2 text-sm font-medium text-[#6c6a64] hover:bg-[#efe9de] transition">
+            Batalkan
+          </button>
+        )}
+      </div>
+    </div>
+  );
 };
 
 // ── Helpers ──
