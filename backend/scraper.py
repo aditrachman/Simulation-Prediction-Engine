@@ -7,6 +7,7 @@
 
 import re
 import time
+import traceback
 import json
 import hashlib
 import math
@@ -496,7 +497,7 @@ def get_cache_stats() -> dict:
 # HTTP helper
 # ---------------------------------------------------------------------------
 
-def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT) -> Optional[str]:
+def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT, errors: list | None = None) -> Optional[str]:
     """Fetch URL, return body string atau None jika gagal."""
     try:
         req = urllib.request.Request(url, headers=headers or HEADERS)
@@ -508,6 +509,9 @@ def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT) -> Optional[s
                 return raw.decode("latin-1", errors="replace")
     except Exception as e:
         print(f"[SOURCES] fetch_exception url={url} error={type(e).__name__}: {e}")
+        traceback.print_exc()
+        if errors is not None:
+            errors.append(f"{url}: {type(e).__name__}: {e}")
         return None
 
 
@@ -750,18 +754,65 @@ _WEAK_ANCHOR_WORDS = frozenset({
 })
 
 
+def _stem_id(kata: str) -> str:
+    """Stemming ringan untuk pencocokan kata kunci rule-based tanpa dependency baru.
+    Buang awalan me-/meng-/men-/mem-/di-/ke-/pe-/per-/ber-/ter- dan akhiran -kan/-an/-i/-nya.
+    Panjang akar minimal 3 huruf.
+    """
+    kata = kata.lower().strip()
+    if len(kata) < 3:
+        return kata
+
+    stemmed = kata
+    
+    # 1. Buang awalan
+    if stemmed.startswith(("meng", "mem", "men", "per", "ber", "ter")):
+        if stemmed.startswith("men") and len(stemmed) > 3 and stemmed[3] in "aeiou":
+            stemmed = stemmed[2:]  # me- + n...
+        elif stemmed.startswith("meng"):
+            stemmed = stemmed[4:]
+        elif stemmed.startswith(("mem", "men", "per", "ber", "ter")):
+            stemmed = stemmed[3:]
+    elif stemmed.startswith(("me", "di", "ke", "pe")):
+        stemmed = stemmed[2:]
+
+    # 2. Buang akhiran: -nya, -kan, -an, -i
+    if stemmed.endswith("nya") and len(stemmed) - 3 >= 3:
+        stemmed = stemmed[:-3]
+    elif stemmed.endswith("kan") and len(stemmed) - 3 >= 3:
+        if stemmed.endswith("aikan"):
+            stemmed = stemmed[:-2]  # -an
+        else:
+            stemmed = stemmed[:-3]
+    elif stemmed.endswith("an") and len(stemmed) - 2 >= 3:
+        stemmed = stemmed[:-2]
+    elif stemmed.endswith("i") and len(stemmed) - 1 >= 3:
+        stemmed = stemmed[:-1]
+
+    return stemmed if len(stemmed) >= 3 else kata
+
+
+# Kata yang sering muncul di berita promo dan bukan penanda topik.
+_ANCHOR_BLOCKLIST = frozenset({"pendaftaran", "daftar", "ndaftar"})
+
+
 def _extract_anchor_keywords(query_keywords: set[str]) -> set[str]:
     """Ambil kata kunci jangkar (anchor) dari query keywords.
     Jangkar = kata kunci yang cukup spesifik, BUKAN generik/lemah.
-    Filter: tidak ada di _GENERIC_TOPIC_WORDS, tidak ada di _WEAK_ANCHOR_WORDS,
-    panjang >= 4, bukan angka.
+    Filter: bentuk asli maupun akar stemming tidak boleh ada di daftar kata
+    umum/lemah, panjang akar >= 4, bukan angka.
     """
     anchors = set()
     for kw in query_keywords:
-        kw_clean = kw.strip().lower()
+        kw_raw = kw.strip().lower()
+        kw_clean = _stem_id(kw_raw)
         if (len(kw_clean) >= 4
+                and kw_raw not in _GENERIC_TOPIC_WORDS
                 and kw_clean not in _GENERIC_TOPIC_WORDS
+                and kw_raw not in _WEAK_ANCHOR_WORDS
                 and kw_clean not in _WEAK_ANCHOR_WORDS
+                and kw_raw not in _ANCHOR_BLOCKLIST
+                and kw_clean not in _ANCHOR_BLOCKLIST
                 and not kw_clean.isdigit()):
             anchors.add(kw_clean)
     return anchors
@@ -906,7 +957,7 @@ def _hitung_relevansi_keyword(topik: str, items: list[dict], maks: int = 15) -> 
 # Fetch News (RSS)
 # ---------------------------------------------------------------------------
 
-def fetch_google_news_search(query: str) -> list[dict]:
+def fetch_google_news_search(query: str, errors: list | None = None) -> list[dict]:
     """
     Ambil hasil Google News RSS search untuk satu query.
     URL: https://news.google.com/rss/search?q=<QUERY>&hl=id&gl=ID&ceid=ID:id
@@ -917,7 +968,7 @@ def fetch_google_news_search(query: str) -> list[dict]:
     encoded_query = urllib.parse.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}&hl=id&gl=ID&ceid=ID:id"
     print(f"[SOURCES] google_news_search query={query!r} url={url}")
-    xml = _fetch(url)
+    xml = _fetch(url, errors=errors)
     if not xml:
         print(f"[SOURCES] google_news_search fetch_failed query={query!r}")
         return []
@@ -937,20 +988,24 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     Filter relevan dengan TF-IDF (fallback keyword counting).
 
     Returns dict:
-        {"articles": list[dict], "total_unik": int, "total_filtered": int}
+        {"articles": list[dict], "total_unik": int, "total_filtered": int,
+         "sumber_status": str, "sumber_pesan": str}
           articles         — artikel yg lolos threshold (sorted by relevance desc)
           total_unik       — total semua kandidat UNIK sebelum filter
           total_filtered   — jumlah artikel yg lolos threshold
+          sumber_status    — "ok" | "kosong" | "gagal"
+          sumber_pesan     — pesan singkat kondisi sumber
     """
     print(f"[SOURCES] fetch_berita start topik={topik!r} sources={len(RSS_SOURCES)}")
     semua = []
     raw_counts = {}
+    errors: list[str] = []
 
     # 1. Portal RSS tradisional
     for src in RSS_SOURCES:
         url = src["url"]
         print(f"[SOURCES] fetching url={url} sumber={src['nama']}")
-        xml = _fetch(url)
+        xml = _fetch(url, errors=errors)
         if not xml:
             print(f"[SOURCES] fetch_failed url={url} sumber={src['nama']}")
             continue
@@ -963,7 +1018,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     queries = buat_query_pencarian(topik)
     google_items = []
     for query in queries:
-        g_items = fetch_google_news_search(query)
+        g_items = fetch_google_news_search(query, errors=errors)
         google_items.extend(g_items)
     if google_items:
         raw_counts["google_news_search"] = len(google_items)
@@ -983,7 +1038,15 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     total_unik = len(unik)
     print(f"[SOURCES] after_dedup unik={total_unik}")
     if not unik:
-        return {"articles": [], "total_unik": 0, "total_filtered": 0}
+        if errors:
+            sumber_status, sumber_pesan = "gagal", f"{len(errors)} sumber gagal: {errors[0][:160]}"
+        else:
+            sumber_status, sumber_pesan = "kosong", "Tidak ada artikel dari sumber mana pun."
+        print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan}")
+        return {
+            "articles": [], "total_unik": 0, "total_filtered": 0,
+            "sumber_status": sumber_status, "sumber_pesan": sumber_pesan,
+        }
 
     # Pisahkan item portal dan google_news_search
     portal_items = [a for a in unik if a.get("sumber") != "google_news_search"]
@@ -1041,28 +1104,40 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     removed_no_anchor = 0
     removed_old = 0
     removed_no_kw = 0
+    tanggal_map: dict[int, Optional[datetime]] = {}
+
+    def _stem_tokens(text: str) -> set[str]:
+        """Token judul dinormalkan ke akar supaya 'kenaikan' cocok dengan 'naik'."""
+        return {_stem_id(tok) for tok in re.findall(r"[a-z0-9]+", text.lower())}
 
     for art in google_items:
-        judul_lower = art.get("judul", "").lower()
+        judul_stem = _stem_tokens(art.get("judul", ""))
 
-        # Cek minimal 1 anchor keyword
-        has_anchor = any(ak in judul_lower for ak in anchor_keywords) if anchor_keywords else False
+        # Cek minimal 1 anchor keyword (anchor sudah berbentuk akar)
+        has_anchor = bool(anchor_keywords & judul_stem)
 
-        # Cek minimal 2 query keywords total
-        kw_matches = [kw for kw in query_keywords if kw in judul_lower]
-        kw_count = len(kw_matches)
+        # Aturan per-query: minimal ceil(jumlah kata kunci query / 2) harus cocok
+        q_kws = [kw for kw in art.get("query_origin", "").lower().split() if len(kw) > 2]
+        q_stems = {_stem_id(kw) for kw in q_kws}
+        matched = q_stems & judul_stem
+        min_kw = math.ceil(len(q_kws) / 2) if q_kws else 0
 
-        # Parse tanggal
+        # Parse tanggal; yang disimpan di artikel hanya string ISO
         pub_dt = _parse_rss_date(art.get("tanggal", ""))
-        art["_pub_dt"] = pub_dt
+        tanggal_map[id(art)] = pub_dt
+        art["tanggal_iso"] = pub_dt.isoformat() if pub_dt else ""
         is_recent = pub_dt is not None and pub_dt >= cutoff_dt
 
         if not has_anchor:
-            print(f"[SOURCES] google_news removed (no anchor) judul={art.get('judul','')[:80]}")
+            print(f"[SOURCES] google_news removed (no anchor) query={art.get('query_origin','')!r} judul={art.get('judul','')[:80]}")
             removed_no_anchor += 1
             continue
-        if kw_count < 2:
-            print(f"[SOURCES] google_news removed (kw_count={kw_count} < 2) judul={art.get('judul','')[:80]}")
+        if len(matched) < min_kw:
+            print(
+                f"[SOURCES] google_news removed (kw {len(matched)}/{min_kw}) "
+                f"query={art.get('query_origin','')!r} cocok={sorted(matched)} "
+                f"judul={art.get('judul','')[:80]}"
+            )
             removed_no_kw += 1
             continue
         if not is_recent:
@@ -1106,7 +1181,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
 
     # 1. Dedup berdasarkan judul yang dinormalisasi
     # Urutkan berdasarkan tanggal terbaru dulu
-    google_filtered.sort(key=lambda a: a.get("_pub_dt") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    google_filtered.sort(key=lambda a: tanggal_map.get(id(a)) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
     seen_titles = {}  # normalized_title -> item terbaru
     dedup_removed = 0
@@ -1117,8 +1192,10 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         if norm_title in seen_titles:
             # Sudah ada, bandingkan tanggal
             existing = seen_titles[norm_title]
-            if art.get("_pub_dt") and existing.get("_pub_dt"):
-                if art["_pub_dt"] > existing["_pub_dt"]:
+            art_dt = tanggal_map.get(id(art))
+            existing_dt = tanggal_map.get(id(existing))
+            if art_dt and existing_dt:
+                if art_dt > existing_dt:
                     print(f"[SOURCES] google_news dedup removed (newer kept): {art.get('judul','')[:80]} (existing: {existing.get('judul','')[:60]})")
                     dedup_removed += 1
                     seen_titles[norm_title] = art
@@ -1149,15 +1226,15 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     def _domain_cap(domain: str) -> int:
         return 3 if _is_kemenkum_domain(domain) else 2
 
-    pool = [a for a in unique_items if a.get("_pub_dt") and a["_pub_dt"] >= cutoff_120]
+    pool = [a for a in unique_items if tanggal_map.get(id(a)) and tanggal_map[id(a)] >= cutoff_120]
     recent_pool = sorted(
-        [a for a in pool if a["_pub_dt"] >= cutoff_30],
-        key=lambda a: a["_pub_dt"],
+        [a for a in pool if tanggal_map[id(a)] >= cutoff_30],
+        key=lambda a: tanggal_map[id(a)],
         reverse=True,
     )
     older_pool = sorted(
-        [a for a in pool if a["_pub_dt"] < cutoff_30],
-        key=lambda a: (-_priority_keywords(a.get("judul", "")), -a["_pub_dt"].timestamp()),
+        [a for a in pool if tanggal_map[id(a)] < cutoff_30],
+        key=lambda a: (-_priority_keywords(a.get("judul", "")), -tanggal_map[id(a)].timestamp()),
     )
 
     selected = []
@@ -1219,7 +1296,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     for art in pool:
         if id(art) in selected_ids:
             continue
-        age = (now_utc - art["_pub_dt"]).days
+        age = (now_utc - tanggal_map[id(art)]).days
         print(
             f"[SOURCES] google_news diversity_removed: {art.get('judul','')[:80]} | age={age} days "
             f"| priority={_priority_keywords(art.get('judul',''))} | alasan={drop_reason.get(id(art), 'tidak diketahui')}"
@@ -1227,16 +1304,24 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
 
     google_filtered = selected
 
-    print(f"[SOURCES] google_news final_kept={len(google_filtered)} (recent={len([a for a in google_filtered if a.get('_pub_dt') and a['_pub_dt'] >= cutoff_30])}, older={len([a for a in google_filtered if a.get('_pub_dt') and a.get('_pub_dt') < cutoff_30 and a['_pub_dt'] >= datetime.now(timezone.utc) - timedelta(days=120)])})")
+    recent_kept = len([a for a in google_filtered if tanggal_map[id(a)] >= cutoff_30])
+    older_kept = len([a for a in google_filtered if cutoff_120 <= tanggal_map[id(a)] < cutoff_30])
+    print(f"[SOURCES] google_news final_kept={len(google_filtered)} (recent={recent_kept}, older={older_kept})")
 
-    # Log 3 kolom untuk 12 item Google News: judul | pubDate mentah | parsed date
+    # Log 3 kolom untuk 12 item Google News: judul | pubDate mentah | ISO
     print(f"[SOURCES] google_news date_verification (judul | pubDate_raw | parsed):")
     for art in google_filtered:
         judul = art.get("judul", "")[:80]
         pub_raw = art.get("tanggal", "no-date")
-        dt = art.get("_pub_dt")
+        dt = tanggal_map.get(id(art))
         parsed_str = dt.date().isoformat() if dt else "no-date"
         print(f"[SOURCES]   {judul} | {pub_raw} | {parsed_str}")
+
+    # Artikel portal juga diberi tanggal ISO agar payload seragam & JSON-safe
+    for art in portal_filtered:
+        if not art.get("tanggal_iso"):
+            dt = _parse_rss_date(art.get("tanggal", ""))
+            art["tanggal_iso"] = dt.isoformat() if dt else ""
 
     # Gabungkan: portal_filtered + google_filtered
     filtered = portal_filtered + google_filtered
@@ -1246,15 +1331,23 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         top5 = [(f.get("relevansi", 0), f.get("judul", "")[:80], f.get("sumber", "")) for f in filtered[:5]]
         for score, title, src in top5:
             print(f"[SOURCES]   top relevansi={score:.4f} sumber={src} judul={title}")
-    # _pub_dt hanya dipakai untuk seleksi di dalam fungsi ini; datetime
-    # tidak JSON-serializable dan memecahkan cache + diversity window.
-    for art in filtered:
-        art.pop("_pub_dt", None)
+    if errors:
+        sumber_status = "gagal"
+        sumber_pesan = f"{len(errors)} sumber gagal: {errors[0][:160]}"
+    elif not filtered:
+        sumber_status = "kosong"
+        sumber_pesan = "Sumber berhasil diambil tetapi tidak ada artikel yang lolos filter."
+    else:
+        sumber_status = "ok"
+        sumber_pesan = f"{len(filtered)} artikel lolos filter."
+    print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan}")
 
     return {
         "articles": filtered,
         "total_unik": total_unik,
         "total_filtered": len(filtered),
+        "sumber_status": sumber_status,
+        "sumber_pesan": sumber_pesan,
     }
 
 
@@ -1318,6 +1411,10 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
         if cached:
             print(f"[SOURCES] cache_hit=true topik={topik!r}")
             cached["from_cache"] = True
+            # Cache lama belum punya sumber_status — turunkan dari isi berita
+            if "sumber_status" not in cached:
+                cached["sumber_status"] = "ok" if cached.get("berita") else "kosong"
+                cached["sumber_pesan"] = ""
             # ponytail: inject data_transparency if missing (old cache before field existed)
             if "data_transparency" not in cached:
                 rss_passed = len(cached.get("berita", []))
@@ -1365,6 +1462,8 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
     berita = fetch_result["articles"]
     total_unik = fetch_result["total_unik"]
     total_filtered = fetch_result["total_filtered"]
+    sumber_status = fetch_result.get("sumber_status", "")
+    sumber_pesan = fetch_result.get("sumber_pesan", "")
 
     print(f"[relevance-debug] topik={topik!r} | {total_unik} unik, {total_filtered} lolos threshold (>= {SIMILARITY_THRESHOLD:.2f})")
     for b in berita[:5]:
@@ -1449,6 +1548,8 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
         "from_cache":          False,
         "polling_reference":   polling,
         "data_transparency":   data_transparency,
+        "sumber_status":       sumber_status,
+        "sumber_pesan":        sumber_pesan,
     }
 
     # ── Simpan ke cache ───────────────────────────────────────────────────
