@@ -36,7 +36,8 @@ RSS_SOURCES = [
     {"nama": "Detik",         "url": "https://news.detik.com/rss",                           "bahasa": "id"},
     # ponytail: BBC Indonesia URL changed: indonesian → indonesia (no 'n')
     {"nama": "BBC Indonesia", "url": "https://feeds.bbci.co.uk/indonesia/rss.xml",           "bahasa": "id"},
-    {"nama": "Tempo",         "url": "https://rss.tempo.co/nasional",                        "bahasa": "id"},
+    # 403 per 2026-11-07 — dimatikan, bukan dihapus, biar gampang diaktifkan lagi
+    {"nama": "Tempo",         "url": "https://rss.tempo.co/nasional",                        "bahasa": "id", "enabled": False},
     {"nama": "Antara",        "url": "https://www.antaranews.com/rss/terkini.xml",           "bahasa": "id"},
     {"nama": "CNN Indonesia", "url": "https://www.cnnindonesia.com/rss",                     "bahasa": "id"},
     # Feed ekonomi — topik pajak/upah/UMKM jarang muncul di feed umum.
@@ -515,6 +516,18 @@ def _fetch(url: str, headers: dict = None, timeout: int = TIMEOUT, errors: list 
         return None
 
 
+def _ringkas_error(err: str) -> str:
+    """Ringkas pesan error fetch jadi bentuk pendek 'host: HTTP 403'."""
+    host = re.sub(r"^https?://", "", err).split("/", 1)[0].split(": ", 1)[0].rstrip(":") or "sumber"
+    status = re.search(r"HTTP Error (\d+)", err)
+    if status:
+        return f"{host}: HTTP {status.group(1)}"
+    tipe = re.search(r":\s*([A-Za-z_]\w*(?:Error|Exception)):", err)
+    if tipe:
+        return f"{host}: {tipe.group(1)}"
+    return f"{host}: gagal"
+
+
 def _clean_html(text: str) -> str:
     """Hapus tag HTML dan normalisasi whitespace."""
     if not text:
@@ -989,20 +1002,33 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
 
     Returns dict:
         {"articles": list[dict], "total_unik": int, "total_filtered": int,
-         "sumber_status": str, "sumber_pesan": str}
-          articles         — artikel yg lolos threshold (sorted by relevance desc)
-          total_unik       — total semua kandidat UNIK sebelum filter
-          total_filtered   — jumlah artikel yg lolos threshold
-          sumber_status    — "ok" | "kosong" | "gagal"
-          sumber_pesan     — pesan singkat kondisi sumber
+         "sumber_status": str, "sumber_pesan": str, "sumber_peringatan": list[str]}
+          articles          — artikel yg lolos threshold (sorted by relevance desc)
+          total_unik        — total semua kandidat UNIK sebelum filter
+          total_filtered    — jumlah artikel yg lolos threshold
+          sumber_status     — "ok" | "kosong" | "gagal"
+          sumber_pesan      — pesan singkat kondisi sumber
+          sumber_peringatan — ringkasan sumber yang gagal, mis. ["rss.tempo.co: HTTP 403"]
     """
     print(f"[SOURCES] fetch_berita start topik={topik!r} sources={len(RSS_SOURCES)}")
     semua = []
     raw_counts = {}
     errors: list[str] = []
 
+    def _status_sumber(jumlah_artikel: int) -> tuple[str, str, list[str]]:
+        """Artikel final menang atas kegagalan sebagian sumber."""
+        peringatan = [_ringkas_error(e) for e in errors]
+        if jumlah_artikel > 0:
+            return "ok", f"{jumlah_artikel} artikel lolos filter.", peringatan
+        if errors:
+            return "gagal", f"{len(errors)} sumber gagal: {errors[0][:160]}", peringatan
+        return "kosong", "Sumber berhasil diambil tetapi tidak ada artikel yang lolos filter.", peringatan
+
     # 1. Portal RSS tradisional
     for src in RSS_SOURCES:
+        if not src.get("enabled", True):
+            print(f"[SOURCES] skip_disabled sumber={src['nama']} url={src['url']}")
+            continue
         url = src["url"]
         print(f"[SOURCES] fetching url={url} sumber={src['nama']}")
         xml = _fetch(url, errors=errors)
@@ -1038,14 +1064,13 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     total_unik = len(unik)
     print(f"[SOURCES] after_dedup unik={total_unik}")
     if not unik:
-        if errors:
-            sumber_status, sumber_pesan = "gagal", f"{len(errors)} sumber gagal: {errors[0][:160]}"
-        else:
-            sumber_status, sumber_pesan = "kosong", "Tidak ada artikel dari sumber mana pun."
-        print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan}")
+        sumber_status, sumber_pesan, sumber_peringatan = _status_sumber(0)
+        print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan} peringatan={sumber_peringatan}")
         return {
             "articles": [], "total_unik": 0, "total_filtered": 0,
-            "sumber_status": sumber_status, "sumber_pesan": sumber_pesan,
+            "sumber_status": sumber_status,
+            "sumber_pesan": sumber_pesan,
+            "sumber_peringatan": sumber_peringatan,
         }
 
     # Pisahkan item portal dan google_news_search
@@ -1331,16 +1356,8 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         top5 = [(f.get("relevansi", 0), f.get("judul", "")[:80], f.get("sumber", "")) for f in filtered[:5]]
         for score, title, src in top5:
             print(f"[SOURCES]   top relevansi={score:.4f} sumber={src} judul={title}")
-    if errors:
-        sumber_status = "gagal"
-        sumber_pesan = f"{len(errors)} sumber gagal: {errors[0][:160]}"
-    elif not filtered:
-        sumber_status = "kosong"
-        sumber_pesan = "Sumber berhasil diambil tetapi tidak ada artikel yang lolos filter."
-    else:
-        sumber_status = "ok"
-        sumber_pesan = f"{len(filtered)} artikel lolos filter."
-    print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan}")
+    sumber_status, sumber_pesan, sumber_peringatan = _status_sumber(len(filtered))
+    print(f"[SOURCES] sumber_status={sumber_status} pesan={sumber_pesan} peringatan={sumber_peringatan}")
 
     return {
         "articles": filtered,
@@ -1348,6 +1365,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         "total_filtered": len(filtered),
         "sumber_status": sumber_status,
         "sumber_pesan": sumber_pesan,
+        "sumber_peringatan": sumber_peringatan,
     }
 
 
@@ -1411,10 +1429,11 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
         if cached:
             print(f"[SOURCES] cache_hit=true topik={topik!r}")
             cached["from_cache"] = True
-            # Cache lama belum punya sumber_status — turunkan dari isi berita
+            # Cache lama belum punya sumber_status/sumber_peringatan
             if "sumber_status" not in cached:
                 cached["sumber_status"] = "ok" if cached.get("berita") else "kosong"
                 cached["sumber_pesan"] = ""
+            cached.setdefault("sumber_peringatan", [])
             # ponytail: inject data_transparency if missing (old cache before field existed)
             if "data_transparency" not in cached:
                 rss_passed = len(cached.get("berita", []))
@@ -1464,6 +1483,7 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
     total_filtered = fetch_result["total_filtered"]
     sumber_status = fetch_result.get("sumber_status", "")
     sumber_pesan = fetch_result.get("sumber_pesan", "")
+    sumber_peringatan = fetch_result.get("sumber_peringatan", [])
 
     print(f"[relevance-debug] topik={topik!r} | {total_unik} unik, {total_filtered} lolos threshold (>= {SIMILARITY_THRESHOLD:.2f})")
     for b in berita[:5]:
@@ -1550,6 +1570,7 @@ def ambil_konteks_real(topik: str, force_refresh: bool = False, topik_asli: str 
         "data_transparency":   data_transparency,
         "sumber_status":       sumber_status,
         "sumber_pesan":        sumber_pesan,
+        "sumber_peringatan":   sumber_peringatan,
     }
 
     # ── Simpan ke cache ───────────────────────────────────────────────────

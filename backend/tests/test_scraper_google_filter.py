@@ -103,6 +103,7 @@ def test_sumber_status_gagal(monkeypatch):
 
     assert hasil["sumber_status"] == "gagal"
     assert "URLError" in hasil["sumber_pesan"]
+    assert hasil["sumber_peringatan"] == ["x.invalid: URLError"]
     assert hasil["articles"] == []
 
 
@@ -114,4 +115,41 @@ def test_sumber_status_kosong(monkeypatch):
     hasil = scraper.fetch_berita("topik apa saja")
 
     assert hasil["sumber_status"] == "kosong"
+    assert hasil["sumber_peringatan"] == []
     assert hasil["articles"] == []
+
+
+def test_ok_walau_ada_sumber_gagal(monkeypatch):
+    monkeypatch.setattr(scraper, "RSS_SOURCES", [{"nama": "X", "url": "http://x.invalid", "bahasa": "id"}])
+    monkeypatch.setattr(scraper, "buat_query_pencarian", lambda topik: list(QUERIES))
+    monkeypatch.setattr(
+        scraper, "fetch_google_news_search",
+        lambda query, errors=None: [_artikel("PTKP naik tahun depan", query, "detik.com")],
+    )
+
+    def fake_fetch(url, headers=None, timeout=30, errors=None):
+        if errors is not None:
+            errors.append(f"{url}: URLError: boom")
+        return None
+
+    monkeypatch.setattr(scraper, "_fetch", fake_fetch)
+    hasil = scraper.fetch_berita(TOPIK)
+
+    assert hasil["sumber_status"] == "ok"
+    assert hasil["sumber_peringatan"] == ["x.invalid: URLError"]
+    assert hasil["sumber_pesan"] == "1 artikel lolos filter."
+    assert hasil["articles"]
+
+
+def test_sumber_disabled_dilewati(monkeypatch, capsys):
+    dipanggil = []
+    monkeypatch.setattr(scraper, "RSS_SOURCES", [
+        {"nama": "Tempo", "url": "https://rss.tempo.co/nasional", "bahasa": "id", "enabled": False},
+    ])
+    monkeypatch.setattr(scraper, "buat_query_pencarian", lambda topik: [])
+    monkeypatch.setattr(scraper, "_fetch", lambda *a, **k: dipanggil.append(1))
+
+    scraper.fetch_berita("topik apa saja")
+
+    assert dipanggil == []
+    assert "skip_disabled" in capsys.readouterr().out
