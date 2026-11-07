@@ -48,9 +48,58 @@ function bacaData(payload, pesan = "Data tidak ditemukan.") {
   if (!payload || typeof payload !== "object" || !payload.data)
     throw new Error(payload?.detail || payload?.message || pesan);
   const hasil = payload.data;
-  if (payload.konteks_real?.data_transparency)
-    hasil.data_transparency = payload.konteks_real.data_transparency;
+  const konteks = payload.konteks_real ?? {};
+  if (konteks.data_transparency) hasil.data_transparency = konteks.data_transparency;
+  // Angka sumber hanya ada di konteks_real, bukan di dalam data hasil.
+  hasil.ringkas_sumber = {
+    total: konteks.total_sumber ?? hasil.data_transparency?.rss_articles_passed_threshold ?? 0,
+    ditemukan: hasil.data_transparency?.rss_articles_found ?? null,
+    lolos: hasil.data_transparency?.rss_articles_passed_threshold ?? null,
+    polling: hasil.data_transparency?.polling_reference_matched ?? false,
+    status: hasil.data_transparency?.briefing_status ?? "",
+    catatan: hasil.data_transparency?.note ?? "",
+    reddit: Array.isArray(konteks.reddit) ? konteks.reddit.length : 0,
+    // Status jalur sumber; null berarti cache lama tanpa field ini.
+    status_sumber: konteks.sumber_status ?? null,
+    pesan_sumber: konteks.sumber_pesan ?? "",
+    peringatan: Array.isArray(konteks.sumber_peringatan) ? konteks.sumber_peringatan : [],
+    sumber_berita: (konteks.berita ?? []).map(b => ({
+      judul: b?.judul ?? "",
+      media: mediaSumber(b),
+      tanggal: tanggalRingkas(b?.tanggal_iso),
+      link: b?.link ?? "",
+    })).filter(b => b.judul),
+  };
   return hasil;
+}
+
+function mediaSumber(artikel) {
+  if (artikel?.sumber && artikel.sumber !== "google_news_search") return artikel.sumber;
+  if (!artikel?.source_url) return "Sumber tidak diketahui";
+  try {
+    return new URL(artikel.source_url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Sumber tidak diketahui";
+  }
+}
+
+// "2026-11-06T14:58:29+00:00" -> "6 Nov 2026"
+function tanggalRingkas(iso) {
+  const teks = String(iso ?? "");
+  const cocok = teks.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  if (cocok) return `${Number(cocok[3])} ${bulan[Number(cocok[2]) - 1]} ${cocok[1]}`;
+  const t = new Date(teks);
+  if (Number.isNaN(t.getTime())) return "";
+  return `${t.getUTCDate()} ${bulan[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+}
+
+// "finance.detik.com: TimeoutError" -> "finance.detik.com (timeout)"
+function ringkasPeringatan(teks) {
+  const [host, ...sisa] = String(teks).split(":");
+  const alasan = sisa.join(":").trim();
+  const label = /timeout/i.test(alasan) ? "timeout" : (alasan || "gagal dibuka");
+  return `${host.trim()} (${label})`;
 }
 
 // ── Badge ──
@@ -131,6 +180,24 @@ const beresinTeksAkhir = (teks) => {
     .replace(/Sentimen\s*akhir\s*negatif\s*\(([^)]+)\)/gi, "Kelompok ini menolak program tersebut")
     .replace(/Sentimen\s*akhir\s*positif\s*\(([^)]+)\)/gi, "Kelompok ini mendukung program tersebut")
     .replace(/Sentimen\s*akhir\s*netral\s*\(([^)]+)\)/gi, "Kelompok ini bersikap netral");
+};
+
+// Kalimat pertama cara_pendekatan cuma mengulang nama dan angka pengaruh.
+const aksiPendekatan = (teks, nama) => {
+  const isi = (teks ?? "").trim();
+  if (!isi || !nama || !isi.startsWith(nama)) return isi;
+  const titik = isi.indexOf(". ");
+  return titik > 0 ? isi.slice(titik + 2) : isi;
+};
+
+const persen = (n) => (typeof n === "number" ? `${Math.round(n * 100)}%` : null);
+
+const sikapDariAlasan = (teks) => {
+  const cocok = String(teks ?? "").match(/-?\d+(?:[.,]\d+)?/);
+  if (!cocok) return null;
+  const n = parseFloat(cocok[0].replace(",", "."));
+  if (Number.isNaN(n)) return null;
+  return n >= 0.25 ? "positif" : n <= -0.25 ? "negatif" : "netral";
 };
 
 // ── Section labels ──
@@ -317,168 +384,98 @@ const TranskripRisalah = ({ daftarRonde, rondeAktif, setRondeAktif }) => {
   );
 };
 
-// ── Static Bar Chart ──
-const StaticBarChart = ({ meterData }) => (
-  <div className="space-y-4">
-    {meterData.map((ag) => (
-      <div key={ag.nama}>
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-medium text-[#141413] break-words">{ag.nama}</span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap shrink-0 ${ag.skorLabel.bg}`}
-            style={{ color: ag.skorLabel.color, backgroundColor: ag.skorLabel.color + "15", border: `1px solid ${ag.skorLabel.color}30` }}>
-            {ag.skorLabel.label}
-          </span>
-        </div>
-        <div className="relative h-7 rounded-full bg-[#e6dfd8] overflow-hidden">
-          <div className="h-full rounded-full transition-all flex items-center justify-end pr-2"
-            style={{ width: `${ag.akhir}%`, backgroundColor: ag.skorLabel.color, minWidth: ag.akhir > 0 ? "20px" : "0" }}>
-            <span className="text-[11px] font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">{ag.akhir}</span>
-          </div>
-        </div>
-      </div>
-    ))}
-  </div>
-);
+// ── Perubahan Sikap ──
+const namaSikap = { positif: "mendukung", netral: "netral", negatif: "menolak" };
+
+const sikapDariSkor = (s) => (s >= 0.25 ? "positif" : s <= -0.25 ? "negatif" : "netral");
+
+// Skor -1 (menolak) sampai +1 (mendukung) dipetakan ke posisi 0-100%.
+const posisiSkor = (s) => ((Math.max(-1, Math.min(1, s ?? 0)) + 1) / 2) * 100;
 
 const MeteranSikap = ({ sentimenAgr, daftarRonde }) => {
-  const namaAgen = Object.keys(sentimenAgr ?? {});
-  if (!namaAgen.length) return null;
+  const daftar = Object.entries(sentimenAgr ?? {});
   const totalRonde = daftarRonde?.length ?? 0;
-  if (totalRonde < 1) return null;
-  const meterData = namaAgen.map((nama, i) => {
-    const skorRonde = sentimenAgr[nama].map(s => Math.round(((s ?? 0) + 1) * 50));
-    const awal = skorRonde[0];
-    const akhir = skorRonde[skorRonde.length - 1];
-    const skorLabel = labelSkor(akhir);
-    return { nama, skorLabel, skorRonde, color: AGENT_COLORS[i % AGENT_COLORS.length], awal, akhir, selisih: akhir - awal };
-  });
-  const isSingleRound = totalRonde === 1;
+  if (!daftar.length || totalRonde < 1) return null;
 
-  const rondeTerakhir = daftarRonde?.[daftarRonde.length - 1];
-  const ringkasan = { positif: 0, netral: 0, negatif: 0 };
-  (rondeTerakhir?.agen ?? []).forEach((a) => {
-    const label = a.sentimen?.label;
-    if (ringkasan[label] !== undefined) ringkasan[label] += 1;
+  const baris = daftar.map(([nama, deret]) => {
+    const nilai = (deret ?? []).map((s) => Number(s) || 0);
+    const awal = nilai[0] ?? 0;
+    const akhir = nilai.length ? nilai[nilai.length - 1] : 0;
+    const labelAwal = sikapDariSkor(awal);
+    const labelAkhir = sikapDariSkor(akhir);
+    const gerak = totalRonde === 1
+      ? namaSikap[labelAkhir]
+      : labelAwal === labelAkhir
+        ? `tetap ${namaSikap[labelAkhir]}`
+        : `${namaSikap[labelAwal]} → ${namaSikap[labelAkhir]}`;
+    return { nama, awal, akhir, labelAkhir, gerak };
   });
-  const totalPeserta = ringkasan.positif + ringkasan.netral + ringkasan.negatif;
+
+  const jumlah = { positif: 0, netral: 0, negatif: 0 };
+  baris.forEach((b) => { jumlah[b.labelAkhir] += 1; });
 
   return (
     <section className="py-6">
-      <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Perubahan Sikap</h2>
-
-      {totalPeserta > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-5">
-          <span className="text-[11px] font-medium text-[#6c6a64]">
-            Posisi akhir {totalPeserta} peserta:
-          </span>
-          <Badge label={`${ringkasan.positif} Mendukung`} variant="positif" />
-          <Badge label={`${ringkasan.netral} Netral`} variant="netral" />
-          <Badge label={`${ringkasan.negatif} Menolak`} variant="negatif" />
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3 mb-5 text-[11px] text-[#6c6a64]">
-        <span className="font-medium">Legenda:</span>
-        <span className="inline-flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-[#b83a3a]" /> Menolak
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-[#6c6a64]" /> Netral
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-[#1b8a4a]" /> Mendukung
-        </span>
+      <div className="flex items-end justify-between gap-4 flex-wrap mb-4">
+        <h2 className="display-sm" style={{ fontWeight: 400 }}>Perubahan Sikap</h2>
+        <p className="text-[11px] text-[#6c6a64]">
+          {totalRonde === 1 ? "Posisi akhir" : `Awal dan akhir dari ${totalRonde} babak`}
+        </p>
       </div>
 
-      <div className="rounded-lg border border-[#e6dfd8] bg-white overflow-hidden p-5">
-        {isSingleRound ? (
-          <>
-            <p className="text-[12px] text-[#6c6a64] mb-1 leading-relaxed">
-              Skor sentimen terakhir tiap kelompok berdasarkan simulasi.
-            </p>
-            <p className="text-[11px] text-[#6c6a64] italic mb-5">
-              Jalankan lebih dari 1 babak untuk melihat pergerakan sikap.
-            </p>
-            <div className="flex items-center gap-3 mb-4 text-[10px] text-[#6c6a64]">
-              <span>Menolak (0)</span>
-              <span className="flex-1 h-px bg-[#e6dfd8]" />
-              <span>Mendukung (100)</span>
-            </div>
-            <StaticBarChart meterData={meterData} />
-          </>
-        ) : (
-          <>
-            <p className="text-[12px] text-[#6c6a64] mb-5 leading-relaxed">
-              Perubahan sentimen tiap kelompok dari babak ke babak.
-              Titik <strong className="text-[#141413]">bulat</strong> = posisi per babak · garis = arah perubahan.
-            </p>
-            <div className="flex items-center gap-3 mb-6 text-[10px] text-[#6c6a64]">
-              <span>Menolak</span>
-              <div className="relative flex-1 h-3 rounded-full" style={{
-                background: "linear-gradient(to right, #b83a3a, #8e8b82 25%, #6c6a64 50%, #8e8b82 75%, #1b8a4a)",
-                opacity: 0.3,
-              }} />
-              <span>Mendukung</span>
-            </div>
-            <div className="flex justify-between text-[10px] text-[#6c6a64] -mt-2 mb-6">
-              <span>0 (Tolak)</span><span>50 (Netral)</span><span>100 (Dukung)</span>
-            </div>
-            <div className="space-y-5">
-              {meterData.map((ag) => (
-                <div key={ag.nama}>
-                  <div className="flex items-start justify-between mb-2 gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-[#141413] break-words">{ag.nama}</span>
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap shrink-0 ${ag.skorLabel.bg}`}
-                        style={{ color: ag.skorLabel.color, backgroundColor: ag.skorLabel.color + "15", border: `1px solid ${ag.skorLabel.color}30` }}>
-                        {ag.skorLabel.label}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-[#6c6a64] whitespace-nowrap">
-                        {ag.awal}→{ag.akhir}{ag.selisih > 0 ? ` +${ag.selisih}` : ag.selisih < 0 ? ` ${ag.selisih}` : ""}
-                      </span>
-                      <span className="text-[10px] font-medium" style={{ color: ag.color }}>
-                        {ag.selisih > 0 ? "↗ Menguat" : ag.selisih < 0 ? "↘ Melemah" : "→ Stabil"}
-                      </span>
-                    </div>
-                  </div>
-                  <svg width="100%" height="28" viewBox="0 0 400 28" preserveAspectRatio="none" className="overflow-visible">
-                    <rect x="0" y="11" width="400" height="6" rx="3" fill="url(#grad-bg)" opacity="0.3" />
-                    {ag.skorRonde.length > 1 && (() => {
-                        const points = ag.skorRonde.map((s, i) => {
-                          const x = (400 / (totalRonde)) * i + (400 / (totalRonde + 1));
-                          const y = 14 - (s - 50) * 0.1;
-                          return `${x},${y}`;
-                        }).join(" ");
-                        return (
-                          <polyline fill="none" stroke={ag.color} strokeWidth="2" strokeOpacity="0.5"
-                            strokeDasharray={ag.skorRonde.length > 2 ? "3 2" : "none"}
-                            points={points}
-                          />
-                        );
-                      })()}
-                    {ag.skorRonde.map((s, i) => {
-                      const x = (400 / (totalRonde)) * i + (400 / (totalRonde + 1));
-                      const y = 14 - (s - 50) * 0.1;
-                      return (
-                        <circle key={i} cx={x} cy={y} r="3.5" fill={ag.color} stroke="white" strokeWidth="1.5" />
-                      );
-                    })}
-                    <defs>
-                      <linearGradient id="grad-bg" x1="0" y1="0" x2="400" y2="0">
-                        <stop offset="0%" stopColor="#b83a3a" />
-                        <stop offset="25%" stopColor="#8e8b82" />
-                        <stop offset="50%" stopColor="#6c6a64" />
-                        <stop offset="75%" stopColor="#8e8b82" />
-                        <stop offset="100%" stopColor="#1b8a4a" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <Badge label={`${jumlah.positif} mendukung`} variant="positif" />
+        <Badge label={`${jumlah.netral} netral`} variant="netral" />
+        <Badge label={`${jumlah.negatif} menolak`} variant="negatif" />
+      </div>
+
+      <div className="rounded-lg border border-[#e6dfd8] bg-white p-5">
+        <div className="flex justify-between text-[10px] uppercase tracking-[1px] text-[#6c6a64] mb-4">
+          <span>Menolak</span><span>Netral</span><span>Mendukung</span>
+        </div>
+
+        <div className="space-y-4">
+          {baris.map((b) => {
+            const warna = SENTIMENT[b.labelAkhir].color;
+            const kiri = Math.min(posisiSkor(b.awal), posisiSkor(b.akhir));
+            const lebar = Math.abs(posisiSkor(b.akhir) - posisiSkor(b.awal));
+            return (
+              <div key={b.nama}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm text-[#141413] break-words">{b.nama}</span>
+                  <span className="text-[11px] text-[#6c6a64] shrink-0 text-right">{b.gerak}</span>
                 </div>
-              ))}
-            </div>
-          </>
+                <div className="relative mt-2 h-1.5 rounded-full bg-[#e6dfd8]">
+                  <span className="absolute left-1/2 top-0 h-full w-px bg-[#d3ccbf]" aria-hidden="true" />
+                  {totalRonde > 1 && (
+                    <>
+                      <span
+                        className="absolute top-1/2 h-[2px] -translate-y-1/2 rounded-full"
+                        style={{ left: `${kiri}%`, width: `${lebar}%`, background: warna, opacity: 0.5 }}
+                        aria-hidden="true"
+                      />
+                      <span
+                        className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#a9a094] bg-white"
+                        style={{ left: `${posisiSkor(b.awal)}%` }}
+                        aria-hidden="true"
+                      />
+                    </>
+                  )}
+                  <span
+                    className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={{ left: `${posisiSkor(b.akhir)}%`, background: warna }}
+                    aria-hidden="true"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {totalRonde > 1 && (
+          <p className="mt-5 text-[11px] text-[#6c6a64]">
+            Titik kosong menandai posisi awal, titik berwarna posisi akhir.
+          </p>
         )}
       </div>
     </section>
@@ -559,6 +556,17 @@ export default function DemoPage() {
   const data_transparency = hasil?.data_transparency ?? null;
   const kualitas = hasil?.kualitas ?? null;
   const meta = hasil?.meta ?? {};
+  const ringkasSumber = hasil?.ringkas_sumber ?? null;
+  const jumlahSumber = ringkasSumber?.total ?? meta.sumber ?? 0;
+  // Field tidak ada / kosong (cache lama) dianggap "kosong" hanya kalau memang 0 sumber.
+  const statusMentah = ringkasSumber?.status_sumber;
+  const statusSumber = ["ok", "kosong", "gagal"].includes(statusMentah)
+    ? statusMentah
+    : (jumlahSumber > 0 ? "ok" : "kosong");
+  const peringatanSumber = ringkasSumber?.peringatan ?? [];
+  // Konteks hanya berisi judul berita, jadi kepercayaan tidak pernah "Tinggi".
+  const tingkatKepercayaan = statusSumber === "ok" ? "Sedang" : "Rendah";
+  const jumlahBabak = meta.ronde ?? (daftarRonde.length || jumlahRonde);
 
   const ringkasanFull = analisis
     .split("\n")
@@ -580,6 +588,7 @@ export default function DemoPage() {
   const jmlMenolak = agenAkhir.filter(a => a.sentimen?.label === "negatif").length;
   const jmlNetral = agenAkhir.filter(a => a.sentimen?.label === "netral").length;
   const totalPeserta = agenAkhir.length;
+  const jumlahPeserta = meta.peserta ?? totalPeserta;
 
   let statusSimulasi = { label: "Belum Ada", color: "#6c6a64" };
   if (Object.keys(prediksi).length > 0) {
@@ -722,139 +731,276 @@ export default function DemoPage() {
               </p>
             </section>
 
-            {/* Trustworthiness / Kualitas Data */}
-            {(kualitas || meta.sumber !== undefined) && (
+            {/* Kualitas data */}
+            {(kualitas || ringkasSumber || meta.sumber !== undefined) && (
               <section className="py-6">
-                <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Kualitas Data</h2>
-                <div className="rounded-lg border border-[#e6dfd8] bg-white p-5">
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-lg border border-[#e6dfd8] bg-[#faf9f5] p-4">
-                      <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-1">Sumber Data</p>
-                      <p className="text-2xl font-bold text-[#141413]">{meta.sumber ?? 0} artikel</p>
-                    </div>
-                    <div className="rounded-lg border border-[#e6dfd8] bg-[#faf9f5] p-4">
-                      <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-1">Peserta</p>
-                      <p className="text-2xl font-bold text-[#141413]">{meta.peserta ?? totalPeserta} orang</p>
-                    </div>
-                    <div className="rounded-lg border border-[#e6dfd8] bg-[#faf9f5] p-4">
-                      <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-1">Babak Diskusi</p>
-                      <p className="text-2xl font-bold text-[#141413]">{meta.ronde ?? jumlahRonde}</p>
-                    </div>
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+                  <h2 className="display-sm" style={{ fontWeight: 400 }}>Kualitas Data</h2>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#6c6a64]">Kepercayaan</span>
+                    <Badge
+                      label={tingkatKepercayaan}
+                      variant={tingkatKepercayaan === "Sedang" ? "netral" : "negatif"}
+                    />
                   </div>
-                  {kualitas && (
-                    <div className="mt-4 rounded-lg border border-[#e6dfd8] bg-[#faf9f5] p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-1">Tingkat Kepercayaan</p>
-                          <p className="text-lg font-semibold text-[#141413]">{kualitas.status === "ok" ? "Standar" : kualitas.status === "warning" ? "Perlu Perhatian" : "Tidak Layak"}</p>
-                        </div>
-                        <Badge
-                          label={kualitas.status === "ok" ? "Standar" : kualitas.status === "warning" ? "Perhatian" : "Tidak Layak"}
-                          variant={kualitas.status === "ok" ? "positif" : kualitas.status === "warning" ? "warning" : "negatif"}
-                        />
-                      </div>
-                      <p className="mt-2 text-sm text-[#6c6a64]">
-                        {kualitas.fallback_count} dari {kualitas.total_giliran} giliran menggunakan nilai cadangan
-                        ({(kualitas.fallback_rate * 100).toFixed(1)}%).
+                </div>
+                <div className="rounded-lg border border-[#e6dfd8] bg-white">
+                  <dl className="grid divide-y divide-[#f0ebe3] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                    <div className="p-4">
+                      <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Sumber Data</dt>
+                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">
+                        {statusSumber === "ok" && jumlahSumber > 0 ? `${jumlahSumber} artikel` : "Tidak ada"}
+                      </dd>
+                      {statusSumber === "ok" ? (
+                        <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">
+                          {ringkasSumber?.ditemukan
+                            ? `${ringkasSumber.lolos ?? jumlahSumber} lolos filter dari ${ringkasSumber.ditemukan} artikel terkumpul`
+                            : "Dipakai sebagai briefing agen"}
+                        </p>
+                      ) : statusSumber === "gagal" ? (
+                        <>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">
+                            Pengambilan berita gagal, jadi simulasi berjalan tanpa sumber.
+                          </p>
+                          <p className="mt-1.5 text-[11px] text-[#b8860b]">Coba jalankan ulang.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">
+                            Pencarian berhasil, tetapi tidak ada berita yang cocok dengan topik ini.
+                          </p>
+                          {/* TODO: fitur tempel sumber belum ada */}
+                          <button
+                            type="button"
+                            onClick={() => inputRef.current?.focus()}
+                            className="mt-2 text-[11px] font-medium text-[#cc785c] hover:text-[#a9583e] transition"
+                          >
+                            Ubah topik
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Peserta</dt>
+                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{jumlahPeserta} orang</dd>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">Persona yang berpendapat</p>
+                    </div>
+                    <div className="p-4">
+                      <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Babak Diskusi</dt>
+                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{jumlahBabak}</dd>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">Putaran debat yang dijalankan</p>
+                    </div>
+                  </dl>
+
+                  {statusSumber === "ok" && (ringkasSumber?.sumber_berita ?? []).length > 0 && (
+                    <div className="border-t border-[#f0ebe3] px-4 py-3">
+                      <p className="text-[11px] leading-relaxed text-[#6c6a64]">
+                        Yang dibaca simulasi hanya judul berita, bukan isi artikel.
                       </p>
+                      <details className="group mt-1">
+                        <summary className="flex items-center gap-2 cursor-pointer list-none text-[11px] font-medium text-[#6c6a64] hover:text-[#141413]">
+                          <span>Daftar sumber ({Math.min(ringkasSumber.sumber_berita.length, 12)})</span>
+                          <span className="text-[10px] transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <ul className="mt-2 space-y-2">
+                          {ringkasSumber.sumber_berita.slice(0, 12).map((s, i) => (
+                            <li key={`${s.judul}-${i}`} className="text-[11px] leading-relaxed">
+                              {s.link ? (
+                                <a
+                                  href={s.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#141413] underline decoration-[#e6dfd8] underline-offset-2 hover:text-[#cc785c] transition"
+                                >
+                                  {s.judul}
+                                </a>
+                              ) : (
+                                <span className="text-[#141413]">{s.judul}</span>
+                              )}
+                              <span className="block text-[#6c6a64]">
+                                {s.media}{s.tanggal ? ` · ${s.tanggal}` : ""}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     </div>
                   )}
-                  {meta.tanggal && (
-                    <p className="mt-4 text-sm text-[#6c6a64]">
-                      Dijalankan pada {meta.tanggal}
-                    </p>
-                  )}
-                  {data_transparency && (
-                    <details className="mt-4 group">
-                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[#6c6a64] hover:text-[#141413]">
-                        <span>Transparansi Data</span>
-                        <span className="text-[10px] text-[#6c6a64] transition-transform group-open:rotate-180">▼</span>
-                      </summary>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 text-sm text-[#6c6a64]">
-                        <div><strong>Total Sumber:</strong> {data_transparency.total_sources ?? 0}</div>
-                        <div><strong>RSS:</strong> {data_transparency.rss_count ?? 0}</div>
-                        <div><strong>Reddit:</strong> {data_transparency.reddit_count ?? 0}</div>
-                        <div><strong>Polling:</strong> {data_transparency.polling_count ?? 0}</div>
-                        <div><strong>Skor Keberagaman:</strong> {(data_transparency.diversity_score ?? 0).toFixed(2)}</div>
-                        <div><strong>Skor Ketercapan:</strong> {(data_transparency.coverage_score ?? 0).toFixed(2)}</div>
-                      </div>
-                    </details>
-                  )}
+
+                  <details className="group border-t border-[#f0ebe3] px-4 py-3">
+                    <summary className="flex items-center gap-2 cursor-pointer list-none text-sm font-medium text-[#6c6a64] hover:text-[#141413]">
+                      <span>Lihat detail</span>
+                      <span className="text-[10px] transition-transform group-open:rotate-180">▼</span>
+                    </summary>
+                    <div className="mt-2 space-y-1.5">
+                      {kualitas && (
+                        <p className="text-[11px] text-[#6c6a64]">
+                          Seberapa sering jawaban peserta memakai nilai cadangan, bukan keluaran model.
+                        </p>
+                      )}
+                      {kualitas && (
+                        <p className="text-sm text-[#3d3d3a]">
+                          {kualitas.fallback_count > 0 ? (
+                            <>
+                              <Badge
+                                label={kualitas.status === "ok" ? "Lancar" : kualitas.status === "warning" ? "Sebagian cadangan" : "Banyak cadangan"}
+                                variant={kualitas.status === "ok" ? "positif" : kualitas.status === "warning" ? "warning" : "negatif"}
+                              />
+                              <span className="ml-2 text-[#6c6a64]">
+                                {kualitas.fallback_count} dari {kualitas.total_giliran} giliran memakai nilai cadangan
+                                ({(kualitas.fallback_rate * 100).toFixed(1)}%).
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Badge label="Lancar" variant="positif" />
+                              <span className="ml-2 text-[#6c6a64]">
+                                Semua {kualitas.total_giliran} giliran memakai keluaran model, tanpa nilai cadangan.
+                              </span>
+                            </>
+                          )}
+                        </p>
+                      )}
+                      {meta.tanggal && (
+                        <p className="text-[11px] text-[#6c6a64]">Dijalankan pada {meta.tanggal}</p>
+                      )}
+                      {ringkasSumber?.catatan && (
+                        <p className="text-[11px] text-[#6c6a64]">{ringkasSumber.catatan}</p>
+                      )}
+                      {statusSumber === "ok" && peringatanSumber.length > 0 && (
+                        <p className="text-[11px] text-[#6c6a64]">
+                          Sebagian sumber tidak bisa dibuka: {peringatanSumber.map(ringkasPeringatan).join(", ")}.
+                        </p>
+                      )}
+                      {statusSumber === "gagal" && (
+                        <p className="text-[11px] text-[#6c6a64]">
+                          {ringkasSumber?.pesan_sumber || "Tidak ada detail kegagalan dari server."}
+                        </p>
+                      )}
+                    </div>
+                  </details>
                 </div>
               </section>
             )}
 
-            {/* Key Findings - Actor Analysis */}
+            {/* Analisis Aktor */}
             {aktorAnalisis && (
               <section className="py-6">
-                <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Analisis Aktor</h2>
-                <div className="space-y-4">
-                  {(aktorKunci ?? []).map((aktor, idx) => (
-                    <div key={idx} className="rounded-lg border border-[#e6dfd8] bg-white p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#141413]">{aktor.nama}</p>
-                          <p className="text-sm text-[#6c6a64] mt-0.5">{aktor.peran ?? "Aktor kunci"}</p>
+                <h2 className="display-sm mb-2" style={{ fontWeight: 400 }}>Analisis Aktor</h2>
+                <p className="text-sm text-[#6c6a64] leading-relaxed mb-5">
+                  {aktorKunci.length > 0
+                    ? "Diurutkan dari skor pengaruh, yang menggabungkan besarnya pengaruh dan konsistensi sikap sepanjang diskusi."
+                    : "Tidak ada aktor yang menonjol pada sesi ini."}
+                  {penggerak ? ` Penggerak utama: ${penggerak}.` : ""}
+                </p>
+
+                {aktorKunci.length > 0 && (
+                  <div className="rounded-lg border border-[#e6dfd8] bg-white divide-y divide-[#f0ebe3]">
+                    {aktorKunci.map((aktor, idx) => {
+                      const pengaruh = aktor.pengaruh_skor ?? aktor.pengaruh ?? null;
+                      const konsistensi = aktor.konsistensi_skor
+                        ?? (typeof aktor.konsisten === "boolean" ? (aktor.konsisten ? 1 : 0) : null);
+                      const labelSikap = aktor.sikap_label ?? null;
+                      const aksi = aksiPendekatan(aktor.cara_pendekatan, aktor.nama) || beresinTeksAkhir(aktor.alasan);
+                      return (
+                        <div key={aktor.nama ?? idx} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_150px] sm:items-start">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-[#141413]">{aktor.nama}</span>
+                              {labelSikap && <BadgeSentimen label={labelSikap} />}
+                            </div>
+                            {aksi && (
+                              <p className="mt-1.5 text-sm leading-relaxed text-[#3d3d3a]">{aksi}</p>
+                            )}
+                            {aktor.dampak_jika_berubah && (
+                              <p className="mt-1 text-[11px] text-[#6c6a64]">{aktor.dampak_jika_berubah}</p>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#6c6a64] sm:text-right sm:pt-0.5">
+                            <p>
+                              <span className="text-sm font-medium tabular-nums text-[#141413]">{persen(pengaruh) ?? "—"}</span> pengaruh
+                            </p>
+                            <p className="mt-0.5">
+                              {konsistensi !== null ? `Konsistensi ${persen(konsistensi)}` : "Konsistensi tidak tersedia"}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Badge label={aktor.pengaruh >= 0.7 ? "Pengaruh Tinggi" : aktor.pengaruh >= 0.4 ? "Pengaruh Sedang" : "Pengaruh Rendah"}
-                            variant={aktor.pengaruh >= 0.7 ? "negatif" : aktor.pengaruh >= 0.4 ? "warning" : "default"} />
-                          <Badge label={aktor.konsisten ? "Konsisten" : "Volatil"} variant="outline" />
-                        </div>
-                      </div>
-                      {aktor.alasan && (
-                        <p className="mt-3 text-sm text-[#3d3d3a] leading-relaxed">{beresinTeksAkhir(aktor.alasan)}</p>
-                      )}
-                    </div>
-                  ))}
-                  {(rekomendasiStrategis ?? []).map((r, idx) => (
-                    <div key={idx} className="rounded-lg border border-[#e6dfd8] bg-white p-5">
-                      <p className="text-sm font-medium text-[#141413]">{r.aksi ?? r}</p>
-                      {r.alasan && <p className="mt-1 text-sm text-[#6c6a64]">{r.alasan}</p>}
-                      {r.prioritas && (
-                        <Badge label={`Prioritas: ${r.prioritas}`} variant="warning" className="mt-2" />
-                      )}
-                    </div>
-                  ))}
-                  {rekomendasi && (
-                    <div className="rounded-lg border border-[#e6dfd8] bg-[#cc785c]/5 p-5">
-                      <p className="text-sm font-medium text-[#141413] mb-2">Rekomendasi Utama</p>
-                      <p className="text-sm text-[#3d3d3a] leading-relaxed">{beresinTeksAkhir(rekomendasi)}</p>
-                    </div>
-                  )}
-                  {risikoUtama && (
-                    <div className="rounded-lg border border-[#b83a3a]/30 bg-[#b83a3a]/5 p-5">
-                      <p className="text-sm font-medium text-[#b83a3a] mb-2">Risiko Utama</p>
-                      <p className="text-sm text-[#3d3d3a] leading-relaxed">{beresinTeksAkhir(risikoUtama)}</p>
-                    </div>
-                  )}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {(aktorAnalisis.swing_voter ?? []).length > 0 && (
+                  <div className="mt-5">
+                    <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-2">Paling mudah berubah</p>
+                    <ul className="grid gap-2 sm:grid-cols-3">
+                      {(aktorAnalisis.swing_voter ?? []).slice(0, 3).map((v, idx) => (
+                        <li key={v.nama ?? idx} className="rounded-md border border-[#e6dfd8] bg-[#faf9f5] px-3 py-2.5">
+                          <p className="text-sm text-[#141413] break-words">{v.nama}</p>
+                          <p className="mt-0.5 text-[11px] text-[#6c6a64]">
+                            {sikapDariAlasan(String(v.sikap_awal)) ?? "netral"} → {sikapDariAlasan(String(v.sikap_akhir)) ?? "netral"}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(rekomendasiStrategis ?? []).length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-3">Langkah yang disarankan</p>
+                    <ol className="space-y-3">
+                      {(rekomendasiStrategis ?? []).map((r, idx) => {
+                        const teks = typeof r === "string" ? r : r?.aksi;
+                        if (!teks) return null;
+                        return (
+                          <li key={idx} className="grid grid-cols-[22px_minmax(0,1fr)] gap-3">
+                            <span className="text-sm tabular-nums text-[#8f3a1f]">{idx + 1}</span>
+                            <p className="text-sm leading-relaxed text-[#3d3d3a]">{teks}</p>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+
+                {rekomendasi && (rekomendasiStrategis ?? []).length === 0 && (
+                  <div className="mt-6 border-l-2 border-[#cc785c] pl-4">
+                    <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-1">Rekomendasi</p>
+                    <p className="text-sm leading-relaxed text-[#3d3d3a]">{beresinTeksAkhir(rekomendasi)}</p>
+                  </div>
+                )}
+
+                {risikoUtama && (
+                  <div className="mt-6 border-l-2 border-[#b83a3a] pl-4">
+                    <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#b83a3a] mb-1">Risiko Utama</p>
+                    <p className="text-sm leading-relaxed text-[#3d3d3a]">{beresinTeksAkhir(risikoUtama)}</p>
+                  </div>
+                )}
               </section>
             )}
 
-            {/* Critical Groups */}
+            {/* Kelompok Kritis */}
             {(kelompokKritis ?? []).length > 0 && (
               <section className="py-6">
                 <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Kelompok Kritis</h2>
-                <div className="space-y-3">
-                  {(kelompokKritis ?? []).map((k, idx) => (
-                    <div key={idx} className="rounded-lg border border-[#e6dfd8] bg-white p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-[#141413]">{k.nama}</p>
-                          <p className="text-sm text-[#6c6a64]">{getAlasanKritis(k.nama)}</p>
+                <div className="rounded-lg border border-[#e6dfd8] bg-white divide-y divide-[#f0ebe3]">
+                  {(kelompokKritis ?? []).map((k, idx) => {
+                    const label = sikapDariAlasan(k.alasan);
+                    const alasan = k.alasan ? beresinTeksAkhir(k.alasan) : getAlasanKritis(k.nama);
+                    return (
+                      <div key={k.nama ?? idx} className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-semibold text-[#141413] break-words">{k.nama}</p>
+                          {label && <BadgeSentimen label={label} />}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge label={k.pengaruh >= 0.7 ? "Pengaruh Tinggi" : "Pengaruh Sedang"}
-                            variant="negatif" />
-                          <Badge label="Butuh Dialog" variant="warning" />
-                        </div>
+                        {alasan && <p className="mt-1 text-sm text-[#6c6a64] leading-relaxed">{alasan}</p>}
+                        {k.cara_pendekatan && (
+                          <p className="mt-2 text-sm leading-relaxed text-[#3d3d3a]">{k.cara_pendekatan}</p>
+                        )}
                       </div>
-                      {k.pendekatan && (
-                        <p className="mt-3 text-sm text-[#3d3d3a]">{k.pendekatan}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}

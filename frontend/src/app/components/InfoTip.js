@@ -54,7 +54,7 @@ const GLOSARIUM = {
   },
   brief: {
     label: "Informasi Awal",
-    arti: "Data atau info tambahan yang dikasih ke agen biar simulasi lebih akurat. Kayak contekan — makin lengkap briefingnya, makin mirip hasilnya sama dunia nyata.",
+    arti: "Data atau info tambahan yang dikasih ke agen sebelum diskusi dimulai, biar pendapatnya nyambung sama kenyataan. Isinya bisa berita terbaru, hasil survei, atau catatan lapangan. Makin lengkap infonya, makin mirip hasil simulasinya sama dunia nyata.",
   },
   meteranSikap: {
     label: "Meteran / Peta Sikap",

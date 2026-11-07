@@ -80,6 +80,19 @@ _STOPWORDS = {
 }
 
 
+_SYSTEM_TEXT_PREFIXES = (
+    "[error",
+    "[ratelimit",
+    "[offline",
+    "(tidak dapat merespons",
+)
+
+
+def _is_system_text(text: str) -> bool:
+    """True kalau teks ini pesan sistem/error, bukan pendapat agen."""
+    return text.strip().lower().startswith(_SYSTEM_TEXT_PREFIXES)
+
+
 def _tokenize(text: str) -> list[str]:
     """Tokenize, lowercase, hapus non-alfabet, filter stopword & kata pendek."""
     text = text.lower()
@@ -123,6 +136,8 @@ def extract_word_frequencies(ronde_detail: list[dict], top_n: int = 50) -> dict:
             if label not in counters:
                 label = "netral"
             pendapat = agen.get("pendapat", "") or ""
+            if _is_system_text(pendapat):
+                continue
             tokens = _tokenize(pendapat)
             counters[label].update(tokens)
             total_words[label] += len(tokens)
@@ -174,6 +189,8 @@ def extract_word_frequencies_from_texts(
     for label in labels:
         texts = texts_by_label.get(label, [])
         for teks in texts:
+            if _is_system_text(teks):
+                continue
             tokens = _tokenize(teks)
             counters[label].update(tokens)
             total_words[label] += len(tokens)

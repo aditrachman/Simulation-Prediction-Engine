@@ -130,31 +130,37 @@ export default function WordCloud({ data, className = "" }) {
           className="flex flex-wrap items-center justify-center gap-1 px-4 py-6"
           style={{ lineHeight: 1.2 }}
         >
-          {activeWords.map((w) => {
-            const fontSize = scaleFont(w.berat, beratMin, beratMax);
-            const warna = hashColor(w.kata, PALET[effectiveTab]);
-            const rotate = hashRotation(w.kata);
-            const isBold = w.berat > (beratMin + beratMax) * 0.6;
-            return (
-              <span
-                key={w.kata}
-                title={`${w.kata} (${w.frekuensi}x)`}
-                className="inline-block cursor-default select-none transition-all duration-200 ease-out hover:scale-125 hover:opacity-100"
-                style={{
-                  fontSize: `${fontSize}px`,
-                  fontWeight: isBold ? 700 : 500,
-                  color: warna,
-                  opacity: 0.55 + (w.berat / beratMax) * 0.45,
-                  padding: "2px 4px",
-                  transform: `rotate(${rotate}deg)`,
-                  textShadow: warna + "15 0 1px 2px",
-                  letterSpacing: fontSize > 30 ? "-0.02em" : "normal",
-                }}
-              >
-                {w.kata}
-              </span>
-            );
-          })}
+          {activeWords.length === 0 ? (
+            <p className="w-full text-center py-8 text-sm text-[#6c6a64] italic">
+              Belum ada kata untuk kategori ini. Coba jalankan simulasi ulang.
+            </p>
+          ) : (
+            activeWords.map((w) => {
+              const fontSize = scaleFont(w.berat, beratMin, beratMax);
+              const warna = hashColor(w.kata, PALET[effectiveTab]);
+              const rotate = hashRotation(w.kata);
+              const isBold = w.berat > (beratMin + beratMax) * 0.6;
+              return (
+                <span
+                  key={w.kata}
+                  title={`${w.kata} (${w.frekuensi}x)`}
+                  className="inline-block cursor-default select-none transition-all duration-200 ease-out hover:scale-125 hover:opacity-100"
+                  style={{
+                    fontSize: `${fontSize}px`,
+                    fontWeight: isBold ? 700 : 500,
+                    color: warna,
+                    opacity: 0.55 + (w.berat / beratMax) * 0.45,
+                    padding: "2px 4px",
+                    transform: `rotate(${rotate}deg)`,
+                    textShadow: warna + "15 0 1px 2px",
+                    letterSpacing: fontSize > 30 ? "-0.02em" : "normal",
+                  }}
+                >
+                  {w.kata}
+                </span>
+              );
+            })
+          )}
         </div>
 
         {/* Info footer */}

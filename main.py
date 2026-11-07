@@ -560,7 +560,7 @@ def start_sim(payload: SimRequest, request: Request):
         "data":   hasil,
         "konteks_real": {
             "total_sumber": konteks_real.get("total", 0),
-            "berita":       konteks_real.get("berita", [])[:5],
+            "berita":       konteks_real.get("berita", [])[:12],
             "reddit":       konteks_real.get("reddit", [])[:5],
             "timestamp":    konteks_real.get("timestamp", ""),
             "data_transparency": konteks_real.get("data_transparency", {}),
