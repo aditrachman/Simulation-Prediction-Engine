@@ -566,6 +566,7 @@ def start_sim(payload: SimRequest, request: Request):
             "data_transparency": konteks_real.get("data_transparency", {}),
             "sumber_status": konteks_real.get("sumber_status", ""),
             "sumber_pesan":  konteks_real.get("sumber_pesan", ""),
+            "sumber_peringatan": konteks_real.get("sumber_peringatan", []),
         },
         "source_diversity": source_diversity,
     }
