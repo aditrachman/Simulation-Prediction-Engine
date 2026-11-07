@@ -564,6 +564,8 @@ def start_sim(payload: SimRequest, request: Request):
             "reddit":       konteks_real.get("reddit", [])[:5],
             "timestamp":    konteks_real.get("timestamp", ""),
             "data_transparency": konteks_real.get("data_transparency", {}),
+            "sumber_status": konteks_real.get("sumber_status", ""),
+            "sumber_pesan":  konteks_real.get("sumber_pesan", ""),
         },
         "source_diversity": source_diversity,
     }
