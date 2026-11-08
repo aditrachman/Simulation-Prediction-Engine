@@ -447,15 +447,20 @@ def start_sim(payload: SimRequest, request: Request):
         score = float(quality.get("score", 1.0))
 
         total_sumber = int(konteks_real.get("total", 0) or 0)
-        avg_relevansi = 0.0
         sources = (konteks_real.get("berita") or []) + (konteks_real.get("reddit") or [])
-        if sources:
-            avg_relevansi = sum(float(s.get("relevansi", 0) or 0) for s in sources) / len(sources)
+        angka_relevansi = [
+            float(s["relevansi"])
+            for s in sources
+            if isinstance(s.get("relevansi"), (int, float))
+        ]
+        avg_relevansi = (
+            sum(angka_relevansi) / len(angka_relevansi) if angka_relevansi else None
+        )
 
         if total_sumber == 0:
             score -= 0.15
             limitations.append("Tidak ada sumber real-time yang cocok; konteks berita/sosmed kosong.")
-        elif avg_relevansi < 1.5:
+        elif avg_relevansi is not None and avg_relevansi < 1.5:
             score -= 0.08
             limitations.append("Sumber real-time ditemukan, tapi relevansi rata-ratanya rendah.")
 
@@ -475,7 +480,7 @@ def start_sim(payload: SimRequest, request: Request):
             "tier": tier,
             "label": label,
             "real_context_sources": total_sumber,
-            "avg_context_relevance": round(avg_relevansi, 2),
+            "avg_context_relevance": round(avg_relevansi, 2) if avg_relevansi is not None else None,
             "limitations": limitations,
         })
         hasil["simulation_quality"] = quality

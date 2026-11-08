@@ -17,6 +17,7 @@
 
 import os
 import re
+import json
 import time
 import statistics
 
@@ -953,6 +954,7 @@ def run_simulation(
     analisis_raw = _strip_emoji(analisis_raw)
     # Store ringkasan_terstruktur for later use in hasil_dict
     _ringkasan_terstruktur_temp = ringkasan_terstruktur
+    _ringkasan_kalimat_temp = _susun_ringkasan_kalimat(sentimen_agregat, ringkasan_terstruktur)
 
     # ponytail: Parse RISIKO UTAMA dari teks analisis — regex, 2 baris
     risiko_match = re.search(r"RISIKO UTAMA:\s*(.+?)(?:\n\n|\Z)", analisis_raw, re.DOTALL | re.IGNORECASE)
@@ -1100,6 +1102,7 @@ def run_simulation(
 
     # NEW: Ringkasan terstruktur dari LLM (isi dari _analisis_dan_aktor return)
     hasil_dict["ringkasan_terstruktur"] = _ringkasan_terstruktur_temp
+    hasil_dict["ringkasan_kalimat"] = _ringkasan_kalimat_temp
 
     hasil_dict["explainability_report"] = generate_report(hasil_dict)
 
@@ -1263,6 +1266,82 @@ def _label_sentimen(skor: float) -> str:
     return "netral"
 
 
+def _parse_ringkasan_json(teks: str) -> tuple[dict, str]:
+    """Ambil JSON object dari keluaran LLM dan buang dari teks.
+
+    Tahan code fence dan teks di sekitarnya. Jika JSON rusak, objek tetap
+    dibuang dari teks supaya JSON mentah tidak tampil di ringkasan.
+    """
+    tanpa_fence = re.sub(r"```(?:json)?", "", teks or "", flags=re.IGNORECASE)
+    tanpa_fence = tanpa_fence.replace("```", "")
+
+    parsed: dict = {}
+    objek_terpakai = ""
+    kandidat = set(re.findall(r"\{[^{}]*\}", tanpa_fence, re.DOTALL))
+    kandidat.update(re.findall(r"\{.*\}", tanpa_fence, re.DOTALL))
+    for kandidat_json in sorted(kandidat, key=len, reverse=True):
+        try:
+            data = json.loads(kandidat_json)
+        except Exception:
+            continue
+        if isinstance(data, dict) and data and all(isinstance(k, str) for k in data):
+            parsed = {k: v for k, v in data.items() if isinstance(v, str)}
+            objek_terpakai = kandidat_json
+            break
+
+    bersih = tanpa_fence
+    if objek_terpakai:
+        bersih = bersih.replace(objek_terpakai, " ")
+    # Buang sisa blok JSON yang gagal di-parse.
+    bersih = re.sub(r"\{[^{}]*\}", " ", bersih, flags=re.DOTALL)
+    if "{" in bersih:
+        bersih = re.sub(r"\{.*", " ", bersih, flags=re.DOTALL)
+    bersih = bersih.replace("}", " ")
+    bersih = re.sub(r"[ \t]+", " ", bersih)
+    bersih = re.sub(r"\n\s*\n+", "\n\n", bersih).strip()
+    return parsed, bersih
+
+
+def _susun_ringkasan_kalimat(
+    sentimen_agregat: dict[str, list[float]],
+    ringkasan_terstruktur: dict,
+) -> list[str]:
+    """Susun kalimat per peserta dari skor akhir dan klausa syarat berubah."""
+    kalimat: list[str] = []
+    for nama, tren in sentimen_agregat.items():
+        if not tren:
+            continue
+        skor = tren[-1]
+        if skor > 0.2:
+            sikap = "mendukung"
+        elif skor < -0.2:
+            sikap = "menolak"
+        else:
+            sikap = "netral"
+
+        klausa = str(ringkasan_terstruktur.get(nama) or "").strip()
+        klausa = re.sub(
+            r"^(bisa|akan)\s+berubah\s+jika\s+",
+            "",
+            klausa,
+            flags=re.IGNORECASE,
+        ).strip()
+        klausa = re.sub(r"^jika\s+", "", klausa, flags=re.IGNORECASE).strip()
+        klausa = klausa.rstrip(".")
+
+        if not klausa:
+            kalimat.append(
+                f"{nama} bersikap {sikap} (skor akhir {skor:.2f}); "
+                "syarat berubah tidak tersedia."
+            )
+        else:
+            kalimat.append(
+                f"{nama} bersikap {sikap} (skor akhir {skor:.2f}); "
+                f"bisa berubah jika {klausa}."
+            )
+    return kalimat
+
+
 def _build_ringkasan_agen(agents: list[dict], sentimen_agregat: dict) -> tuple[dict, dict, list[str]]:
     pengaruh_map = {a["nama"]: a.get("pengaruh", 0.5) for a in agents}
     volatilitas: dict[str, float] = {}
@@ -1329,17 +1408,8 @@ def _analisis_dan_aktor(
     if not analisis_raw or analisis_raw.startswith("[Error") or analisis_raw.startswith("[RateLimit"):
         analisis_raw = "(analisis tidak tersedia)"
 
-    # Extract ringkasan_terstruktur from LLM output (JSON object embedded in text)
-    ringkasan_terstruktur = {}
-    try:
-        json_match = re.search(r'\{.*\}', analisis_raw, re.DOTALL)
-        if json_match:
-            import json
-            parsed = json.loads(json_match.group())
-            if isinstance(parsed, dict):
-                ringkasan_terstruktur = {k: v for k, v in parsed.items() if isinstance(v, str)}
-    except Exception:
-        pass
+    # Extract ringkasan_terstruktur dari JSON di keluaran LLM, lalu buang JSON dari teks.
+    ringkasan_terstruktur, analisis_raw = _parse_ringkasan_json(analisis_raw)
 
     # Remove PREDIKSI SKENARIO lines from analisis_raw (LLM might still include it)
     analisis_raw = re.sub(

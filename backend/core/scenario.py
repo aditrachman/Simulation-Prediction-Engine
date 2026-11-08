@@ -61,18 +61,8 @@ def resolve_scenario(
     if not prediksi:
         arah = "Status Quo"
         aturan = "tidak ada prediksi heuristic"
-        kekuatan = "Lemah"
     else:
         arah = max(prediksi, key=prediksi.get)
-        nilai_tertinggi = prediksi[arah]
-        nilai_kedua = max(v for k, v in prediksi.items() if k != arah) if len(prediksi) > 1 else 0
-        selisih = nilai_tertinggi - nilai_kedua
-        if selisih >= 15:
-            kekuatan = "Kuat"
-        elif selisih >= 5:
-            kekuatan = "Sedang"
-        else:
-            kekuatan = "Lemah"
         aturan = _aturan_dari_arah(arah, hp.get("reasoning", ""))
 
     # Hitung hitungan kubu dari sentimen_agregat (sebelum crowd blend)
@@ -90,12 +80,20 @@ def resolve_scenario(
         else:
             n_net += 1
 
+    pct_pos = n_pos / total if total else 0.0
+    pct_neg = n_neg / total if total else 0.0
+    pct_net = n_net / total if total else 0.0
+
     # Variance untuk skor_aturan
     all_scores = [tren[-1] for tren in sentimen_agregat.values() if tren]
     variance = 0.0
     if len(all_scores) > 1:
         import statistics
         variance = statistics.variance(all_scores)
+
+    # Kekuatan = selisih kubu pemicu terhadap ambangnya, dalam poin persentase.
+    margin_pp = _margin_pemicu(arah, pct_pos, pct_neg, pct_net, variance)
+    kekuatan = _kekuatan_dari_margin(margin_pp)
 
     return {
         "arah": arah,
@@ -107,15 +105,46 @@ def resolve_scenario(
             "menolak": n_neg,
         },
         "skor_aturan": {
-            "pct_pos": n_pos / total if total else 0.0,
-            "pct_neg": n_neg / total if total else 0.0,
-            "pct_net": n_net / total if total else 0.0,
+            "pct_pos": pct_pos,
+            "pct_neg": pct_neg,
+            "pct_net": pct_net,
             "variance": round(variance, 3),
             "threshold_pos": 0.6,
             "threshold_neg": 0.5,
             "threshold_net": 0.6,
+            "margin_pp": round(margin_pp, 2),
         },
     }
+
+
+def _margin_pemicu(
+    arah: str,
+    pct_pos: float,
+    pct_neg: float,
+    pct_net: float,
+    variance: float,
+) -> float:
+    """Selisih kubu pemicu terhadap ambangnya, dalam poin persentase."""
+    if arah == "Konsensus":
+        return (pct_pos - 0.6) * 100
+    if arah == "Polarisasi":
+        margins = []
+        if pct_neg >= 0.5:
+            margins.append((pct_neg - 0.5) * 100)
+        if variance > 0.3:
+            margins.append((variance - 0.3) * 100)
+        return max(margins) if margins else 0.0
+    if arah == "Status Quo" and pct_net >= 0.6:
+        return (pct_net - 0.6) * 100
+    return 0.0
+
+
+def _kekuatan_dari_margin(margin_pp: float) -> str:
+    if margin_pp >= 15:
+        return "Kuat"
+    if margin_pp >= 5:
+        return "Sedang"
+    return "Lemah"
 
 
 def _aturan_dari_arah(arah: str, reasoning: str) -> str:
@@ -146,7 +175,10 @@ def kepercayaan_sumber(
     """
     if sumber_status == "ok" and sumber_relevan >= 3:
         level = "Sedang"
-        alasan = f"{sumber_relevan} sumber relevan lolos filter; briefing tersedia."
+        if isi_dibaca:
+            alasan = f"{sumber_relevan} sumber relevan lolos filter; briefing tersedia."
+        else:
+            alasan = f"{sumber_relevan} sumber relevan lolos filter; hanya judul berita yang dibaca."
     else:
         level = "Rendah"
         if sumber_status == "kosong":
@@ -192,9 +224,10 @@ def teks_polarisasi(
     # Cek apakah kubu terkecil >= 30% dari yang bersikap
     kecil = min(n_pos, n_neg)
     if kecil >= 0.3 * bersikap:
+        pct_kecil = round(kecil / bersikap * 100)
         return (
             f"Terjadi polarisasi: {n_pos} mendukung vs {n_neg} menolak "
-            f"({bersikap} dari {total_peserta} bersikap; {kecil} kubu terkecil)."
+            f"({bersikap} dari {total_peserta} bersikap; kubu terkecil: {kecil} orang ({pct_kecil}%))."
         )
 
     # Bukan polarisasi: mayoritas vs minoritas

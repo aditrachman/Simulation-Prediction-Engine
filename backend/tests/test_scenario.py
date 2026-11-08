@@ -75,6 +75,7 @@ class TestKepercayaanSumber:
         hasil = kepercayaan_sumber("ok", 5, False, 10, 3)
         assert hasil["level"] == "Sedang"
         assert hasil["fakta"]["sumber_relevan"] == 5
+        assert "hanya judul berita yang dibaca" in hasil["alasan"]
 
     def test_ok_relevan_kurang(self):
         hasil = kepercayaan_sumber("ok", 2, False, 10, 3)
@@ -109,6 +110,7 @@ class TestTeksPolarisasi:
         skor.update({f"neg{i}": -0.8 for i in range(6)})
         teks = teks_polarisasi(skor, total_peserta=12)
         assert "polarisasi" in teks.lower()
+        assert "kubu terkecil: 6 orang (50%)" in teks
 
 
 class TestSwingVoterTerfilter:
@@ -153,3 +155,57 @@ def test_run_simulation_tanpa_konteks_real_tidak_fetch(monkeypatch):
     )
     assert "skenario_resolved" in hasil
     assert hasil["kepercayaan_sumber"]["level"] == "Rendah"
+
+
+def _sentimen_skor(n_pos: int, n_neg: int, n_net: int, pos: float = 0.8, neg: float = -0.8) -> dict:
+    data = {}
+    for i in range(n_pos):
+        data[f"pos{i}"] = [pos]
+    for i in range(n_neg):
+        data[f"neg{i}"] = [neg]
+    for i in range(n_net):
+        data[f"net{i}"] = [0.0]
+    return data
+
+
+@pytest.mark.parametrize(
+    "n_pos,n_neg,n_net,expected",
+    [
+        (6, 0, 4, "Lemah"),   # tepat di ambang 0.6
+        (7, 0, 3, "Sedang"),  # +10 pp
+        (8, 0, 2, "Kuat"),    # +20 pp
+    ],
+)
+def test_kekuatan_konsensus_batas(n_pos, n_neg, n_net, expected):
+    hasil = resolve_scenario(_sentimen_skor(n_pos, n_neg, n_net), 10, 3, 1.0)
+    assert hasil["arah"] == "Konsensus"
+    assert hasil["kekuatan"] == expected
+
+
+@pytest.mark.parametrize(
+    "n_pos,n_neg,expected",
+    [
+        (5, 5, "Lemah"),   # pct_neg tepat 0.5
+        (4, 6, "Sedang"),  # +10 pp
+        (3, 7, "Kuat"),    # +20 pp
+    ],
+)
+def test_kekuatan_polarisasi_batas(n_pos, n_neg, expected):
+    # skor dekat ambang supaya variance tidak ikut memicu cabang polarisasi
+    hasil = resolve_scenario(_sentimen_skor(n_pos, n_neg, 0, pos=0.3, neg=-0.3), 10, 3, 1.0)
+    assert hasil["arah"] == "Polarisasi"
+    assert hasil["kekuatan"] == expected
+
+
+@pytest.mark.parametrize(
+    "n_net,n_pos,expected",
+    [
+        (6, 4, "Lemah"),   # pct_net tepat 0.6
+        (7, 3, "Sedang"),  # +10 pp
+        (8, 2, "Kuat"),    # +20 pp
+    ],
+)
+def test_kekuatan_status_quo_batas(n_net, n_pos, expected):
+    hasil = resolve_scenario(_sentimen_skor(n_pos, 0, n_net, pos=0.3), 10, 3, 1.0)
+    assert hasil["arah"] == "Status Quo"
+    assert hasil["kekuatan"] == expected
