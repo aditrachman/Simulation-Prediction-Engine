@@ -20,6 +20,7 @@ import re
 import json
 import time
 import statistics
+from datetime import datetime, timezone
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -342,7 +343,7 @@ def run_simulation(
     • Jalur JSON: agen dalam satu ronde paralel (PARALLEL_AGENTS, maks
       PARALLEL_AGENTS_MAX), tanpa jeda tetap; pacing via TokenBudget + RPM
     • Jalur legacy: SEQUENTIAL dengan AGENT_CALL_DELAY / ROUND_DELAY
-    • Token prompt dipangkas: role max 250 char, briefing max 200 char
+    • Token prompt dipangkas: role max 250 char, briefing dibatasi 8 baris (~900 char)
     • Retry otomatis via call_llm() jika 429
     • Sentiment mode inline = 0 token tambahan per agen
     ─────────────────────────────────────────────────
@@ -357,8 +358,12 @@ def run_simulation(
     if konteks_real is None:
         konteks_real = {}
 
-    # Ensure briefing_real is populated from konteks_real if not explicitly provided
-    if not briefing_real and konteks_real:
+    # Briefing agen disusun ulang dari daftar berita: semua sumber, satu baris
+    # per kelompok peristiwa. Field lama konteks_real["briefing"] hanya cadangan.
+    briefing_dipakai = _susun_briefing(konteks_real.get("berita") or [])
+    if briefing_dipakai["teks"]:
+        briefing_real = briefing_dipakai["teks"]
+    elif not briefing_real:
         briefing_real = konteks_real.get("briefing", "")
 
     # Ensure data_transparency is populated from konteks_real if not explicitly provided
@@ -605,7 +610,7 @@ def run_simulation(
         if ronde_ke == 1:
             # Semua agen Ronde 1 dapat briefing yang sama, tanpa saling melihat output.
             if briefing_real:
-                parts.append(f"Info konteks: {briefing_real[:500]}")
+                parts.append(f"Info konteks: {briefing_real}")
             parts.append("Sampaikan posisimu yang paling kuat.")
         elif konteks_pengaruh:
             parts.append(konteks_pengaruh)
@@ -636,21 +641,27 @@ def run_simulation(
                 if konteks_memori:
                     parts_trimmed.append(konteks_memori[:80])
                 if ronde_ke == 1 and briefing_real:
-                    parts_trimmed.append(f"Info konteks: {briefing_real[:320]}")
+                    parts_trimmed.append(f"Info konteks: {briefing_real}")
                 elif konteks_pengaruh:
                     parts_trimmed.append("\n".join(konteks_pengaruh.split("\n")[:4]))
                 parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
                 user_p = "\n".join(parts_trimmed)
         elif len(user_p) > BATAS_TRIM_JSON:
             # Jalur JSON: posisi agen, aturan berubah_karena, dan ringkasan pihak lain
-            # tidak boleh dipangkas. Yang dipangkas hanya briefing/topik panjang.
+            # tidak boleh dipangkas. Briefing dipangkas per baris utuh, bukan per karakter.
             parts_trimmed = []
             if konteks_memori:
                 parts_trimmed.append(konteks_memori)
             if aturan_berubah:
                 parts_trimmed.append(aturan_berubah)
             if ronde_ke == 1 and briefing_real:
-                parts_trimmed.append(f"Info konteks: {briefing_real[:200]}")
+                briefing_trim = briefing_real
+                if len(briefing_real) > BATAS_TRIM_JSON // 2:
+                    briefing_trim = (
+                        _susun_briefing(konteks_real.get("berita") or [], maks_baris=4)["teks"]
+                        or briefing_real
+                    )
+                parts_trimmed.append(f"Info konteks: {briefing_trim}")
             if konteks_pengaruh:
                 parts_trimmed.append(konteks_pengaruh)
             parts_trimmed.append(f"Topik: {topik_ronde[:130]}\n\nTanggapannya?")
@@ -1100,6 +1111,9 @@ def run_simulation(
         ambang=0.15,
     )
 
+    # Briefing yang benar-benar masuk prompt agen (diperiksa di UI/laporan).
+    hasil_dict["briefing_dipakai"] = briefing_dipakai
+
     # NEW: Ringkasan terstruktur dari LLM (isi dari _analisis_dan_aktor return)
     hasil_dict["ringkasan_terstruktur"] = _ringkasan_terstruktur_temp
     hasil_dict["ringkasan_kalimat"] = _ringkasan_kalimat_temp
@@ -1264,6 +1278,123 @@ def _label_sentimen(skor: float) -> str:
     if skor > 0.2:  return "positif"
     if skor < -0.2: return "negatif"
     return "netral"
+
+
+# ── Briefing agen: satu baris per kelompok peristiwa ─────────────────────────
+BRIEFING_PEMBUKA = "Sumber: hanya judul berita, isi artikel belum dibaca."
+BRIEFING_MAKS_BARIS = 8
+BRIEFING_MAKS_CHAR = 900
+BRIEFING_KATA_KRITIS = ("kritik", "pengamat", "royalti", "tunda")
+BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def _media_artikel(art: dict) -> str:
+    sumber = str(art.get("sumber") or "").strip()
+    if sumber and sumber != "google_news_search":
+        return sumber
+    from urllib.parse import urlparse
+    url = str(art.get("source_url") or art.get("link") or "")
+    host = urlparse(url).hostname or ""
+    return host[4:] if host.startswith("www.") else (host or sumber or "media tidak diketahui")
+
+
+def _judul_tanpa_media(judul: str) -> str:
+    """Buang sufiks nama media di ujung judul ("... - Kompas.com")."""
+    teks = re.sub(r"&nbsp;", " ", str(judul or "")).strip()
+    teks = re.sub(r"\s+[-–—|]\s+[^-–—|]{2,60}$", "", teks)
+    return teks.strip(" -–—|")
+
+
+def _tanggal_artikel(art: dict) -> tuple[str, datetime | None]:
+    iso = str(art.get("tanggal_iso") or "")
+    cocok = re.match(r"^(\d{4})-(\d{2})-(\d{2})", iso)
+    if not cocok:
+        return "", None
+    tahun, bulan, hari = int(cocok.group(1)), int(cocok.group(2)), int(cocok.group(3))
+    if not 1 <= bulan <= 12:
+        return "", None
+    return f"{hari} {BULAN_SINGKAT[bulan - 1]} {tahun}", datetime(tahun, bulan, hari, tzinfo=timezone.utc)
+
+
+def _susun_briefing(
+    berita: list | None,
+    maks_baris: int = BRIEFING_MAKS_BARIS,
+    maks_char: int = BRIEFING_MAKS_CHAR,
+    sekarang: datetime | None = None,
+) -> dict:
+    """Satu baris per kelompok peristiwa, tanpa memotong baris di tengah."""
+    sekarang = sekarang or datetime.now(timezone.utc)
+    artikel = [b for b in (berita or []) if isinstance(b, dict) and b.get("judul")][:12]
+    if not artikel:
+        return {"teks": "", "baris": [], "jumlah_kelompok": 0, "jumlah_baris": 0}
+
+    siap = [
+        {
+            **b,
+            "judul": _judul_tanpa_media(b.get("judul")),
+            "ringkasan": "",
+            "_media": _media_artikel(b),
+            "_tanggal": _tanggal_artikel(b),
+        }
+        for b in artikel
+    ]
+
+    from .scraper import cluster_articles_by_topic
+    klaster = cluster_articles_by_topic(siap) if len(siap) > 1 else [siap]
+
+    kelompok = []
+    for anggota in klaster:
+        anggota = sorted(anggota, key=lambda a: a["_tanggal"][1] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        wakil = anggota[0]
+        tanggal_label, tanggal_dt = wakil["_tanggal"]
+        teks_kelompok = " ".join(a.get("judul", "") for a in anggota).lower()
+        kelompok.append({
+            "baris": (
+                f"- {wakil['judul']} ({wakil['_media']}, {tanggal_label or 'tanggal tidak diketahui'}; "
+                f"dilaporkan {len({a['_media'] for a in anggota})} media)"
+            ),
+            "tanggal": tanggal_dt,
+            "lama": bool(tanggal_dt and (sekarang - tanggal_dt).days > 30),
+            "kritis": any(k in teks_kelompok for k in BRIEFING_KATA_KRITIS),
+        })
+
+    def urut(k):
+        return k["tanggal"] or datetime.min.replace(tzinfo=timezone.utc)
+
+    kelompok.sort(key=urut, reverse=True)
+    terpilih: list[dict] = []
+    terpakai: set[int] = set()
+
+    def muat(kelompok_baru: dict) -> bool:
+        total = len(BRIEFING_PEMBUKA) + sum(len(k["baris"]) + 1 for k in terpilih + [kelompok_baru])
+        return total <= maks_char
+
+    # Satu baris lama (>30 hari) dan satu baris berisi kata kritis, bila ada.
+    for wajib in (
+        next((k for k in kelompok if k["lama"]), None),
+        next((k for k in kelompok if k["kritis"]), None),
+    ):
+        if wajib and id(wajib) not in terpakai and len(terpilih) < maks_baris and muat(wajib):
+            terpilih.append(wajib)
+            terpakai.add(id(wajib))
+
+    for k in kelompok:
+        if len(terpilih) >= maks_baris:
+            break
+        if id(k) in terpakai or not muat(k):
+            continue
+        terpilih.append(k)
+        terpakai.add(id(k))
+
+    terpilih.sort(key=urut, reverse=True)
+    baris = [BRIEFING_PEMBUKA] + [k["baris"] for k in terpilih]
+    return {
+        "teks": "\n".join(baris),
+        "baris": baris,
+        "jumlah_kelompok": len(kelompok),
+        "jumlah_baris": len(terpilih),
+    }
+
 
 
 def _parse_ringkasan_json(teks: str) -> tuple[dict, str]:
