@@ -116,9 +116,30 @@ class TestRonde1Independen:
         prompt: list[dict] = []
         putaran = {"i": 0}
 
+        # Mock response untuk FAKTA TERKINI (panggilan pertama)
+        _FAKTA_RESPONSE = (
+            "[1] Pemerintah mengumumkan program MBG dengan anggaran Rp335 triliun.\n"
+            "[2] Beberapa daerah melaporkan kesiapan distribusi belum merata.\n"
+            "[3] Komisi pemantau menilai target pencapaian masih di atas rata-rata."
+        )
+
+        # Berita untuk memicu FAKTA TERKINI
+        berita = [
+            {
+                "judul": f"Berita kebijakan nomor {i} tentang distribusi",
+                "sumber": "google_news_search",
+                "source_url": f"https://media{i}.com",
+                "tanggal_iso": f"2026-11-{i + 1:02d}T00:00:00+00:00",
+            }
+            for i in range(5)
+        ]
+
         def fake(system_p, user_p, **kwargs):
             putaran["i"] += 1
             prompt.append({"user": user_p})
+            # Panggilan pertama = FAKTA TERKINI
+            if putaran["i"] == 1:
+                return _FAKTA_RESPONSE
             return _turn("menolak", f"Argumen nomor {putaran['i']} soal distribusi.")
 
         monkeypatch.setattr(simulation, "call_llm", fake)
@@ -127,9 +148,11 @@ class TestRonde1Independen:
 
         simulation.run_simulation(
             topik=TOPIK, agents=dua_agen, jumlah_ronde=2, tier="free",
+            konteks_real={"berita": berita, "sumber_status": "ok"},
         )
 
-        lanjutan = prompt[len(dua_agen):]
+        # FAKTA TERKINI call (1) + agen R1 (4) = 5, then agen R2 starts at index 5
+        lanjutan = prompt[5:]
         assert lanjutan
         for p in lanjutan:
             assert "Pihak lain berpendapat" in p["user"]

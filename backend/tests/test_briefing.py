@@ -72,5 +72,9 @@ def test_baris_utuh_dan_anggaran():
 
 def test_berita_kosong():
     info = _susun_briefing([], sekarang=SEKARANG)
-    assert info == {"teks": "", "baris": [], "jumlah_kelompok": 0, "jumlah_baris": 0}
+    assert info["teks"] == ""
+    assert info["baris"] == []
+    assert info["kelompok"] == []
+    assert info["jumlah_kelompok"] == 0
+    assert info["jumlah_baris"] == 0
     assert _susun_briefing(None)["teks"] == ""

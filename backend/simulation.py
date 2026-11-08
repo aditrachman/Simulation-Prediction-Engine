@@ -68,6 +68,7 @@ from .services.agent_turn import (
     PEMICU_MAX_TOKENS,
     PEMICU_RESPONSE_FORMAT,
     angka_klaim,
+    _kumpulan_angka,
 )
 # CrowdPool removed 2026-07-05 — unused, over-engineered
 
@@ -362,9 +363,13 @@ def run_simulation(
     # per kelompok peristiwa. Field lama konteks_real["briefing"] hanya cadangan.
     briefing_dipakai = _susun_briefing(konteks_real.get("berita") or [])
     if briefing_dipakai["teks"]:
-        briefing_real = briefing_dipakai["teks"]
+        # Bangun blok FAKTA TERKINI dari kelompok berita
+        fakta_blok = _bangun_fakta_terkini(briefing_dipakai, topik)
+        briefing_real = fakta_blok["teks"]
+        briefing_dipakai["fakta_terkini"] = fakta_blok
     elif not briefing_real:
         briefing_real = konteks_real.get("briefing", "")
+        briefing_dipakai["fakta_terkini"] = {"teks": briefing_real, "klaim": [], "catatan_istilah": None, "briefing_guard": {"regenerasi_angka": 0, "regenerasi_salinan": 0}}
 
     # Ensure data_transparency is populated from konteks_real if not explicitly provided
     if data_transparency is None and konteks_real:
@@ -697,6 +702,54 @@ def run_simulation(
                     f"output JSON tidak valid, pakai stance {turn['stance']}"
                 )
 
+            # ── Briefing Guard: validasi output terhadap FAKTA TERKINI ─────
+            fakta_info = briefing_dipakai.get("fakta_terkini", {})
+            klaim = fakta_info.get("klaim", [])
+            guard = fakta_info.get("briefing_guard", {"regenerasi_angka": 0, "regenerasi_salinan": 0})
+            angka_boleh = _kumpulan_angka_fakta(klaim) | _kumpulan_angka(topik)
+
+            # Regenerasi max 1x per alasan
+            for _ in range(1):
+                # a. Angka asing
+                angka_asing = _cek_angka_asing(turn["alasan"], angka_boleh)
+                if angka_asing:
+                    guard["regenerasi_angka"] += 1
+                    # Regenerasi dengan peringatan
+                    warn_p = user_p + f"\n\nPERINGATAN: Jawabanmu mengandung angka {', '.join(angka_asing)} yang tidak ada di FAKTA TERKINI atau topik. Tulis ulang tanpa angka tersebut."
+                    turn_retry = execute_turn(
+                        llm=lambda s, u: call_llm(s, u, max_tokens=TURN_MAX_TOKENS, model=MODEL_AGENT, use_cache=False, auto_complete=False, response_format=TURN_RESPONSE_FORMAT),
+                        system_p=system_p,
+                        user_p=warn_p,
+                        prev_stance=stance_ronde_lalu,
+                        prev_score=skor_ronde_lalu,
+                        llm_pemicu=lambda s, u: call_llm(s, u, max_tokens=PEMICU_MAX_TOKENS, model=MODEL_AGENT, use_cache=False, auto_complete=False, response_format=PEMICU_RESPONSE_FORMAT),
+                    )
+                    if not _cek_angka_asing(turn_retry["alasan"], angka_boleh):
+                        turn = turn_retry
+                    else:
+                        # Masih ada angka asing → hapus kalimat yang memuat angka itu
+                        turn["alasan"] = _hapus_kalimat_dengan_angka(turn_retry["alasan"], angka_asing)
+                    break
+
+                # b. Salinan judul/klaim >= 6 kata
+                if _cek_salinan_judul(turn["alasan"], klaim):
+                    guard["regenerasi_salinan"] += 1
+                    warn_p = user_p + "\n\nPERINGATAN: Jawabanmu menyalin >=6 kata berurutan dari FAKTA TERKINI. Tulis ulang dengan kata-katamu sendiri."
+                    turn_retry = execute_turn(
+                        llm=lambda s, u: call_llm(s, u, max_tokens=TURN_MAX_TOKENS, model=MODEL_AGENT, use_cache=False, auto_complete=False, response_format=TURN_RESPONSE_FORMAT),
+                        system_p=system_p,
+                        user_p=warn_p,
+                        prev_stance=stance_ronde_lalu,
+                        prev_score=skor_ronde_lalu,
+                        llm_pemicu=lambda s, u: call_llm(s, u, max_tokens=PEMICU_MAX_TOKENS, model=MODEL_AGENT, use_cache=False, auto_complete=False, response_format=PEMICU_RESPONSE_FORMAT),
+                    )
+                    if not _cek_salinan_judul(turn_retry["alasan"], klaim):
+                        turn = turn_retry
+                    break
+
+                # Tidak ada pelanggaran
+                break
+
             # Aturan realisme: score dibatasi agar tidak loncat > _DELTA_CAP per ronde.
             # Ini clamp Python, bukan hasil model. Stance tetap seperti yang ditulis agen.
             turn["score"] = _apply_delta_cap(turn["score"], skor_ronde_lalu, agen["nama"], ronde_ke)
@@ -722,6 +775,7 @@ def run_simulation(
                 "fallback":        turn["fallback"],
                 "klaim_agen":      bool(asing),
                 "angka_klaim":     asing,
+                "briefing_guard":  guard,
             }
         # ── Jalur lama (USE_LEGACY_PIPELINE=true) ──────────────────────────
         jawaban = call_llm(system_p, user_p, max_tokens=MAX_TOKENS_AGENT, model=MODEL_AGENT, use_cache=False)
@@ -1148,6 +1202,7 @@ def run_simulation(
         )
 
     # Simpan run ke file (atomik, thread-safe)
+    run_id = None
     try:
         from .services.run_store import save_run
         run_id = save_run(hasil_dict)
@@ -1157,16 +1212,17 @@ def run_simulation(
         print(f"[RUN_STORE] save failed: {e}")
 
     # Assemble + simpan CaseStudy (narator + computed) — tidak boleh gagalkan simulasi
-    try:
-        from .services.casestudy_assemble import assemble_case_study, save_case_study
-        case_dict = assemble_case_study(run_id)
-        save_case_study(run_id, case_dict)
-        print(f"[CASE_STUDY] assembled and saved for run_id={run_id}")
-    except Exception as exc:
-        print(
-            f"[CASE_STUDY] failed for run_id={run_id}: "
-            f"{type(exc).__name__}: {exc}"
-        )
+    if run_id:
+        try:
+            from .services.casestudy_assemble import assemble_case_study, save_case_study
+            case_dict = assemble_case_study(run_id)
+            save_case_study(run_id, case_dict)
+            print(f"[CASE_STUDY] assembled and saved for run_id={run_id}")
+        except Exception as exc:
+            print(
+                f"[CASE_STUDY] failed for run_id={run_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     return hasil_dict
 
@@ -1287,6 +1343,210 @@ BRIEFING_MAKS_CHAR = 900
 BRIEFING_KATA_KRITIS = ("kritik", "pengamat", "royalti", "tunda")
 BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 
+# ── FAKTA TERKINI: konversi baris briefing jadi klaim terstruktur ───────────
+FAKTA_MAKS_KLAIM = 5
+FAKTA_MAKS_KATA = 20
+
+_FAKTA_SYSTEM = (
+    "Kamu mengubah daftar judul berita yang sudah dikelompokkan per peristiwa "
+    "menjadi daftar klaim fakta pendek. Aturan ketat:\n"
+    "1. HANYA gunakan informasi yang ada di judul. JANGAN tambah fakta, angka, nama, atau tanggal.\n"
+    "2. Setiap klaim = SATU kalimat pernyataan, ≤20 kata.\n"
+    "3. Awali dengan nomor kelompok: '[1] ...', '[2] ...', dst.\n"
+    "4. Urutan: klaim yang memuat informasi DI LUAR topik dulu (waktu, pihak yang menyatakan, "
+    "syarat, penundaan, kondisi), lalu klaim yang hanya mengulang topik.\n"
+    "5. Maksimal 5 klaim. Jika >5 kelompok, pilih 5 paling informatif.\n"
+    "6. Output HANYA daftar klaim, satu per baris, tanpa markdown, tanpa penjelasan."
+)
+
+_FAKTA_USER_TEMPLATE = (
+    "Topik: {topik}\n\n"
+    "Kelompok berita (sudah diklaster):\n{kelompok_teks}\n\n"
+    "Hasilkan maksimal {maks} klaim fakta:"
+)
+
+
+def _susun_fakta_terkini(
+    kelompok: list[dict],
+    topik: str,
+    maks_klaim: int = FAKTA_MAKS_KLAIM,
+) -> list[dict] | None:
+    """
+    Panggil LLM sekali untuk mengubah kelompok berita jadi klaim terstruktur.
+    Return list of dict: [{"nomor": 1, "klaim": "...", "kelompok_asli": 0}, ...] atau None jika gagal.
+    """
+    if not kelompok:
+        return None
+
+    # Siapkan teks kelompok untuk prompt
+    kelompok_teks = "\n".join(
+        f"[{i+1}] {k['baris'].lstrip('- ')}"
+        for i, k in enumerate(kelompok)
+    )
+
+    user_p = _FAKTA_USER_TEMPLATE.format(
+        topik=topik,
+        kelompok_teks=kelompok_teks,
+        maks=maks_klaim,
+    )
+
+    try:
+        raw = call_llm(
+            _FAKTA_SYSTEM,
+            user_p,
+            max_tokens=200,
+            model="openai/gpt-oss-20b",
+            use_cache=False,
+            auto_complete=False,
+        )
+    except Exception as e:
+        # Tes memblokir LLM nyata → fallback ke baris judul
+        return None
+
+    # Parse output: baris "[1] Klaim..." atau "1. Klaim..."
+    klaim_list = []
+    for baris in raw.strip().split("\n"):
+        baris = baris.strip()
+        if not baris:
+            continue
+        # Cocokkan "[N] ..." atau "N. ..."
+        m = re.match(r"[\[\(]?(\d+)[\]\)]?[\.\:]\s*(.+)", baris)
+        if not m:
+            m = re.match(r"^(\d+)\s+(.+)", baris)
+        if m:
+            nomor = int(m.group(1))
+            klaim = m.group(2).strip()
+            if 1 <= nomor <= len(kelompok):
+                # Hitung kata
+                if len(klaim.split()) <= FAKTA_MAKS_KATA:
+                    klaim_list.append({
+                        "nomor": nomor,
+                        "klaim": klaim,
+                        "kelompok_asli": nomor - 1,
+                    })
+
+    if not klaim_list:
+        return None
+
+    # Urutkan: yang punya info di luar topik dulu (heuristik: mengandung waktu/pihak/syarat/penundaan)
+    kata_ekstra = ("januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus",
+                   "september", "oktober", "november", "desember", "2025", "2026", "2027",
+                   "menko", "menteri", "airlangga", "prabowo", "jokowi", "presiden",
+                   "tunda", "ditunda", "penundaan", "belum", "tidak", "akan", "setelah",
+                   "syarat", "kondisi", "hanya", "cuma", "sementara")
+
+    def skor_ekstra(k):
+        t = k["klaim"].lower()
+        return sum(1 for w in kata_ekstra if w in t)
+
+    klaim_list.sort(key=skor_ekstra, reverse=True)
+    return klaim_list[:maks_klaim]
+
+
+def _catatan_istilah(topik: str) -> str | None:
+    """Hasilkan satu kalimat definisi untuk istilah teknis di topik, jika jelas."""
+    topik_lower = topik.lower()
+    # Hanya untuk istilah yang benar-benar standar dan tidak ambigu
+    if "ptkp" in topik_lower and "penghasilan" not in topik_lower:
+        return "Catatan istilah (umum): PTKP = batas penghasilan yang tidak dikenai pajak; PTKP naik berarti pajak yang dibayar berkurang."
+    if "hak cipta" in topik_lower and "gratis" in topik_lower:
+        return "Catatan istilah (umum): Hak cipta = hak eksklusif pencipta atas karya; gratiskan biaya pendaftaran berarti tidak ada biaya administrasi tapi hak tetap berlaku."
+    return None
+
+
+def _bangun_fakta_terkini(
+    briefing_dipakai: dict,
+    topik: str,
+) -> dict:
+    """
+    Bangun blok FAKTA TERKINI dari hasil _susun_briefing.
+    Return dict: {"teks": str, "klaim": list[dict], "catatan_istilah": str|None, "briefing_guard": dict}
+    """
+    kelompok = briefing_dipakai.get("kelompok", [])
+    if not kelompok:
+        return {
+            "teks": "",
+            "klaim": [],
+            "catatan_istilah": None,
+            "briefing_guard": {"regenerasi_angka": 0, "regenerasi_salinan": 0},
+        }
+
+    # Coba konversi ke klaim via LLM (satu panggilan)
+    klaim = _susun_fakta_terkini(kelompok, topik)
+
+    catatan = _catatan_istilah(topik)
+
+    if klaim:
+        # Format blok FAKTA TERKINI
+        baris_fakta = [f"[{k['nomor']}] {k['klaim']}" for k in klaim]
+        teks_blok = "FAKTA TERKINI:\n" + "\n".join(baris_fakta)
+        if catatan:
+            teks_blok += "\n" + catatan
+        teks_blok += "\n\nPilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar."
+    else:
+        # Fallback: pakai baris briefing biasa
+        baris_fallback = [k["baris"] for k in kelompok[:8]]
+        teks_blok = "FAKTA TERKINI:\n" + "\n".join(baris_fallback)
+        if catatan:
+            teks_blok += "\n" + catatan
+        teks_blok += "\n\nPilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar."
+        klaim = []  # kosongkan klaim agar guard tidak aktif
+
+    return {
+        "teks": teks_blok,
+        "klaim": klaim,
+        "catatan_istilah": catatan,
+        "briefing_guard": {"regenerasi_angka": 0, "regenerasi_salinan": 0},
+    }
+
+
+# ── Briefing guard: validasi output agen terhadap FAKTA TERKINI ──────────────
+_ANGKA_RE = re.compile(r"\d+(?:[.,]\d+)*\s*%?|Rp\s*\d+(?:[.,]\d+)?")
+
+def _kumpulan_angka_fakta(klaim: list[dict]) -> set[str]:
+    """Kumpulkan angka yang BOLEH disebut (dari klaim fakta)."""
+    hasil = set()
+    for k in klaim:
+        for tok in _ANGKA_RE.findall(k["klaim"] or ""):
+            t = re.sub(r"\s|%|Rp", "", tok)
+            if len(re.sub(r"\D", "", t)) >= 2:
+                hasil.add(t.replace(",", "."))
+    return hasil
+
+
+def _cek_angka_asing(alasan: str, angka_boleh: set[str]) -> list[str]:
+    """Angka di alasan yang tidak ada di angka_boleh."""
+    asing = []
+    for tok in _ANGKA_RE.findall(alasan or ""):
+        t = re.sub(r"\s|%|Rp", "", tok).replace(",", ".")
+        if t and t not in angka_boleh:
+            asing.append(tok.strip())
+    return asing
+
+
+def _cek_salinan_judul(alasan: str, klaim: list[dict]) -> bool:
+    """True jika alasan mengandung >=6 kata berurutan sama dengan salah satu klaim/judul."""
+    kata_alasan = (alasan or "").lower().split()
+    if len(kata_alasan) < 6:
+        return False
+    for k in klaim:
+        klaim_kata = (k["klaim"] or "").lower().split()
+        if len(klaim_kata) < 6:
+            continue
+        # Cek substring 6+ kata
+        for i in range(len(klaim_kata) - 5):
+            potongan = " ".join(klaim_kata[i:i+6])
+            if potongan in alasan.lower():
+                return True
+    return False
+
+
+def _hapus_kalimat_dengan_angka(teks: str, angka_target: list[str]) -> str:
+    """Hapus kalimat yang mengandung salah satu angka target."""
+    kalimat = re.split(r'(?<=[.!?])\s+', teks.strip())
+    kalimat_bersih = [k for k in kalimat if not any(a in k for a in angka_target)]
+    return " ".join(kalimat_bersih) if kalimat_bersih else teks
+
 
 def _media_artikel(art: dict) -> str:
     sumber = str(art.get("sumber") or "").strip()
@@ -1322,11 +1582,13 @@ def _susun_briefing(
     maks_char: int = BRIEFING_MAKS_CHAR,
     sekarang: datetime | None = None,
 ) -> dict:
-    """Satu baris per kelompok peristiwa, tanpa memotong baris di tengah."""
+    """Satu baris per kelompok peristiwa, tanpa memotong baris di tengah.
+    Return dict dengan baris, dan juga 'kelompok' (list of dict) untuk konversi ke FAKTA TERKINI.
+    """
     sekarang = sekarang or datetime.now(timezone.utc)
     artikel = [b for b in (berita or []) if isinstance(b, dict) and b.get("judul")][:12]
     if not artikel:
-        return {"teks": "", "baris": [], "jumlah_kelompok": 0, "jumlah_baris": 0}
+        return {"teks": "", "baris": [], "kelompok": [], "jumlah_kelompok": 0, "jumlah_baris": 0}
 
     siap = [
         {
@@ -1388,9 +1650,17 @@ def _susun_briefing(
 
     terpilih.sort(key=urut, reverse=True)
     baris = [BRIEFING_PEMBUKA] + [k["baris"] for k in terpilih]
+    # Konversi datetime ke string untuk JSON serialization
+    kelompok_serializable = []
+    for k in kelompok:
+        k_serializable = dict(k)
+        if k_serializable.get("tanggal"):
+            k_serializable["tanggal"] = k_serializable["tanggal"].isoformat()
+        kelompok_serializable.append(k_serializable)
     return {
         "teks": "\n".join(baris),
         "baris": baris,
+        "kelompok": kelompok_serializable,
         "jumlah_kelompok": len(kelompok),
         "jumlah_baris": len(terpilih),
     }
