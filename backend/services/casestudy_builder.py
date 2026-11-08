@@ -378,7 +378,8 @@ def build_computed(run: dict) -> dict:
         f"Topik simulasi ini: {topik}" if topik else "Topik simulasi ini tidak disebutkan."
     )
     pemicu_angka = _angka_pemicu(run)
-    bahan: list[str] = []
+    # Convert bukti dicts to strings for narrator
+    bahan = [f"{e['agen']}: {e['teks']}" for e in bukti[:3]]
     sumber_teks = f"Sumber: {n_sumber} artikel RSS."
     if n_sumber <= 1:
         sumber_teks += " Briefing terbatas."

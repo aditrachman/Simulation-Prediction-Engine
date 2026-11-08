@@ -7,16 +7,16 @@
   },
   "keterbatasan": "Simulasi ini hanya memakai 1 artikel sumber, dan angka yang muncul di debat adalah klaim para agen, bukan data yang sudah diverifikasi.",
   "hasil": {
-    "vonis": "Mayoritas peserta menolak usulan dalam topik ini.",
+    "vonis": "Sikap akhir: 8 dari 12 peserta menolak. Pertanyaan: Apakah program Makan Bergizi Gratis (MBG) sudah tepat sasaran?",
     "distribusi": {
       "menolak": 8,
       "netral": 3,
       "mendukung": 1
     },
     "alasan": [
-      "Kontradiksi data membuktikan program tidak terkelola dengan baik.",
-      "Bantuan konsisten, anak sehat. Program ini benar-benar membantu keluarga kecil.",
-      "Data konflik: warga bilang naik, dokter bilang turun. Siapa yang jujur?"
+      "\"Kontradiksi data membuktikan program tidak terkelola dengan baik.\"",
+      "\"Data konflik: warga bilang naik, dokter bilang turun. Siapa yang jujur?\"",
+      "\"Data 78% naik vs turun menunjukkan sistem pelaporan belum terstandarisasi.\""
     ],
     "kepercayaan": {
       "level": "Rendah–Sedang",
@@ -28,7 +28,10 @@
       "angka": "72,8%",
       "teks": "Topik simulasi ini: Apakah program Makan Bergizi Gratis (MBG) sudah tepat sasaran?"
     },
-    "bahan": [],
+    "bahan": [
+      "Akademisi · Ronde 3: Berat badan naik 78%, tapi status gizi membaik hanya 45%. Ukuran sukses salah.",
+      "Dokter/Nakes · Ronde 3: Data Desa X: 78% berat badan turun dan anak menolak makan. Program berbahaya."
+    ],
     "sumber": "Sumber: 1 artikel RSS. Briefing terbatas."
   },
   "kubu": [
@@ -85,7 +88,7 @@
     {
       "no": 2,
       "judul": "Sikap peserta di ronde 2",
-      "ringkas": "9 menolak, 2 netral, 1 mendukung.",
+      "ringkas": "9 menolak, 2 netral, 1 mendukung. Dokter/Nakes bergeser dari menolak ke netral.",
       "distribusi": {
         "menolak": 9,
         "netral": 2,
@@ -100,7 +103,7 @@
     {
       "no": 3,
       "judul": "Sikap peserta di ronde 3",
-      "ringkas": "8 menolak, 3 netral, 1 mendukung.",
+      "ringkas": "8 menolak, 3 netral, 1 mendukung. Warga Desa/Kelurahan bergeser dari menolak ke netral; Orang Tua Bayi bergeser dari menolak ke netral; Dokter/Nakes bergeser dari netral ke menolak.",
       "distribusi": {
         "menolak": 8,
         "netral": 3,
@@ -162,5 +165,11 @@
       "maka": "1 peserta Pendukung bisa melemah.",
       "dasar_agen": "Ibu Hamil/Menyusui"
     }
-  ]
+  ],
+  "kualitas": {
+    "fallback_count": 0,
+    "total_giliran": 36,
+    "fallback_rate": 0.0278,
+    "status": "ok"
+  }
 }

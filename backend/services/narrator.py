@@ -38,7 +38,7 @@ NARRATOR_RESPONSE_FORMAT = {
                             "required": ["angka", "teks"],
                             "additionalProperties": False,
                         },
-                        "bahan": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+                        "bahan": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3},
                     },
                     "required": ["pemicu", "bahan"],
                     "additionalProperties": False,
