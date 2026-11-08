@@ -671,6 +671,10 @@ _GENERIC_TOPIC_WORDS = frozenset({
     "topik", "menurut", "terhadap", "mengenai", "sebaiknya", "harus", "perlu",
     "bisa", "dapat", "akan", "tidak", "belum", "sudah", "lebih", "kurang",
     "sangat", "paling", "para", "bagi", "untuk", "dalam", "dengan", "atau",
+    # kata generik dari ekor kalimat topik yang sering menyesatkan
+    "usul", "usulan", "masyarakat", "berdasarkan", "kami", "warga",
+    # kata generik tambahan untuk filter query
+    "jenis", "macam", "bentuk", "layanan",
 })
 
 
@@ -685,7 +689,57 @@ def _topic_keywords(topik: str) -> set[str]:
 # Google News Search Query Generator
 # ---------------------------------------------------------------------------
 
-def buat_query_pencarian(topik: str) -> list[str]:
+def _extract_kata_wajib(topik: str, queries: list[str]) -> list[str]:
+    """
+    Ekstrak 2-4 istilah inti (kata wajib) sebagai ALTERNATIF.
+    Mencari bigram/trigram spesifik dari topik yang muncul di query.
+    Fallback: bigram paling spesifik dari topik.
+    """
+    # Kumpulkan semua token dari query
+    all_tokens = []
+    for q in queries:
+        all_tokens.extend(q.lower().split())
+    
+    # Cari bigram dari topik yang muncul di query
+    topik_tokens = _extract_content_words(topik)
+    topik_tokens = [t for t in topik_tokens if t not in _GENERIC_TOPIC_WORDS]
+    
+    alternatives = []
+    
+    # Cari bigram (2 kata) dari topik_tokens yang berurutan
+    for i in range(len(topik_tokens) - 1):
+        bg = topik_tokens[i] + " " + topik_tokens[i + 1]
+        # Cek apakah bigram ini (atau stem-nya) muncul di query
+        for tok in all_tokens:
+            if tok.startswith(topik_tokens[i][:4]) or tok.startswith(topik_tokens[i+1][:4]):
+                alternatives.append(bg)
+                break
+    
+    # Cari trigram (3 kata) jika belum cukup
+    if len(alternatives) < 2:
+        for i in range(len(topik_tokens) - 2):
+            tg = topik_tokens[i] + " " + topik_tokens[i + 1] + " " + topik_tokens[i + 2]
+            for tok in all_tokens:
+                if tok.startswith(topik_tokens[i][:4]):
+                    alternatives.append(tg)
+                    break
+    
+    # Tambahkan kata tunggal spesifik dari topik (panjang >= 5)
+    for t in topik_tokens:
+        if len(t) >= 5 and t not in [a.split()[0] for a in alternatives]:
+            alternatives.append(t)
+    
+    # Uniq, max 4
+    seen = set()
+    uniq = []
+    for a in alternatives:
+        if a not in seen:
+            seen.add(a)
+            uniq.append(a)
+    return uniq[:4]
+
+
+def buat_query_pencarian(topik: str) -> dict:
     """
     Bangun 2-4 query pendek (2-4 kata kunci) untuk Google News RSS search.
     Pakai LLM (call_llm) dengan fallback rule-based dari _topic_keywords.
@@ -694,7 +748,9 @@ def buat_query_pencarian(topik: str) -> list[str]:
         topik: Topik simulasi (kalimat penuh).
 
     Returns:
-        List query string (max 3), siap untuk URL-encode ke Google News.
+        Dict dengan keys:
+        - "queries": list[str] max 3, siap untuk URL-encode ke Google News
+        - "kata_wajib": list[str] 2-4 alternatif istilah inti (singkatan, kepanjangan, sebutan populer)
     """
     # Coba LLM dulu
     try:
@@ -705,14 +761,20 @@ def buat_query_pencarian(topik: str) -> list[str]:
     system_prompt = (
         "Kamu menghasilkan query pencarian Google News untuk topik kebijakan Indonesia. "
         "Aturan keras:\n"
-        "1. Output HANYA JSON object dengan key \"queries\" yang berisi array string, tanpa teks lain.\n"
-        "2. Setiap query 2-4 kata kunci pendek (bukan kalimat).\n"
-        "3. Hapus kata generik: pemerintah, program, kebijakan, aturan, dampak, "
-        "solusi, langkah, upaya, masalah, isu, topik, menurut, terhadap, mengenai.\n"
+        "1. Output HANYA JSON object dengan key \"queries\" dan \"kata_wajib\", tanpa teks lain.\n"
+        "2. \"queries\": array string, max 3, tiap query 2-4 kata kunci pendek (bukan kalimat).\n"
+        "3. Hapus kata generik: pemerintah, program, kebijakan, aturan, dampak, solusi, "
+        "langkah, upaya, masalah, isu, topik, menurut, terhadap, mengenai, jenis, macam, bentuk, layanan.\n"
         "4. Fokus pada entitas spesifik, nama program, angka, singkatan, atau aksi konkret.\n"
-        "5. Maksimal 3 query.\n"
+        "5. \"kata_wajib\": array 2-4 string, alternatif istilah inti: singkatan, kepanjangan, "
+        "sebutan populer. Contoh PTKP: [\"ptkp\", \"penghasilan tidak kena pajak\", "
+        "\"batas penghasilan bebas pajak\", \"batas gaji bebas pajak\"]. "
+        "Contok hak cipta: [\"hak cipta\", \"pencatatan ciptaan\", \"kekayaan intelektual\"].\n"
+        "6. Setiap query HARUS mengandung minimal 1 token dari kata_wajib (setelah stem). "
+        "Query yang tidak mengandung token kata_wajib akan dibuang.\n"
         "Contoh: topik 'Pemerintah menggratiskan biaya pendaftaran 19 jenis hak cipta' -> "
-        '{"queries": ["pendaftaran hak cipta gratis", "PNBP hak cipta 19 jenis", "Kemenkum hak cipta gratis"]}'
+        '{"queries": ["pendaftaran hak cipta gratis", "PNBP hak cipta 19 jenis", "Kemenkum hak cipta gratis"], '
+        '"kata_wajib": ["hak cipta", "pencatatan ciptaan", "kekayaan intelektual"]}'
     )
     user_prompt = f"Topik: {topik}"
 
@@ -721,31 +783,76 @@ def buat_query_pencarian(topik: str) -> list[str]:
             raw = call_llm(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=200,
+                max_tokens=300,
                 use_analysis_chain=False,
                 use_cache=True,
                 response_format={"type": "json_object"},
             )
             import json
             parsed = json.loads(raw)
-            # Support both {"queries": [...]} and [...]
-            queries = parsed.get("queries") if isinstance(parsed, dict) else parsed
+            if isinstance(parsed, dict):
+                queries = parsed.get("queries", [])
+                kata_wajib = parsed.get("kata_wajib", [])
+            else:
+                queries = parsed
+                kata_wajib = []
             if isinstance(queries, list):
-                # Clean and validate
+                # Clean and validate queries
                 cleaned = []
                 for q in queries:
                     q = str(q).strip()
                     if 2 <= len(q.split()) <= 4 and len(q) <= 60:
                         cleaned.append(q)
                 if cleaned:
-                    print(f"[SOURCES] buat_query_pencarian LLM queries={cleaned}")
-                    return cleaned[:3]
+                    # Ensure kata_wajib is list of strings
+                    if isinstance(kata_wajib, list):
+                        kw_clean = [str(k).strip().lower() for k in kata_wajib if str(k).strip()]
+                        kw_clean = kw_clean[:4]
+                    else:
+                        kw_clean = _extract_kata_wajib(topik, cleaned)
+                    # BUANG query yang tidak mengandung token apa pun dari kata_wajib
+                    final_queries = []
+                    for q in cleaned:
+                        q_tokens = set(q.lower().split())
+                        has_wajib_token = False
+                        for kw in kw_clean:
+                            kw_parts = kw.split()
+                            if len(kw_parts) == 1:
+                                if _stem_id(kw_parts[0]) in {_stem_id(t) for t in q_tokens}:
+                                    has_wajib_token = True
+                                    break
+                            else:
+                                # Frasa: cek apakah semua token frasa ada di query
+                                if all(_stem_id(p) in {_stem_id(t) for t in q_tokens} for p in kw_parts):
+                                    has_wajib_token = True
+                                    break
+                        if has_wajib_token:
+                            final_queries.append(q)
+                        else:
+                            print(f"[SOURCES] buat_query_pencarian dropped query (no kata_wajib token): {q!r}")
+                    if not final_queries:
+                        final_queries = cleaned[:1]  # fallback: keep at least 1
+
+                    # Pastikan minimal 2 query: jika LLM hanya return 1, buat query kedua
+                    # Query kedua = kata_wajib[0] + satu kata kunci spesifik non-generik dari topik
+                    if len(final_queries) == 1 and kw_clean:
+                        first_wajib = kw_clean[0]
+                        # Cari kata kunci spesifik dari topik (bukan generik, bukan kata_wajib)
+                        topic_kw = _topic_keywords(topik)
+                        specific_kw = [w for w in topic_kw if w not in _GENERIC_TOPIC_WORDS and w not in first_wajib]
+                        if specific_kw:
+                            second_query = f"{first_wajib} {specific_kw[0]}"
+                            if second_query != final_queries[0]:
+                                final_queries.append(second_query)
+                                print(f"[SOURCES] buat_query_pencarian auto-generated second query: {second_query!r}")
+
+                    print(f"[SOURCES] buat_query_pencarian LLM queries={final_queries} kata_wajib={kw_clean}")
+                    return {"queries": final_queries[:3], "kata_wajib": kw_clean}
         except Exception as e:
             print(f"[SOURCES] buat_query_pencarian LLM error={type(e).__name__}: {e}, fallback rule-based")
 
     # Fallback rule-based: ambil kata kunci terkuat dari _topic_keywords
     keywords = sorted(_topic_keywords(topik), key=lambda w: -len(w))
-    # Buat kombinasi 2-3 kata dari 4-5 kata teratas
     queries = []
     if len(keywords) >= 2:
         queries.append(" ".join(keywords[:2]))
@@ -754,8 +861,9 @@ def buat_query_pencarian(topik: str) -> list[str]:
     if len(keywords) >= 4:
         queries.append(" ".join(keywords[1:3]))  # variasi
     queries = [q for q in queries if q][:3]
-    print(f"[SOURCES] buat_query_pencarian rule-based queries={queries}")
-    return queries
+    kata_wajib = _extract_kata_wajib(topik, queries) if queries else (keywords[:1] if keywords else [])
+    print(f"[SOURCES] buat_query_pencarian rule-based queries={queries} kata_wajib={kata_wajib}")
+    return {"queries": queries, "kata_wajib": kata_wajib}
 
 
 # Kata sifat/penilaian yang terlalu lemah buat jadi satu-satunya alasan cocok.
@@ -1010,6 +1118,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
           sumber_pesan      — pesan singkat kondisi sumber
           sumber_peringatan — ringkasan sumber yang gagal, mis. ["rss.tempo.co: HTTP 403"]
     """
+    import re
     print(f"[SOURCES] fetch_berita start topik={topik!r} sources={len(RSS_SOURCES)}")
     semua = []
     raw_counts = {}
@@ -1019,6 +1128,8 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         """Artikel final menang atas kegagalan sebagian sumber."""
         peringatan = [_ringkas_error(e) for e in errors]
         if jumlah_artikel > 0:
+            if jumlah_artikel < 3:
+                return "sedikit", f"Hanya {jumlah_artikel} artikel lolos filter (kurang dari 3).", peringatan
             return "ok", f"{jumlah_artikel} artikel lolos filter.", peringatan
         if errors:
             return "gagal", f"{len(errors)} sumber gagal: {errors[0][:160]}", peringatan
@@ -1041,7 +1152,10 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         semua.extend(articles)
 
     # 2. Google News Search untuk tiap query
-    queries = buat_query_pencarian(topik)
+    query_result = buat_query_pencarian(topik)
+    queries = query_result["queries"]
+    kata_wajib = query_result.get("kata_wajib", [])
+    print(f"[SOURCES] buat_query_pencarian queries={queries} kata_wajib={kata_wajib}")
     google_items = []
     for query in queries:
         g_items = fetch_google_news_search(query, errors=errors)
@@ -1082,9 +1196,10 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     print(f"[SOURCES] portal after_relevance_filter={len(portal_filtered)} threshold={SIMILARITY_THRESHOLD:.2f}")
 
     # Ambil query keywords dan anchor keywords SEBELUM filter portal (dibutuhkan oleh keduanya)
+    # SEMUA kata dari queries jadi query_keywords (bukan 3 pertama)
     query_keywords = set()
-    for q in buat_query_pencarian(topik):
-        for kw in q.split()[:3]:
+    for q in queries:
+        for kw in q.split():
             if len(kw) > 2:
                 query_keywords.add(kw.lower())
     print(f"[SOURCES] shared query_keywords={sorted(query_keywords)}")
@@ -1116,30 +1231,101 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     print(f"[SOURCES] portal anchor_filter: kept={len(portal_kept)} removed_no_anchor={portal_removed_no_anchor} removed_no_kw={portal_removed_no_kw} from {len(portal_filtered)}")
     portal_filtered = portal_kept
 
-    # Google News items: filter ketat dengan anchor keyword + tanggal + limit
-    # Ambil query keywords dari buat_query_pencarian
+    # Google News items: filter dengan kata_wajib + query keywords + tanggal
+    # kata_wajib menggantikan anchor: lolos bila cocok SALAH SATU alternatif
+    # DAN minimal 1 kata kunci non-generik lain dari query cocok.
     print(f"[SOURCES] google_news query_keywords={sorted(query_keywords)}")
-    print(f"[SOURCES] google_news anchor_keywords={sorted(anchor_keywords)}")
+    print(f"[SOURCES] google_news kata_wajib={kata_wajib}")
+    print(f"[SOURCES] google_news anchor_keywords (logging only)={sorted(anchor_keywords)}")
 
     # Cutoff tanggal
     cutoff_dt = datetime.now(timezone.utc) - timedelta(days=GOOGLE_NEWS_MAX_AGE_DAYS)
     print(f"[SOURCES] google_news date_cutoff={cutoff_dt.date()} (max {GOOGLE_NEWS_MAX_AGE_DAYS} hari)")
 
     google_filtered = []
-    removed_no_anchor = 0
-    removed_old = 0
+    removed_no_wajib = 0
     removed_no_kw = 0
+    removed_old = 0
     tanggal_map: dict[int, Optional[datetime]] = {}
 
     def _stem_tokens(text: str) -> set[str]:
         """Token judul dinormalkan ke akar supaya 'kenaikan' cocok dengan 'naik'."""
         return {_stem_id(tok) for tok in re.findall(r"[a-z0-9]+", text.lower())}
 
-    for art in google_items:
-        judul_stem = _stem_tokens(art.get("judul", ""))
+    # Siapkan kata_wajib stems untuk pencocokan
+    # Kata_wajib bisa berupa frasa 2 kata ("hak cipta") atau kata tunggal ("ptkp")
+    def _check_kata_wajib(judul_stem: set[str], judul_lower: str) -> bool:
+        """Cek apakah judul mengandung minimal 1 kata_wajib.
+        - Kata tunggal: cocok jika stem ada di judul_stem
+        - Frasa 2 kata: cocok jika kedua kata (setelah stem) ada di judul_stem
+        - Frasa >2 kata: cek substring di judul_lower
+        """
+        if not kata_wajib:
+            return True  # tidak ada kata_wajib berarti tidak difilter
+        for kw in kata_wajib:
+            kw_lower = kw.lower().strip()
+            kw_parts = kw_lower.split()
+            if len(kw_parts) == 1:
+                if _stem_id(kw_parts[0]) in judul_stem:
+                    return True
+            elif len(kw_parts) == 2:
+                # Frasa 2 kata: kedua kata harus ada (setelah stem)
+                if _stem_id(kw_parts[0]) in judul_stem and _stem_id(kw_parts[1]) in judul_stem:
+                    return True
+            else:
+                # Frasa >2 kata: cek substring di judul_lower
+                if kw_lower in judul_lower:
+                    return True
+        return False
 
-        # Cek minimal 1 anchor keyword (anchor sudah berbentuk akar)
-        has_anchor = bool(anchor_keywords & judul_stem)
+    # Query keywords non-generik (buang yang ada di _GENERIC_TOPIC_WORDS)
+    non_generic_query_kw = {kw for kw in query_keywords if kw not in _GENERIC_TOPIC_WORDS}
+
+    # Tentukan kata_wajib yang "kuat" (frasa >= 2 kata ATAU singkatan unik uppercase 3-5 char)
+    # Item yang cocok kata_wajib kuat lolos tanpa min_kw per query dan tanpa kata kunci tambahan
+    def _is_strong_wajib(kw: str) -> bool:
+        parts = kw.lower().split()
+        if len(parts) >= 2:
+            return True  # frasa 2+ kata
+        # singkatan unik: huruf besar semua (3-5 char) ATAU singkatan known lowercase
+        # known Indonesian policy abbreviations (case-insensitive)
+        known_abbrev = {"ptkp", "kpu", "dpr", "mpr", "bpk", "kpk", "ban", "bkn", "bakamla"}
+        if len(kw) >= 3 and len(kw) <= 5 and (kw.isupper() or kw.lower() in known_abbrev):
+            return True
+        return False
+
+    strong_wajib_set = {kw for kw in kata_wajib if _is_strong_wajib(kw)}
+
+    for art in google_items:
+        judul = art.get("judul", "")
+        judul_lower = judul.lower()
+        judul_stem = _stem_tokens(judul)
+
+        # Cek kata_wajib (wajib ada di judul) - INI GANTI ANCHOR
+        has_wajib = _check_kata_wajib(judul_stem, judul_lower)
+
+        # Cek apakah judul cocok dengan KATA_WAJIB KUAT (frasa atau singkatan)
+        # Jika ya, lolos tanpa min_kw per query dan tanpa kata kunci tambahan
+        matched_strong_wajib = False
+        for kw in strong_wajib_set:
+            kw_lower = kw.lower().strip()
+            kw_parts = kw_lower.split()
+            if len(kw_parts) == 1:
+                if _stem_id(kw_parts[0]) in judul_stem:
+                    matched_strong_wajib = True
+                    break
+            elif len(kw_parts) == 2:
+                if _stem_id(kw_parts[0]) in judul_stem and _stem_id(kw_parts[1]) in judul_stem:
+                    matched_strong_wajib = True
+                    break
+            else:
+                if kw_lower in judul_lower:
+                    matched_strong_wajib = True
+                    break
+
+        # Cek minimal 1 query keyword non-generik (selain kata_wajib)
+        kw_matches = [kw for kw in non_generic_query_kw if kw in judul_lower]
+        kw_count = len(kw_matches)
 
         # Aturan per-query: minimal ceil(jumlah kata kunci query / 2) harus cocok
         q_kws = [kw for kw in art.get("query_origin", "").lower().split() if len(kw) > 2]
@@ -1153,27 +1339,34 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         art["tanggal_iso"] = pub_dt.isoformat() if pub_dt else ""
         is_recent = pub_dt is not None and pub_dt >= cutoff_dt
 
-        if not has_anchor:
-            print(f"[SOURCES] google_news removed (no anchor) query={art.get('query_origin','')!r} judul={art.get('judul','')[:80]}")
-            removed_no_anchor += 1
+        if not has_wajib:
+            print(f"[SOURCES] google_news removed (no kata_wajib) query={art.get('query_origin','')!r} kata_wajib={kata_wajib} judul={judul[:80]}")
+            removed_no_wajib += 1
+            continue
+
+        # JIKA cocok kata_wajib KUAT (frasa >= 2 kata atau singkatan PTKP):
+        # lolos tanpa min_kw per query DAN tanpa syarat kw_count >= 1
+        if matched_strong_wajib:
+            google_filtered.append(art)
+            continue
+
+        # JIKA KHAT kata_wajib biasa (satu kata): butuh kw_count >= 1 DAN min_kw
+        if kw_count < 1:
+            print(f"[SOURCES] google_news removed (no other query kw) query={art.get('query_origin','')!r} non_generic_kw={sorted(non_generic_query_kw)} judul={judul[:80]}")
+            removed_no_kw += 1
             continue
         if len(matched) < min_kw:
             print(
                 f"[SOURCES] google_news removed (kw {len(matched)}/{min_kw}) "
                 f"query={art.get('query_origin','')!r} cocok={sorted(matched)} "
-                f"judul={art.get('judul','')[:80]}"
+                f"judul={judul[:80]}"
             )
             removed_no_kw += 1
-            continue
-        if not is_recent:
-            pub_str = pub_dt.date().isoformat() if pub_dt else "no-date"
-            print(f"[SOURCES] google_news removed (old, {pub_str}) judul={art.get('judul','')[:80]}")
-            removed_old += 1
             continue
 
         google_filtered.append(art)
 
-    print(f"[SOURCES] google_news filtered: kept={len(google_filtered)} removed_no_anchor={removed_no_anchor} removed_old={removed_old} removed_no_kw={removed_no_kw} from {len(google_items)}")
+    print(f"[SOURCES] google_news filtered: kept={len(google_filtered)} removed_no_wajib={removed_no_wajib} removed_no_kw={removed_no_kw} removed_old={removed_old} from {len(google_items)}")
 
     # ====== Diversity Selection for Google News ======
     from difflib import SequenceMatcher
@@ -1208,6 +1401,7 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     # Urutkan berdasarkan tanggal terbaru dulu
     google_filtered.sort(key=lambda a: tanggal_map.get(id(a)) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
+    # Dedup: first pass - exact normalized title match (existing logic)
     seen_titles = {}  # normalized_title -> item terbaru
     dedup_removed = 0
     unique_items = []
@@ -1236,17 +1430,70 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
 
     print(f"[SOURCES] google_news dedup: kept={len(unique_items)} removed={dedup_removed}")
 
-    # 2. Seleksi akhir: 8 item <30 hari terbaru + 4 item >=30 hari skor tertinggi
-    now_utc    = datetime.now(timezone.utc)
-    cutoff_30  = now_utc - timedelta(days=30)
-    cutoff_120 = now_utc - timedelta(days=GOOGLE_NEWS_MAX_AGE_DAYS)
-
+    # Helper functions for cross-dedup (must be defined before use)
     def _domain_key(art: dict) -> str:
         """Domain induk; item tanpa domain jelas dapat kunci unik sendiri."""
         d = _domain_from_source(art.get("sumber", ""), art.get("judul", ""), art.get("source_url", ""))
         if not d or d == "google_news_search":
             return f"unknown:{art.get('id', '')}"
         return d
+
+    def _is_aggregator_domain(domain: str) -> bool:
+        agg = {"google_news_search", "news.google.com", "feed", "rss"}
+        return domain in agg or domain.startswith("unknown:")
+
+    # Dedup: second pass - cross-domain identical core title
+    # Jika dua item punya judul identik setelah buang akhiran "- Media", simpan satu
+    # Prioritas: non-agregator domain, lalu yang lebih awal
+    core_title_map = {}  # core_title -> (item, domain)
+    cross_dedup_removed = 0
+    final_items = []
+
+    for art in unique_items:
+        title = art.get("judul", "")
+        # Extract core title: remove trailing "- Media Name" or "| Media Name"
+        import re
+        core = re.sub(r'\s*[-|]\s*[A-Za-z0-9.\s]+\s*$', '', title).strip()
+        domain = _domain_key(art)
+
+        if core in core_title_map:
+            existing_art, existing_domain = core_title_map[core]
+            # Prefer non-aggregator, then earlier date
+            existing_is_agg = _is_aggregator_domain(existing_domain)
+            current_is_agg = _is_aggregator_domain(domain)
+
+            if existing_is_agg and not current_is_agg:
+                # Replace with non-aggregator
+                print(f"[SOURCES] google_news cross-dedup replaced aggregator: {existing_art.get('judul','')[:60]} -> {art.get('judul','')[:60]}")
+                core_title_map[core] = (art, domain)
+                cross_dedup_removed += 1
+            elif not existing_is_agg and current_is_agg:
+                # Keep existing non-aggregator
+                print(f"[SOURCES] google_news cross-dedup kept non-aggregator: {existing_art.get('judul','')[:60]}")
+                cross_dedup_removed += 1
+            else:
+                # Both same type, keep earlier date
+                existing_dt = tanggal_map.get(id(existing_art))
+                current_dt = tanggal_map.get(id(art))
+                if existing_dt and current_dt and current_dt < existing_dt:
+                    core_title_map[core] = (art, domain)
+                    print(f"[SOURCES] google_news cross-dedup replaced older: {existing_art.get('judul','')[:60]} -> {art.get('judul','')[:60]}")
+                cross_dedup_removed += 1
+        else:
+            core_title_map[core] = (art, domain)
+            final_items.append(art)
+
+    if cross_dedup_removed:
+        print(f"[SOURCES] google_news cross-dedup removed={cross_dedup_removed}")
+
+    unique_items = final_items
+
+    print(f"[SOURCES] google_news dedup: kept={len(unique_items)} removed={dedup_removed + cross_dedup_removed}")
+
+    # 2. Seleksi akhir: 8 item <30 hari terbaru + 4 item >=30 hari skor tertinggi
+    now_utc    = datetime.now(timezone.utc)
+    cutoff_30  = now_utc - timedelta(days=30)
+    cutoff_120 = now_utc - timedelta(days=GOOGLE_NEWS_MAX_AGE_DAYS)
 
     def _domain_cap(domain: str) -> int:
         return 3 if _is_kemenkum_domain(domain) else 2
@@ -1334,13 +1581,15 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
     print(f"[SOURCES] google_news final_kept={len(google_filtered)} (recent={recent_kept}, older={older_kept})")
 
     # Log 3 kolom untuk 12 item Google News: judul | pubDate mentah | ISO
-    print(f"[SOURCES] google_news date_verification (judul | pubDate_raw | parsed):")
+    print(f"[SOURCES] google_news date_verification (judul | pubDate_raw | parsed | domain_key | source_url):")
     for art in google_filtered:
         judul = art.get("judul", "")[:80]
         pub_raw = art.get("tanggal", "no-date")
         dt = tanggal_map.get(id(art))
         parsed_str = dt.date().isoformat() if dt else "no-date"
-        print(f"[SOURCES]   {judul} | {pub_raw} | {parsed_str}")
+        domain_key = _domain_key(art)
+        source_url = art.get("source_url", "")
+        print(f"[SOURCES]   {judul} | {pub_raw} | {parsed_str} | {domain_key} | {source_url}")
 
     # Artikel portal juga diberi tanggal ISO agar payload seragam & JSON-safe
     for art in portal_filtered:
