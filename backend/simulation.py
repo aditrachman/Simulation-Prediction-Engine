@@ -53,6 +53,12 @@ from .core.scheduler import (
     get_strategy_display,
 )
 from .core.prediction import heuristic_predict, compute_confidence
+from .core.scenario import (
+    resolve_scenario,
+    kepercayaan_sumber,
+    teks_polarisasi,
+    swing_voter_terfilter,
+)
 from .services.agent_turn import (
     execute_turn,
     TURN_MAX_TOKENS,
@@ -325,6 +331,7 @@ def run_simulation(
     scheduler_strategy: str = "influence_aware",
     n_crowd: int = 0,
     data_transparency: dict | None = None,
+    konteks_real: dict | None = None,
 ) -> dict:
     """
     Jalankan simulasi multi-agen multi-ronde.
@@ -344,6 +351,18 @@ def run_simulation(
         print("[SIMULATION] FAST MODE aktif — delay=0, QA/justify skip, max_tokens dipangkas.")
 
     from .llm_guard import metrics as _llm_metrics, reset_metrics as _reset_metrics
+
+    # konteks_real opsional: main.py sudah mengambilnya sekali. Jangan fetch di sini.
+    if konteks_real is None:
+        konteks_real = {}
+
+    # Ensure briefing_real is populated from konteks_real if not explicitly provided
+    if not briefing_real and konteks_real:
+        briefing_real = konteks_real.get("briefing", "")
+
+    # Ensure data_transparency is populated from konteks_real if not explicitly provided
+    if data_transparency is None and konteks_real:
+        data_transparency = konteks_real.get("data_transparency", {})
 
     _reset_metrics()
     waktu_mulai = time.time()
@@ -921,15 +940,19 @@ def run_simulation(
         sentimen_agregat[agen["nama"]] = tren
 
     # ── Analisis akhir + aktor kunci ──
+    # Initialize ringkasan_terstruktur for all tiers
+    ringkasan_terstruktur = {}
     if tier == "free":
         analisis_raw = _analisis_fallback_text(topik, sentimen_agregat)
         pengaruh_map, volatilitas, _ = _build_ringkasan_agen(agents, sentimen_agregat)
         aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat, data_transparency)
     else:
-        analisis_raw, aktor_analisis = _analisis_dan_aktor(
+        analisis_raw, aktor_analisis, ringkasan_terstruktur = _analisis_dan_aktor(
             topik, log_diskusi, agents, sentimen_agregat, data_transparency
         )
     analisis_raw = _strip_emoji(analisis_raw)
+    # Store ringkasan_terstruktur for later use in hasil_dict
+    _ringkasan_terstruktur_temp = ringkasan_terstruktur
 
     # ponytail: Parse RISIKO UTAMA dari teks analisis — regex, 2 baris
     risiko_match = re.search(r"RISIKO UTAMA:\s*(.+?)(?:\n\n|\Z)", analisis_raw, re.DOTALL | re.IGNORECASE)
@@ -993,7 +1016,6 @@ def run_simulation(
         jumlah_ronde=jumlah_ronde,
         sentimen_agregat=sentimen_agregat,
     )
-
     hasil_dict = {
         "ronde_detail":      ronde_detail,
         "graf_data":         graf_data,
@@ -1033,7 +1055,7 @@ def run_simulation(
         "prediction_confidence": prediction_confidence,
         "prediction_reasoning":  prediction_reasoning,
         "confidence_summary":    confidence_summary,  # FIX-E: field baru, konsisten
-        # BUG #10 FIX: prediction_source sebagai flat field, bukan dict — hindari bentrok dengan main.py
+        # BUG #10 FIX: prediction_source sebagai flat field, bukan dict â hindari bentrok dengan main.py
         "prediction_source": "heuristic",
         "giliran_gagal": _build_giliran_gagal_summary(ronde_detail),
         "model_info": {
@@ -1042,6 +1064,42 @@ def run_simulation(
             "sentiment_mode": SENTIMENT_MODE,
         },
     }
+
+    # NEW: Sumber kebenaran tunggal untuk skenario (resolve_scenario)
+    skenario_resolved = resolve_scenario(
+        sentimen_agregat=sentimen_agregat,
+        n_agents=n_agents,
+        n_rounds=jumlah_ronde,
+        quality_score=quality_score,
+        events=events,
+    )
+    hasil_dict["skenario_resolved"] = skenario_resolved
+
+    # NEW: Kepercayaan sumber
+    sumber_status_val = konteks_real.get("sumber_status", "kosong")
+    sumber_relevan_val = len(konteks_real.get("berita", []))
+    hasil_dict["kepercayaan_sumber"] = kepercayaan_sumber(
+        sumber_status=sumber_status_val,
+        sumber_relevan=sumber_relevan_val,
+        isi_dibaca=False,  # hanya judul/ringkasan, tidak isi penuh
+        n_agen=n_agents,
+        n_ronde=jumlah_ronde,
+    )
+
+    # NEW: Teks polarisasi (digunakan di laporan)
+    hasil_dict["teks_polarisasi"] = teks_polarisasi(
+        skor_akhir={nama: tren[-1] for nama, tren in sentimen_agregat.items() if tren},
+        total_peserta=n_agents,
+    )
+
+    # NEW: Swing voter terfilter
+    hasil_dict["swing_voter_terfilter"] = swing_voter_terfilter(
+        sentimen_agregat=sentimen_agregat,
+        ambang=0.15,
+    )
+
+    # NEW: Ringkasan terstruktur dari LLM (isi dari _analisis_dan_aktor return)
+    hasil_dict["ringkasan_terstruktur"] = _ringkasan_terstruktur_temp
 
     hasil_dict["explainability_report"] = generate_report(hasil_dict)
 
@@ -1235,7 +1293,11 @@ def _analisis_dan_aktor(
     agents: list[dict],
     sentimen_agregat: dict,
     data_transparency: dict | None = None,
-) -> tuple[str, dict]:
+) -> tuple[str, dict, dict]:
+    """
+    Returns:
+        (analisis_raw, aktor_analisis, ringkasan_terstruktur)
+    """
     nama_valid = list(sentimen_agregat.keys())
     pengaruh_map, volatilitas, ringkasan_agen = _build_ringkasan_agen(agents, sentimen_agregat)
 
@@ -1244,12 +1306,11 @@ def _analisis_dan_aktor(
         f"Log diskusi:\n{log_diskusi[:1000]}\n\n"
         "Tulis analisis dalam bahasa Indonesia:\n"
         "1. Ringkasan 2 paragraf: dinamika diskusi dan posisi tiap agen.\n"
-        "2. Untuk setiap partisipan, tulis satu kalimat yang menyebutkan nama, "
-        "sikap akhir (positif/negatif/netral), prediksi ke depan, dan kemungkinan berubah.\n"
-        "3. Baris terakhir harus persis:\n"
-        "   PREDIKSI SKENARIO: Konsensus X%, Polarisasi Y%, Status Quo Z%\n"
-        "   (X+Y+Z = 100)\n"
-        "4. Setelah ringkasan dan prediksi, tambahkan satu paragraf pendek dengan format:\n"
+        "2. Untuk setiap partisipan, balas HANYA JSON object dengan format:\n"
+        "   {\"nama_agen\": \"satu klausa syarat berubah (mis. 'bisa berubah jika data menunjukkan peningkatan dampak')\"}\n"
+        "   JANGAN menyebut sikap perorangan (positif/negatif/netral) — itu sudah diketahui dari data.\n"
+        "   JANGAN menulis PREDIKSI SKENARIO.\n"
+        "3. Setelah ringkasan, tambahkan satu paragraf pendek dengan format:\n"
         "   RISIKO UTAMA: [Identifikasi 1-2 risiko terbesar jika topik/kebijakan ini dilanjutkan, berdasarkan argumen agen yang menolak]"
     )
     analisis_raw = call_llm(
@@ -1265,6 +1326,35 @@ def _analisis_dan_aktor(
         use_analysis_chain=True,
     )
     analisis_raw = _strip_emoji(analisis_raw or "")
+    if not analisis_raw or analisis_raw.startswith("[Error") or analisis_raw.startswith("[RateLimit"):
+        analisis_raw = "(analisis tidak tersedia)"
+
+    # Extract ringkasan_terstruktur from LLM output (JSON object embedded in text)
+    ringkasan_terstruktur = {}
+    try:
+        json_match = re.search(r'\{.*\}', analisis_raw, re.DOTALL)
+        if json_match:
+            import json
+            parsed = json.loads(json_match.group())
+            if isinstance(parsed, dict):
+                ringkasan_terstruktur = {k: v for k, v in parsed.items() if isinstance(v, str)}
+    except Exception:
+        pass
+
+    # Remove PREDIKSI SKENARIO lines from analisis_raw (LLM might still include it)
+    analisis_raw = re.sub(
+        r'PREDIKSI SKENARIO:.*?(\n|$)',
+        '',
+        analisis_raw,
+        flags=re.IGNORECASE
+    ).strip()
+    analisis_raw = re.sub(
+        r'\(X\+Y\+Z\s*=\s*100\).*?(\n|$)',
+        '',
+        analisis_raw,
+        flags=re.IGNORECASE
+    ).strip()
+
     if not analisis_raw or analisis_raw.startswith("[Error") or analisis_raw.startswith("[RateLimit"):
         analisis_raw = "(analisis tidak tersedia)"
 
@@ -1388,7 +1478,7 @@ def _analisis_dan_aktor(
     if not aktor_analisis:
         aktor_analisis = _aktor_fallback(pengaruh_map, volatilitas, sentimen_agregat, data_transparency)
 
-    return analisis_raw, aktor_analisis
+    return analisis_raw, aktor_analisis, ringkasan_terstruktur
 
 
 def _aktor_fallback(pengaruh_map: dict, volatilitas: dict, sentimen_agregat: dict, data_transparency: dict | None = None) -> dict:

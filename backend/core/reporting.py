@@ -18,6 +18,7 @@ from .metrics import (
     compute_volatility,
     compute_conflict_score,
 )
+from .scenario import teks_polarisasi, swing_voter_terfilter
 
 
 def _label_skor(skor: float) -> str:
@@ -325,6 +326,11 @@ def generate_report(hasil: dict) -> dict:
         "ringkasan": ringkasan,
         "penyebab": penyebab,
         "konflik": konflik,
+        "teks_polarisasi": teks_polarisasi(
+            skor_akhir={nama: tren[-1] for nama, tren in sentimen_agregat.items() if tren},
+            total_peserta=len(sentimen_agregat),
+        ),
+        "swing_voter_terfilter": swing_voter_terfilter(sentimen_agregat=sentimen_agregat, ambang=0.15),
         "aktor": aktor_list,
         "events": event_list,
         "keyakinan": keyakinan,
@@ -339,6 +345,7 @@ def generate_report(hasil: dict) -> dict:
         "key_driver": key_driver,
         "key_driver_impact": key_driver_impact,
         "swing_voters": swing_voters,
+        "swing_voter_terfilter": swing_voter_terfilter(sentimen_agregat=sentimen_agregat, ambang=0.15),
         "main_conflict": main_conflict,
         "confidence": confidence,
         "limitations": limitations,

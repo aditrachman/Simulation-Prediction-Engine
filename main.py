@@ -500,6 +500,7 @@ def start_sim(payload: SimRequest, request: Request):
         tier=tier_mode,
         n_crowd=payload.n_crowd,
         data_transparency=konteks_real.get("data_transparency", {}),
+        konteks_real=konteks_real,
     )
     _apply_context_quality(hasil, konteks_real)
     hasil["runtime_limits"] = {
@@ -709,6 +710,7 @@ def compare_scenarios(payload: CompareRequest, request: Request):
             tier=tier_mode,
             n_crowd=sc.n_crowd,
             data_transparency=konteks_real.get("data_transparency", {}),
+            konteks_real=konteks_real,
         )
         # BUG #1 FIX: JANGAN timpa prediksi heuristic dengan ML — simpan sebagai experimental
         # BUG #5 FIX: wrap load_or_predict dalam try/except
