@@ -190,7 +190,20 @@ const aksiPendekatan = (teks, nama) => {
   return titik > 0 ? isi.slice(titik + 2) : isi;
 };
 
-const persen = (n) => (typeof n === "number" ? `${Math.round(n * 100)}%` : null);
+const persen = (n) => (typeof n === "number" && Number.isFinite(n) ? `${Math.round(n * 100)}%` : null);
+
+// Urutkan kalimat sikap dari skor akhir tertinggi (mendukung) ke terendah (menolak).
+const urutKalimatSikap = (kalimat, sentimen) => {
+  return kalimat
+    .map((teks) => {
+      const nama = Object.keys(sentimen ?? {}).find((n) => String(teks).startsWith(`${n} `));
+      const tren = nama ? sentimen[nama] : [];
+      const akhir = Array.isArray(tren) && tren.length ? Number(tren[tren.length - 1]) : 0;
+      return { teks, akhir: Number.isFinite(akhir) ? akhir : 0 };
+    })
+    .sort((a, b) => b.akhir - a.akhir)
+    .map((item) => item.teks);
+};
 
 const sikapDariAlasan = (teks) => {
   const cocok = String(teks ?? "").match(/-?\d+(?:[.,]\d+)?/);
@@ -284,25 +297,54 @@ const HeaderRonde = ({ ronde, total }) => (
   </div>
 );
 
+// ── Skenario resolved ──
+const aturanManusia = (aturan) => {
+  const teks = String(aturan ?? "").trim().replace(/\.$/, "");
+  if (!teks) return "";
+  const peta = {
+    ">=60% peserta bersikap mendukung": "60% atau lebih peserta mendukung",
+    ">=50% menolak ATAU variansi sentimen > 0.3": "setidaknya 50% peserta menolak, atau sikap peserta saling berjauhan",
+    ">=60% netral ATAU tidak memenuhi ambang lain": "60% atau lebih peserta bersikap netral, atau tidak ada arah yang cukup kuat",
+  };
+  return peta[teks] ?? teks;
+};
+
+const kalimatKesimpulan = (skenario) => {
+  const arah = String(skenario?.arah ?? "").toLowerCase();
+  const kekuatan = String(skenario?.kekuatan ?? "").toLowerCase();
+  const hitung = skenario?.hitungan ?? {};
+  const mendukung = Number(hitung.mendukung ?? 0);
+  const netral = Number(hitung.netral ?? 0);
+  const menolak = Number(hitung.menolak ?? 0);
+  const total = mendukung + netral + menolak;
+  const aturan = aturanManusia(skenario?.aturan);
+  let kalimat = `Arah yang paling sesuai: ${arah}${kekuatan ? ` (kekuatan ${kekuatan})` : ""}.`;
+  if (aturan) kalimat += ` Aturan: ${aturan}.`;
+  if (total > 0) {
+    kalimat += ` Dari ${total} peserta, ${mendukung} mendukung, ${netral} netral, ${menolak} menolak.`;
+  }
+  return kalimat;
+};
+
 // ── Insight Hero ──
-const InsightHero = ({ prediksi, statusSimulasi, topik }) => {
-  const sorted = Object.entries(prediksi ?? {}).sort((a, b) => b[1] - a[1]);
-  if (!sorted.length) return null;
-  const [skenario, prob] = sorted[0];
-  const label = INSIGHT_LABEL[skenario] ?? skenario;
-  const listOthers = sorted.slice(1).map(([s, p]) => `${s} (${p}%)`);
-  const others = listOthers.length > 1
-    ? listOthers.slice(0, -1).join(", ") + " dan " + listOthers[listOthers.length - 1]
-    : listOthers[0] ?? "";
-  const kalimat = others
-    ? `Skenario "${label}" paling mungkin (${prob}%), mengungguli ${others}.`
-    : `Skenario "${label}" menjadi satu-satunya kemungkinan (${prob}%).`;
+const InsightHero = ({ prediksi, skenario, teksPolarisasi }) => {
+  let kalimat = "";
+  if (skenario?.arah) {
+    kalimat = kalimatKesimpulan(skenario);
+  } else {
+    const sorted = Object.entries(prediksi ?? {}).sort((a, b) => b[1] - a[1]);
+    if (!sorted.length) return null;
+    kalimat = `Arah yang paling sesuai: ${(INSIGHT_LABEL[sorted[0][0]] ?? sorted[0][0]).toLowerCase()}.`;
+  }
   return (
     <div className="rounded-lg border border-[#cc785c]/20 bg-[#cc785c]/5 px-6 py-5">
       <p className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#6c6a64] mb-2">Kesimpulan</p>
       <p className="text-lg leading-relaxed text-[#141413]" style={{ fontFamily: "var(--font-heading, sans-serif)" }}>
         &ldquo;{kalimat}&rdquo;
       </p>
+      {teksPolarisasi && (
+        <p className="mt-3 text-sm leading-relaxed text-[#6c6a64]">{teksPolarisasi}</p>
+      )}
     </div>
   );
 };
@@ -564,9 +606,27 @@ export default function DemoPage() {
     ? statusMentah
     : (jumlahSumber > 0 ? "ok" : "kosong");
   const peringatanSumber = ringkasSumber?.peringatan ?? [];
+  // Sumber kebenaran baru; hasil lama tetap memakai status sumber di atas.
+  const skenarioResolved = hasil?.skenario_resolved ?? null;
+  const teksPolarisasi = hasil?.teks_polarisasi ?? "";
+  const kepercayaan = hasil?.kepercayaan_sumber ?? null;
+  const faktaKepercayaan = kepercayaan?.fakta ?? null;
+  const swingTerfilter = hasil?.swing_voter_terfilter ?? null;
+  const ringkasanKalimat = Array.isArray(hasil?.ringkasan_kalimat)
+    ? urutKalimatSikap(hasil.ringkasan_kalimat.filter((t) => typeof t === "string" && t.trim()), sentimenAgr)
+    : [];
   // Konteks hanya berisi judul berita, jadi kepercayaan tidak pernah "Tinggi".
-  const tingkatKepercayaan = statusSumber === "ok" ? "Sedang" : "Rendah";
+  const tingkatKepercayaan = kepercayaan?.level
+    ?? (statusSumber === "ok" ? "Sedang" : "Rendah");
   const jumlahBabak = meta.ronde ?? (daftarRonde.length || jumlahRonde);
+  const skenarioTerpilih = skenarioResolved?.arah
+    ?? (Object.keys(prediksi).length
+      ? Object.entries(prediksi).sort((a, b) => b[1] - a[1])[0][0]
+      : null);
+  const skorAturan = skenarioResolved?.skor_aturan ?? null;
+  const daftarSkenario = Object.keys(prediksi).length
+    ? Object.keys(prediksi).slice(0, 3)
+    : ["Konsensus", "Polarisasi", "Status Quo"];
 
   const ringkasanFull = analisis
     .split("\n")
@@ -584,31 +644,8 @@ export default function DemoPage() {
   const ringkasan = ringkasanPenuh ? ringkasanFull : truncateAtWord(ringkasanFull, 400);
   const ringkasanTerpotong = ringkasanFull.length > 400;
 
-  const jmlMendukung = agenAkhir.filter(a => a.sentimen?.label === "positif").length;
-  const jmlMenolak = agenAkhir.filter(a => a.sentimen?.label === "negatif").length;
-  const jmlNetral = agenAkhir.filter(a => a.sentimen?.label === "netral").length;
   const totalPeserta = agenAkhir.length;
   const jumlahPeserta = meta.peserta ?? totalPeserta;
-
-  let statusSimulasi = { label: "Belum Ada", color: "#6c6a64" };
-  if (Object.keys(prediksi).length > 0) {
-    const sorted = Object.entries(prediksi).sort((a, b) => b[1] - a[1]);
-    const p = sorted[0];
-    if (p[0] === "Semua Setuju" || p[0] === "Konsensus") {
-      statusSimulasi = { label: "Konsensus", color: "#1b8a4a" };
-    } else if (p[0] === "Masyarakat Terpecah" || p[0] === "Polarisasi") {
-      statusSimulasi = { label: "Terbelah", color: "#b83a3a" };
-    } else {
-      statusSimulasi = { label: "Stabil", color: "#b8860b" };
-    }
-  } else if (totalPeserta > 0) {
-    if (jmlMendukung > jmlMenolak && jmlMendukung > jmlNetral)
-      statusSimulasi = { label: "Cenderung Mendukung", color: "#1b8a4a" };
-    else if (jmlMenolak > jmlMendukung && jmlMenolak > jmlNetral)
-      statusSimulasi = { label: "Cenderung Menolak", color: "#b83a3a" };
-    else
-      statusSimulasi = { label: "Pendapat Terbagi", color: "#b8860b" };
-  }
 
   const handleSimpanPDF = () => eksporPDF(hasil, topik, analisis, aktorAnalisis, null);
   const handleSimpanCSV = () => eksporCSV(hasil, topik);
@@ -713,7 +750,7 @@ export default function DemoPage() {
         {hasil && (
           <section ref={hasilRef} className="pb-10" id="hasil">
             {/* Insight Hero */}
-            <InsightHero prediksi={prediksi} statusSimulasi={statusSimulasi} topik={topik} />
+            <InsightHero prediksi={prediksi} skenario={skenarioResolved} teksPolarisasi={teksPolarisasi} />
 
             {/* Executive Summary */}
             <section className="py-6">
@@ -729,6 +766,19 @@ export default function DemoPage() {
               <p className="text-base leading-relaxed text-[#3d3d3a]" style={{ letterSpacing: "0.01em" }}>
                 {ringkasan}
               </p>
+              {ringkasanKalimat.length > 0 && (
+                <details className="group mt-4 rounded-lg border border-[#e6dfd8] bg-white px-4 py-3">
+                  <summary className="flex items-center gap-2 cursor-pointer list-none text-sm font-medium text-[#6c6a64] hover:text-[#141413]">
+                    <span>Sikap tiap peserta ({ringkasanKalimat.length})</span>
+                    <span className="text-[10px] transition-transform group-open:rotate-180">▼</span>
+                  </summary>
+                  <ul className="mt-3 space-y-1.5">
+                    {ringkasanKalimat.map((teks, i) => (
+                      <li key={i} className="text-sm leading-relaxed text-[#3d3d3a]">{teks}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </section>
 
             {/* Kualitas data */}
@@ -740,12 +790,21 @@ export default function DemoPage() {
                     <span className="text-[11px] text-[#6c6a64]">Kepercayaan</span>
                     <Badge
                       label={tingkatKepercayaan}
-                      variant={tingkatKepercayaan === "Sedang" ? "netral" : "negatif"}
+                      variant={
+                        tingkatKepercayaan === "Tinggi"
+                          ? "positif"
+                          : tingkatKepercayaan === "Sedang"
+                            ? "netral"
+                            : "negatif"
+                      }
                     />
                   </div>
                 </div>
+                {kepercayaan?.alasan && (
+                  <p className="mb-3 text-sm leading-relaxed text-[#6c6a64]">{kepercayaan.alasan}</p>
+                )}
                 <div className="rounded-lg border border-[#e6dfd8] bg-white">
-                  <dl className="grid divide-y divide-[#f0ebe3] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  <dl className={`grid divide-y divide-[#f0ebe3] sm:divide-x sm:divide-y-0 ${kepercayaan ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                     <div className="p-4">
                       <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Sumber Data</dt>
                       <dd className="mt-1 text-2xl font-semibold text-[#141413]">
@@ -780,14 +839,23 @@ export default function DemoPage() {
                         </>
                       )}
                     </div>
+                    {kepercayaan && (
+                      <div className="p-4">
+                        <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Isi dibaca</dt>
+                        <dd className="mt-1 text-2xl font-semibold text-[#141413]">
+                          {faktaKepercayaan?.isi_dibaca ? "Ya" : "Hanya judul"}
+                        </dd>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">Isi artikel yang dibaca</p>
+                      </div>
+                    )}
                     <div className="p-4">
                       <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Peserta</dt>
-                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{jumlahPeserta} orang</dd>
+                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{faktaKepercayaan?.agen ?? jumlahPeserta} orang</dd>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">Persona yang berpendapat</p>
                     </div>
                     <div className="p-4">
                       <dt className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64]">Babak Diskusi</dt>
-                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{jumlahBabak}</dd>
+                      <dd className="mt-1 text-2xl font-semibold text-[#141413]">{faktaKepercayaan?.ronde ?? jumlahBabak}</dd>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#6c6a64]">Putaran debat yang dijalankan</p>
                     </div>
                   </dl>
@@ -930,7 +998,27 @@ export default function DemoPage() {
                   </div>
                 )}
 
-                {(aktorAnalisis.swing_voter ?? []).length > 0 && (
+                {swingTerfilter ? (
+                  <div className="mt-5">
+                    <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-2">Paling mudah berubah</p>
+                    {swingTerfilter.tidak_ada || (swingTerfilter.daftar ?? []).length === 0 ? (
+                      <p className="text-sm leading-relaxed text-[#3d3d3a]">
+                        Tidak ada peserta yang berubah sikap signifikan.
+                      </p>
+                    ) : (
+                      <ul className="grid gap-2 sm:grid-cols-3">
+                        {(swingTerfilter.daftar ?? []).slice(0, 3).map((v, idx) => (
+                          <li key={v.nama ?? idx} className="rounded-md border border-[#e6dfd8] bg-[#faf9f5] px-3 py-2.5">
+                            <p className="text-sm text-[#141413] break-words">{v.nama}</p>
+                            <p className="mt-0.5 text-[11px] text-[#6c6a64]">
+                              {namaSikap[sikapDariSkor(Number(v.sikap_awal ?? 0))]} → {namaSikap[sikapDariSkor(Number(v.sikap_akhir ?? 0))]}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (aktorAnalisis.swing_voter ?? []).length > 0 && (
                   <div className="mt-5">
                     <p className="text-[11px] font-medium uppercase tracking-[1.2px] text-[#6c6a64] mb-2">Paling mudah berubah</p>
                     <ul className="grid gap-2 sm:grid-cols-3">
@@ -1006,27 +1094,77 @@ export default function DemoPage() {
             )}
 
             {/* Prediction / Scenarios */}
-            {Object.keys(prediksi).length > 0 && (
+            {daftarSkenario.length > 0 && (
               <section className="py-6">
                 <h2 className="display-sm mb-4" style={{ fontWeight: 400 }}>Skenario Pelaksanaan</h2>
                 <div className="rounded-lg border border-[#e6dfd8] bg-white overflow-hidden">
-                  {Object.entries(prediksi)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([skenario, prob], idx) => (
-                      <div key={idx} className={`border-t ${idx === 0 ? "" : "border-[#e6dfd8]"} p-5 ${idx === 0 ? "bg-[#cc785c]/3" : ""}`}>
+                  {daftarSkenario.map((skenario, idx) => {
+                    const label = INSIGHT_LABEL[skenario] ?? skenario;
+                    const labelTerpilih = INSIGHT_LABEL[skenarioTerpilih] ?? skenarioTerpilih;
+                    const terpilih = label === labelTerpilih;
+                    return (
+                      <div key={idx} className={`border-t ${idx === 0 ? "" : "border-[#e6dfd8]"} p-5 ${terpilih ? "bg-[#cc785c]/3" : ""}`}>
                         <div className="flex items-center justify-between gap-4">
                           <div>
-                            <p className="text-sm font-semibold text-[#141413]">{skenario}</p>
-                            <p className="text-sm text-[#6c6a64] mt-0.5">{DESKRIPSI_SKENARIO[skenario] ?? ""}</p>
+                            <p className="text-sm font-semibold text-[#141413]">{label}</p>
+                            <p className="text-sm text-[#6c6a64] mt-0.5">
+                              {DESKRIPSI_SKENARIO[skenario] ?? "Deskripsi belum tersedia."}
+                            </p>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-2xl font-bold text-[#141413]" style={{ fontFamily: "var(--font-heading, sans-serif)" }}>{prob}%</p>
-                            <p className="text-[11px] text-[#6c6a64]">Kemungkinan</p>
-                          </div>
+                          {terpilih && <Badge label="Terpilih" variant="outline" />}
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
+
+                {skorAturan && (
+                  <details className="group mt-3 rounded-lg border border-[#e6dfd8] bg-white px-4 py-3">
+                    <summary className="flex items-center gap-2 cursor-pointer list-none text-sm font-medium text-[#6c6a64] hover:text-[#141413]">
+                      <span>Lihat detail</span>
+                      <span className="text-[10px] transition-transform group-open:rotate-180">▼</span>
+                    </summary>
+                    <div className="mt-3">
+                      <p className="text-[11px] text-[#6c6a64]">Skor aturan (bukan probabilitas)</p>
+                      <dl className="mt-1 grid gap-x-6 gap-y-1 text-sm text-[#3d3d3a] sm:grid-cols-2">
+                        <div className="flex justify-between gap-3">
+                          <dt>Peserta mendukung</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.pct_pos)) ?? "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Peserta netral</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.pct_net)) ?? "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Peserta menolak</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.pct_neg)) ?? "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Sebaran sikap</dt>
+                          <dd className="tabular-nums">{Number.isFinite(Number(skorAturan.variance)) ? Number(skorAturan.variance) : "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Selisih terhadap ambang</dt>
+                          <dd className="tabular-nums">
+                            {Number.isFinite(Number(skorAturan.margin_pp)) ? `${Number(skorAturan.margin_pp)} poin persentase` : "-"}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Ambang mendukung</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.threshold_pos)) ?? "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Ambang menolak</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.threshold_neg)) ?? "-"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt>Ambang netral</dt>
+                          <dd className="tabular-nums">{persen(Number(skorAturan.threshold_net)) ?? "-"}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </details>
+                )}
               </section>
             )}
 
