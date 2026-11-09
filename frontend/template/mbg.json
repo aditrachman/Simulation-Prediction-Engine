@@ -1,0 +1,102 @@
+{
+  "judul": "Apakah program MBG sudah tepat sasaran?",
+  "kategori": "Kebijakan publik",
+  "meta": { "peserta": 12, "ronde": 3, "sumber": 1, "tanggal": "4 Nov 2026" },
+  "keterbatasan": "Simulasi ini hanya memakai 1 artikel sumber, dan angka yang muncul di debat adalah klaim para agen, bukan data yang sudah diverifikasi.",
+  "hasil": {
+    "vonis": "Mayoritas peserta menolak anggapan bahwa MBG sudah tepat sasaran.",
+    "distribusi": { "menolak": 8, "netral": 3, "mendukung": 1 },
+    "alasan": [
+      "Angka kepuasan 72,8% tidak menunjukkan siapa yang menerima bantuan.",
+      "Banyak peserta khawatir keluarga miskin di daerah terpencil belum terjangkau.",
+      "Semua pihak sepakat: butuh data distribusi dan dampak gizi, bukan hanya survei kepuasan."
+    ],
+    "kepercayaan": { "level": "Rendah–Sedang", "catatan": "1 sumber · relevansi konteks 0,21" }
+  },
+  "situasi": {
+    "pemicu": {
+      "angka": "72,8%",
+      "teks": "masyarakat disebut puas dengan program Makan Bergizi Gratis. Tapi muncul pertanyaan lain: apakah bantuan itu sampai ke yang paling membutuhkan?"
+    },
+    "bahan": [
+      "Isu keracunan makanan berulang",
+      "Keluarga miskin yang disebut belum terjangkau",
+      "Kepuasan tinggi belum tentu berarti masalah kesehatan berkurang"
+    ],
+    "sumber": "Sumber: 1 artikel RSS. Briefing terbatas."
+  },
+  "kubu": [
+    {
+      "nama": "Kritikus",
+      "tipe": "tolak",
+      "catatan": "Menolak: kepuasan bukan bukti tepat sasaran.",
+      "agen": ["Jurnalis/Media", "Pengusaha/UMKM", "Oposisi Kritis", "Mahasiswa", "Akademisi", "Pekerja Kantoran", "Guru Sekolah", "Dokter/Nakes"]
+    },
+    {
+      "nama": "Penengah",
+      "tipe": "netral",
+      "catatan": "Netral: terbuka pada bukti tambahan.",
+      "agen": ["Warga Desa/Kelurahan", "Orang Tua Bayi", "Pemerintah"]
+    },
+    {
+      "nama": "Pendukung",
+      "tipe": "dukung",
+      "catatan": "Mendukung: manfaat terlihat di posyandu.",
+      "agen": ["Ibu Hamil/Menyusui"]
+    }
+  ],
+  "ronde": [
+    {
+      "no": 1,
+      "judul": "Apa arti angka 72,8%?",
+      "ringkas": "Hampir semua peserta mempertanyakan angka kepuasan: puas, tapi siapa yang disurvei? Hanya Ibu Hamil/Menyusui yang membela program, dan Pemerintah menjawab netral.",
+      "distribusi": { "menolak": 10, "netral": 1, "mendukung": 1 },
+      "kutipan": { "teks": "72,8% masyarakat puas, itu angka tipikal sukses di media, bukan bukti efektivitas.", "agen": "Jurnalis/Media", "jenis": "langsung" }
+    },
+    {
+      "no": 2,
+      "judul": "Isu bergeser ke distribusi",
+      "ringkas": "Debat pindah ke soal siapa yang menerima. Penerima disebut terkonsentrasi di kota, sementara warga miskin lebih banyak di desa. Dokter/Nakes mulai netral.",
+      "distribusi": { "menolak": 9, "netral": 2, "mendukung": 1 },
+      "kutipan": { "teks": "60% dari penerima berada di daerah urban, sementara 80% penduduk miskin masih di pedesaan.", "agen": "Jurnalis/Media", "jenis": "klaim" }
+    },
+    {
+      "no": 3,
+      "judul": "Bukti lapangan muncul, tafsirnya beda",
+      "ringkas": "Data dari “Desa X” masuk ke debat. Warga Desa dan Orang Tua Bayi menjadi netral, sementara Dokter/Nakes kembali menolak dengan membaca data yang berlawanan.",
+      "distribusi": { "menolak": 8, "netral": 3, "mendukung": 1 },
+      "kutipan": { "teks": "Berat badan naik di 78% warga, namun hanya 45% yang mengalami peningkatan status gizi.", "agen": "Akademisi", "jenis": "klaim" }
+    }
+  ],
+  "titikBalik": [
+    {
+      "agen": "Warga Desa/Kelurahan", "dari": "menolak", "ke": "netral", "kapan": "Ronde 3",
+      "alasan": "Setelah mendengar data warung dari pengusaha, menyadari ada distribusi di desa juga, bukan hanya di kota."
+    },
+    {
+      "agen": "Orang Tua Bayi", "dari": "menolak", "ke": "netral", "kapan": "Ronde 3",
+      "alasan": "Data “Desa X” soal kenaikan berat badan anak membuat program terlihat lebih tepat sasaran di desa, tapi tetap skeptis."
+    },
+    {
+      "agen": "Dokter/Nakes", "dari": "netral", "ke": "menolak", "kapan": "Ronde 2 → 3",
+      "alasan": "Berbalik menolak setelah membaca data “Desa X” versi berbeda: penurunan berat badan dan anak menghindari makan."
+    }
+  ],
+  "buktiDiperdebatkan": [
+    { "agen": "Orang Tua Bayi · Ronde 3", "teks": "Data “Desa X”: 78% warga penerima melaporkan berat badan anak naik." },
+    { "agen": "Dokter/Nakes · Ronde 3", "teks": "Data “Desa X”: 78% warga penerima melaporkan berat badan turun." },
+    { "agen": "Akademisi · Ronde 3", "teks": "Berat badan naik di 78%, tapi status gizi membaik hanya di 45%. Ukuran sukses perlu diganti." }
+  ],
+  "skenario": [
+    { "jika": "Pemerintah membuka data distribusi secara transparan", "maka": "Oposisi Kritis bisa lebih moderat." },
+    { "jika": "Hasil audit menunjukkan keracunan makanan menurun", "maka": "Pengusaha/UMKM mungkin beralih ke netral." },
+    { "jika": "Data baru menunjukkan perbaikan nyata di lapangan", "maka": "Jurnalis/Media bisa mengubah sikap." },
+    { "jika": "Anak-anak di daerah terpencil tetap terpinggirkan", "maka": "Aksi protes dari kubu kritis cenderung meningkat." }
+  ],
+  "whatif": {
+    "judul": "Bagaimana kalau pemerintah merilis data distribusi per kecamatan?",
+    "deskripsi": "Simulasi dijalankan ulang dengan satu intervensi, lalu hasilnya dibandingkan dengan simulasi awal.",
+    "sebelum": { "menolak": 8, "netral": 3, "mendukung": 1 },
+    "sesudah": null
+  }
+}

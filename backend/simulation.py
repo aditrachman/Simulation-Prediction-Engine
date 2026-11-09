@@ -561,8 +561,10 @@ def run_simulation(
             + "\nATURAN (melanggar = output dihapus):\n"
             "1. Jangan sebut role/jabatanmu, jangan buka dengan 'Saya pikir'.\n"
             "2. Jangan bilang tak punya opini; jangan ulang argumen orang lain.\n"
-            "3. Dilarang menyebut angka atau statistik yang tidak ada di BRIEFING atau "
-            "TOPIK. Jika butuh data, tulis 'perlu data'.\n"
+            "3. Dilarang menyebut angka atau statistik yang tidak ada di FAKTA TERKINI atau "
+            "TOPIK. Jika FAKTA TERKINI memuat jawabannya, pakai itu. "
+            "Hanya bila informasinya benar-benar tidak ada di daftar, katakan itu belum dilaporkan sumber. "
+            "Dilarang frasa 'tidak ada data', 'tidak ada bukti', 'perlu data' selama FAKTA TERKINI memuat jawaban untuk topik.\n"
             "4. 2-3 kalimat, maksimal 35 kata, seperti orang ngobrol.\n"
         )
 
@@ -1180,12 +1182,27 @@ def run_simulation(
 
     # Statistik run (dari metrik llm_guard): untuk mengukur efek paralel & pacing.
     _stat = _llm_metrics()
+    # Kumpulkan briefing_guard dari semua giliran
+    total_regenerasi_angka = 0
+    total_regenerasi_salinan = 0
+    for rd in ronde_detail:
+        for a in rd.get("agen", []):
+            guard = a.get("briefing_guard", {})
+            total_regenerasi_angka += guard.get("regenerasi_angka", 0)
+            total_regenerasi_salinan += guard.get("regenerasi_salinan", 0)
+
+    # Hitung panggilan FAKTA TERKINI (1 panggilan per simulasi jika ada berita)
+    panggilan_fakta = 1 if briefing_dipakai.get("fakta_terkini", {}).get("klaim") else 0
+
     hasil_dict["statistik_run"] = {
         "pipeline": "legacy" if USE_LEGACY_PIPELINE else "json",
         "parallel": bool(PARALLEL_AGENTS and not USE_LEGACY_PIPELINE),
         "parallel_max": PARALLEL_AGENTS_MAX,
         "durasi_detik": round(time.time() - waktu_mulai, 2),
         "panggilan_llm": _stat["calls"],
+        "panggilan_fakta_terkini": panggilan_fakta,
+        "regenerasi_angka": total_regenerasi_angka,
+        "regenerasi_salinan": total_regenerasi_salinan,
         "token_prompt": _stat["prompt_tokens"],
         "token_completion": _stat["completion_tokens"],
         "token_total": _stat["prompt_tokens"] + _stat["completion_tokens"],
@@ -1409,8 +1426,8 @@ def _susun_fakta_terkini(
         baris = baris.strip()
         if not baris:
             continue
-        # Cocokkan "[N] ..." atau "N. ..."
-        m = re.match(r"[\[\(]?(\d+)[\]\)]?[\.\:]\s*(.+)", baris)
+        # Cocokkan "[N] ..." atau "N. ..." - LLM outputs "[1] Text..." with ] followed by space
+        m = re.match(r"[\[\(]?(\d+)[\]\)]*\s*(.+)", baris)
         if not m:
             m = re.match(r"^(\d+)\s+(.+)", baris)
         if m:

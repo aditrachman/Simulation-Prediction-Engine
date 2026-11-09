@@ -378,8 +378,21 @@ def build_computed(run: dict) -> dict:
         f"Topik simulasi ini: {topik}" if topik else "Topik simulasi ini tidak disebutkan."
     )
     pemicu_angka = _angka_pemicu(run)
-    # Convert bukti dicts to strings for narrator
-    bahan = [f"{e['agen']}: {e['teks']}" for e in bukti[:3]]
+    # Gunakan FAKTA TERKINI (baris-baris fakta) sebagai bahan, BUKAN kutipan agen.
+    # Jika FAKTA TERKINI tidak ada (fallback), pakai judul berita + media.
+    fakta_terkini = run.get("briefing_dipakai", {}).get("fakta_terkini", {})
+    klaim = fakta_terkini.get("klaim", [])
+    if klaim:
+        bahan = [f"[{k['nomor']}] {k['klaim']}" for k in klaim]
+    else:
+        berita = run.get("konteks_real", {}).get("berita", []) or run.get("berita", [])
+        bahan = [
+            f"{b.get('judul', '')} ({b.get('sumber') or b.get('media') or 'sumber tidak diketahui'})"
+            for b in berita[:5]
+        ]
+    # Fallback jika tidak ada klaim dan tidak ada berita
+    if not bahan:
+        bahan = ["Simulasi berjalan tanpa sumber berita."]
     sumber_teks = f"Sumber: {n_sumber} artikel RSS."
     if n_sumber <= 1:
         sumber_teks += " Briefing terbatas."
@@ -432,6 +445,10 @@ def build_computed(run: dict) -> dict:
     ]
 
     kualitas = run.get("kualitas")
+    # Map status "warning" -> "degraded" untuk kompatibilitas schema CaseStudy
+    if kualitas and kualitas.get("status") == "warning":
+        kualitas = dict(kualitas)
+        kualitas["status"] = "degraded"
     return {
         "meta": {"peserta": n_agen, "ronde": n_ronde, "sumber": n_sumber, "tanggal": tanggal},
         "keterbatasan": keterbatasan,
