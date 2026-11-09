@@ -185,7 +185,7 @@ def test_situasi_non_mbg_tanpa_naskah_tertanam(monkeypatch):
     out = build_computed(run)
     assert out["situasi"]["pemicu"]["angka"] is None
     # Fallback message when no sources available
-    assert out["situasi"]["bahan"] == ["Simulasi berjalan tanpa sumber berita."]
+    assert out["situasi"]["bahan"] == ["Sumber: tanpa artikel berita; briefing terbatas."]
     assert "tarif angkutan umum" in out["situasi"]["pemicu"]["teks"]
 
     dump = json.dumps(_assemble(run, monkeypatch), ensure_ascii=False)

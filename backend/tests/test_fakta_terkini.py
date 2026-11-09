@@ -183,7 +183,7 @@ def test_system_prompt_aturan_baru():
 # ── Kasus bahan kosong: konteks_real tanpa berita ───────────────────────
 
 def test_casestudy_builder_bahan_kosong():
-    """Kasus bahan kosong: tampil 'Simulasi berjalan tanpa sumber berita.'"""
+    """Kasus bahan kosong: tampil 'Sumber: tanpa artikel berita; briefing terbatas.'"""
     from backend.services.casestudy_builder import build_computed
 
     run = {
@@ -211,7 +211,7 @@ def test_casestudy_builder_bahan_kosong():
 
     # Seharusnya ada fallback baris
     assert len(bahan) == 1
-    assert "Simulasi berjalan tanpa sumber berita" in bahan[0]
+    assert "Sumber: tanpa artikel berita; briefing terbatas." in bahan[0]
 
 
 def test_narrator_bahan_kosong():

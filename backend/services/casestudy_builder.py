@@ -392,7 +392,7 @@ def build_computed(run: dict) -> dict:
         ]
     # Fallback jika tidak ada klaim dan tidak ada berita
     if not bahan:
-        bahan = ["Simulasi berjalan tanpa sumber berita."]
+        bahan = ["Sumber: tanpa artikel berita; briefing terbatas."]
     sumber_teks = f"Sumber: {n_sumber} artikel RSS."
     if n_sumber <= 1:
         sumber_teks += " Briefing terbatas."
