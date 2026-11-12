@@ -1,0 +1,24 @@
+[LLM] openai/gpt-oss-20b: error Error code: 400 - {'error': {'message': "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details. Error: jsonschema: '/situasi/bahan' does not validate with /properties/situasi/properties/bahan/maxItems: maxItems: got 4, want 3", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"vonis":"Mayoritas peserta mendukung keputusan BGN menghapus biaya kendaraan distribusi","alasan":["Mayoritas peserta mendukung keputusan tersebut","Keputusan dianggap mengurangi biaya operasional bagi pemilik warung","Keputusan dianggap memudahkan distribusi barang ke pelanggan"],"situasi":{"pemicu":{"angka":"","teks":"Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?"},"bahan":["BGN menegaskan kendaraan distribusi tidak lagi masuk anggaran Rp3.000 per penerima manfaat.","BGN memperkenalkan strategi baru dengan menghilangkan biaya kendaraan dari program MBG.","BGN menyatakan mobil SPPG tidak lagi ditanggung oleh biaya operasional MBG.","BGN menghapus biaya kendaraan distribusi dari komponen operasional MBG."]},"kubu_catatan":{"tolak":"","netral":"Pengusaha/UMKM","dukung":"Masyarakat Umum, Pemilik Toko Kecil/Pasar Tradisional"},"ronde":[{"no":1,"judul":"Penghapusan Biaya Kendaraan Distribusi","ringkas":"Pemilik Toko Kecil/Pasar Tradisional menilai penghapusan biaya kendaraan distribusi memberi manfaat lebih bagi pemilik warung, menurunkan biaya operasional dan memudahkan distribusi barang ke pelanggan."}],"skenario":[] }'}}
+[LLM] openai/gpt-oss-120b: error Error code: 400 - {'error': {'message': "max completion tokens reached before generating a valid document: the output was truncated to fit max_completion_tokens and is missing required content. Increase max_completion_tokens. See 'failed_generation' for the truncated output. Error: jsonschema: '' does not validate with /required: missing properties: 'kubu_catatan', 'ronde', 'skenario'", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{\n  "vonis": "Mayoritas peserta mendukung keputusan tersebut.",\n  "alasan": [\n    "Menghapus biaya kendaraan distribusi memberi manfaat lebih bagi pemilik warung, menurunkan biaya operasional dan memudahkan distribusi barang ke pelanggan.",\n    "Aku rasa ngurangin biaya kendaraan buat distribusi itu ngirit duit, jadi lebih banyak dana buat kebutuhan keluarga. Jadi, keputusan itu tepat.",\n    "Pengusaha/UMKM menilai kebijakan tidak mengubah beban biaya secara signifikan."\n  ],\n  "situasi": {\n    "pemicu": {\n      "angka": "",\n      "teks": "Topik simulasi ini: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?"\n    },\n    "bahan": [\n      "BGN menegaskan kendaraan distribusi tidak lagi masuk anggaran Rp3.000 per penerima manfaat.",\n      "BGN memperkenalkan strategi baru dengan menghilangkan biaya kendaraan dari program MBG.",\n      "BGN menyatakan mobil SPPG tidak lagi ditanggung oleh biaya operasional MBG."\n    ]\n  }}'}}
+[LLM] qwen/qwen3.8-27b: error Error code: 400 - {'error': {'message': "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"al 접종'}}
+Testing 3 agents with gpt-oss-120b...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794260973122
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794260973122
+Duration: 5.9s
+=== TEST gpt-oss-120b (5.9s) ===
+FAKTA: FAKTA TERKINI:
+[1] BGN menegaskan kendaraan distribusi tidak lagi masuk anggaran Rp3.000 per penerima manfaat.
+[2] BGN memperkenalkan strategi baru dengan menghilangkan biaya kendaraan dari program MB...
+
+--- Masyarakat Umum | model gpt-oss-120b | positif 0.7
+Aku rasa ngurangin biaya kendaraan buat distribusi itu ngirit duit, jadi lebih banyak dana buat kebutuhan keluarga. Jadi, keputusan itu tepat.
+6 kata pertama: Aku rasa ngurangin biaya kendaraan buat
+
+--- Pemilik Toko Kecil/Pasar Tradisional | model gpt-oss-120b | positif 0.8
+Menghapus biaya kendaraan distribusi memberi manfaat lebih bagi pemilik warung, menurunkan biaya operasional dan memudahkan distribusi barang ke pelanggan.
+6 kata pertama: Menghapus biaya kendaraan distribusi memberi manfaat
+
+--- Pengusaha/UMKM | model gpt-oss-120b | netral 0.0
+Kebijakan ini memang hilangkan biaya kendaraan distribusi, jadi ongkos Rp3.000 per penerima hilang. Bukan solusi biaya, tapi mungkin mengurangi beban. Dampak jangka panjang belum jelas.
+6 kata pertama: Kebijakan ini memang hilangkan biaya kendaraan
+

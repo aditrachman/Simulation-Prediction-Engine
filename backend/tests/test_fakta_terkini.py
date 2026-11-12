@@ -47,11 +47,21 @@ def _kelompok_berita_palsu():
     ]
 
 
+def _judul_berita_palsu():
+    """Judul wakil dari kelompok berita palsu di atas."""
+    return [
+        "Pemerintah Kaji Kenaikan PTKP 2027",
+        "Airlangga Terapkan Penyesuaian PTKP Setelah Januari 2027",
+        "PTKP 2027 Direncanakan Naik, Pemerintah Masih Hitung Besaran",
+        "PTKP Baru Dihitung Ulang, Besaran Belum Jelas",
+    ]
+
+
 # ── (a) blok FAKTA dari LLM palsu berisi klaim <= 20 kata ────────────────
 
 @patch("backend.simulation.call_llm")
 def test_fakta_terkini_llm_palsu_klaim_pendek(mock_call_llm):
-    """LLM mengembalikan klaim <= 20 kata, ter-parse dan di-sort non-topik dulu."""
+    """LLM mengembalikan klaim pendek; hasil akhir tetap klaim tervalidasi."""
     # LLM output: 4 baris, nomor 2 punya "Januari" (non-topik), 3 punya "belum" (non-topik)
     mock_call_llm.return_value = (
         "[1] Pemerintah meninjau kenaikan PTKP 2027.\n"
@@ -60,40 +70,36 @@ def test_fakta_terkini_llm_palsu_klaim_pendek(mock_call_llm):
         "[4] Pemerintah masih menghitung besaran PTKP baru."
     )
 
-    kelompok = _kelompok_berita_palsu()
     topik = "Apakah kenaikan batas PTKP 2027 menguntungkan pekerja?"
 
-    klaim = _susun_fakta_terkini(kelompok, topik)
+    klaim = _susun_fakta_terkini(_judul_berita_palsu(), topik)
 
     assert klaim is not None
-    assert len(klaim) == 4
-    # Semua klaim <= 20 kata
+    assert 1 <= len(klaim) <= 4
     for k in klaim:
+        assert k["klaim"].strip()
         assert len(k["klaim"].split()) <= 20, f"Klaim terlalu panjang: {k['klaim']}"
-
-    # Urutan: non-topik dulu (2: Januari skor tertinggi), lalu klaim lain
-    nomor_urut = [k["nomor"] for k in klaim]
-    assert nomor_urut[0] == 2, "Klaim non-topik (Januari) harus di atas"
-    # Klaim 3 (belum) dan 1 (2027) punya skor sama (1), urutan stabil
-    # Klaim 4 skor 0 di terakhir
-    assert nomor_urut[-1] == 4, "Klaim skor 0 harus di terakhir"
+        assert 0 <= k["sumber_idx"] < 4
 
 
-# ── (b) fallback ke baris judul saat LLM gagal ────────────────────────────
+# ── (b) fallback ke judul sumber saat LLM gagal ───────────────────────────
 
 def test_fakta_terkini_fallback_llm_gagal():
-    """Saat call_llm raise exception, pakai baris judul sebagai fallback."""
+    """Saat call_llm raise exception, judul sumber dipakai sebagai klaim."""
     with patch("backend.simulation.call_llm", side_effect=RuntimeError("LLM down")):
-        kelompok = _kelompok_berita_palsu()
+        judul = _judul_berita_palsu()
         topik = "Topik uji"
 
-        klaim = _susun_fakta_terkini(kelompok, topik)
+        klaim = _susun_fakta_terkini(judul, topik)
 
-        assert klaim is None, "Fallback: klaim None agar _bangun_fakta_terkini pakai baris judul"
+        assert klaim is not None
+        assert len(klaim) == 4
+        for k in klaim:
+            assert k["klaim"] in judul
 
 
 def test_bangun_fakta_terkini_fallback_baris_judul():
-    """_bangun_fakta_terkini pakai baris judul jika klaim None."""
+    """_bangun_fakta_terkini memakai judul dari baris kelompok bila klaim kosong."""
     briefing_dipakai = {
         "teks": "Sumber: hanya judul...\n- Judul 1 (media1, 1 Nov 2026; dilaporkan 1 media)\n- Judul 2 (media2, 2 Nov 2026; dilaporkan 1 media)",
         "baris": [
@@ -116,7 +122,7 @@ def test_bangun_fakta_terkini_fallback_baris_judul():
     assert "Judul 1" in hasil["teks"]
     assert "Judul 2" in hasil["teks"]
     assert "Pilih SATU fakta" in hasil["teks"]
-    assert hasil["klaim"] == []
+    assert [k["klaim"] for k in hasil["klaim"]] == ["Judul 1", "Judul 2"]
 
 
 # ── (c) penjaga angka: regenerasi lalu hapus kalimat ────────────────────

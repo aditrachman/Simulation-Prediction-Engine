@@ -1,0 +1,72 @@
+DEBAT 10 PERSONA (1 RONDE)
+=== FAKTA TERKINI ===
+FAKTA TERKINI:
+[1] BGN mengungkap gaji pengawas gizi dan keuangan dalam aturan biaya operasional MBG.
+[2] BGN menyebut alasan kendaraan dicoret dari biaya operasional MBG.
+[3] BGN menyatakan kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000.
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+  [1] (llm) BGN mengungkap gaji pengawas gizi dan keuangan dalam aturan biaya operasional MBG.
+  [2] (llm) BGN menyebut alasan kendaraan dicoret dari biaya operasional MBG.
+  [3] (llm) BGN menyatakan kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000.
+
+=== JAWABAN ===
+--- Pemerintah | positif 0.8 ---
+BGN menyatakan kendaraan distribusi tidak masuk biaya operasional Rp3.000, sehingga alokasi dana lebih tepat diarahkan ke kebutuhan utama penerima manfaat.
+--- Akademisi | positif 0.8 ---
+BGN menyatakan kendaraan distribusi tidak masuk biaya operasional Rp3.000, sehingga mengeluarkannya tepat.
+--- Pengusaha/UMKM | netral 0.0 ---
+BGN bilang kendaraan distribusi nggak masuk biaya operasional Rp3.000, jadi keputusan itu belum jelas tepat.
+--- Dokter/Nakes | positif 0.5 ---
+BGN berargumen kendaraan tidak masuk biaya operasional karena alasan tertentu, jadi pengeluaran itu wajar
+--- Penyedia Logistik Pangan | negatif -0.4 ---
+BGN menolak kendaraan distribusi dari biaya operasional karena alasan tidak relevan, sehingga keputusan tidak tepat.
+--- Skeptis Ekonomi | positif 0.8 ---
+BGN bilang kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000 per penerima manfaat, jadi keputusan itu masuk akal
+--- Masyarakat Umum | netral 0.0 ---
+BGN bilang kendaraan itu tidak masuk biaya operasional, jadi keputusan itu logis dari sisi pengelolaan dana.
+--- Ibu Hamil/Menyusui | negatif -0.5 ---
+BGN bilang kendaraan distribusi tidak masuk biaya operasional, jadi mengeluarkan biaya Rp3.000 per penerima manfaat tidak tepat.
+--- Pemilik Toko Kecil/Pasar Tradisional | netral 0.0 ---
+BGN menyatakan kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000 per penerima manfaat, sehingga keputusan masih belum jelas kebenarannya.
+--- Pekerja Kantoran | positif 0.5 ---
+BGN bilang kendaraan tak masuk operasional karena alasan tertentu, jadi memang wajar dicoret.
+
+ULANGAN PERSONA TERDAMPAK (2x)
+=== FAKTA TERKINI ===
+FAKTA TERKINI:
+[1] BGN ungkap nasib gaji pengawas gizi dan keuangan.
+[2] Kendaraan dicoret dari biaya operasional MBG.
+[3] Kendaraan distribusi MBG tak masuk biaya operasional Rp3.000.
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+  [1] (llm) BGN ungkap nasib gaji pengawas gizi dan keuangan.
+  [2] (llm) Kendaraan dicoret dari biaya operasional MBG.
+  [3] (llm) Kendaraan distribusi MBG tak masuk biaya operasional Rp3.000.
+
+=== JAWABAN ===
+--- Pengusaha/UMKM | netral 0.0 ---
+BGN bilang kendaraan distribusi tidak masuk biaya operasional Rp3.000, jadi keputusan ini masih dipertanyakan.
+--- Penyedia Logistik Pangan | negatif -0.5 ---
+BGN memutuskan tidak menambahkan kendaraan distribusi ke biaya operasional, padahal transportasi penting untuk distribusi pangan. Keputusan ini mengurangi efisiensi dan transparansi program.
+--- Pemilik Toko Kecil/Pasar Tradisional | netral 0.0 ---
+BGN menyatakan kendaraan distribusi MBG tidak dimasukkan dalam biaya operasional Rp3.000, jadi belum jelas apakah keputusan ini tepat.
+
+=== FAKTA TERKINI ===
+FAKTA TERKINI:
+[1] BGN mengungkap nasib gaji pengawas gizi dan keuangan terkait aturan biaya operasional MBG.
+[2] Kendaraan dicoret dari biaya operasional MBG.
+[3] Kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000.
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+  [1] (llm) BGN mengungkap nasib gaji pengawas gizi dan keuangan terkait aturan biaya operasional MBG.
+  [2] (llm) Kendaraan dicoret dari biaya operasional MBG.
+  [3] (llm) Kendaraan distribusi MBG tidak masuk biaya operasional Rp3.000.
+
+=== JAWABAN ===
+--- Pengusaha/UMKM | positif 0.7 ---
+BGN udah jelas ngasih tahu kendaraan distribusi nggak masuk Rp3.000, jadi itu keputusan yang masuk akal buat ngedukung distribusi yang lebih efisien.
+--- Penyedia Logistik Pangan | negatif -0.5 ---
+Kendaraan distribusi tidak masuk biaya operasional Rp3.000, sehingga tidak ada dana untuk transportasi, mengurangi efisiensi distribusi pangan
+--- Pemilik Toko Kecil/Pasar Tradisional | positif 0.7 ---
+BGN menghapus kendaraan distribusi dari biaya operasional MBG memang tepat, karena alokasi dana harus fokus pada layanan inti, menghindari pemborosan dan meningkatkan efisiensi distribusi.

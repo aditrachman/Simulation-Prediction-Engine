@@ -1,0 +1,67 @@
+============================================================
+EVALUASI 120b - SAME 10 PERSONA, SAME FAKTA AS 20b
+============================================================
+Topik: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?
+Model: openai/gpt-oss-120b
+Durasi: 123.6s
+
+=== BLOK FAKTA TERKINI (IDENTICAL TO 20b) ===
+FAKTA TERKINI:
+[1] BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+[2] Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+[3] Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+[1] (9 kata) BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+[2] (9 kata) Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+[3] (8 kata) Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+
+=== JAWABAN RONDE 1 (10 persona) ===
+
+--- Pengusaha/UMKM | model gpt-oss-120b | negatif -0.6 | status sukses
+Ini langsung memotong biaya, memberi ruang investasi lebih pada usaha kecil seperti warung kopi.
+6 kata pertama: Ini langsung memotong biaya, memberi ruang
+
+--- Pemerintah | model gpt-oss-120b | positif 1.0 | status sukses
+Pencabutan biaya kendaraan dari Rp3.000 per penerima manfaat menyesuaikan realitas anggaran, memperjelas alokasi dana bagi kebutuhan lain.
+6 kata pertama: Pencabutan biaya kendaraan dari Rp3.000 per
+
+--- Akademisi | model gpt-oss-120b | positif 0.8 | status sukses
+Karena BGN menegaskan kendaraan distribusi bukan biaya operasional, menghapusnya dari Rp3.000 per penerima manfaat sesuai definisi biaya. Hal ini konsisten dengan kebijakan yang telah disampaikan.
+6 kata pertama: Karena BGN menegaskan kendaraan distribusi bukan
+
+--- Dokter/Nakes | model gpt-oss-120b | positif 0.7 | status sukses
+Kebijakan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat menjaga fokus dana pada layanan kesehatan, tidak membebani anggaran operasional.
+6 kata pertama: Kebijakan menghapus biaya kendaraan distribusi dari
+
+--- Penyedia Logistik Pangan | model gpt-oss-120b | positif 0.8 | status sukses
+Kendaraan distribusi dipisahkan dari biaya operasional, sehingga Rp3.000 per penerima tidak mencakup biaya transportasi, sesuai kebijakan BGN yang jelas.
+6 kata pertama: Kendaraan distribusi dipisahkan dari biaya operasional,
+
+--- Skeptis Ekonomi | model gpt-oss-120b | positif 0.5 | status sukses
+Kendaraan distribusi bukan biaya operasional MBG, jadi tak perlu dimasukkan Rp3.000 per penerima manfaat. Keputusan konsisten dengan fakta.
+6 kata pertama: Kendaraan distribusi bukan biaya operasional MBG,
+
+--- Pekerja Kantoran | model gpt-oss-120b | positif 0.8 | status sukses
+Menghilangkan biaya kendaraan distribusi dari anggaran Rp3.000 per penerima manfaat memudahkan pengelolaan anggaran, mengurangi beban operasional, dan meningkatkan efisiensi distribusi. Ini langsung berdampak positif pada pengeluaran dan kelancaran program.
+6 kata pertama: Menghilangkan biaya kendaraan distribusi dari anggaran
+
+--- Masyarakat Umum | model gpt-oss-120b | positif 0.5 | status sukses
+Udah jelas kendaraan ga masuk Rp3.000, jadi biaya lain bisa dipakai buat kebutuhan lain di rumah, lebih efisien
+6 kata pertama: Udah jelas kendaraan ga masuk Rp3.000,
+
+--- Pemilik Toko Kecil/Pasar Tradisional | model gpt-oss-120b | positif 0.5 | status sukses
+Biaya kendaraan distribusi tak lagi masuk ke Rp3.000, bikin alokasi lebih efisien. Warung bisa pakai dana itu untuk bahan baku atau promosi.
+6 kata pertama: Biaya kendaraan distribusi tak lagi masuk
+
+--- Ibu Hamil/Menyusui | model gpt-oss-120b | positif 0.5 | status sukses
+Kebijakan BGN mengeluarkan kendaraan distribusi dari biaya operasional Rp3.000 sesuai fakta bahwa kendaraan tidak dianggap komponen biaya operasional MBG.
+6 kata pertama: Kebijakan BGN mengeluarkan kendaraan distribusi dari
+
+=== HITUNGAN 120b (FIXED FAKTA) ===
+(i) Klaim berbeda yang dirujuk: 2 dari 3 -> [1, 3]
+(ii) Jawaban memuat kata sudut selain klaim 1: 0 -> []
+(iii) Jawaban diawali 'BGN' atau nama lembaga: 0 -> []
+(iv) Jawaban menyatakan alasan di luar FAKTA: 3 -> ['Pekerja Kantoran', 'Masyarakat Umum', 'Pemilik Toko Kecil/Pasar Tradisional']
+(v) Jawaban salah tafsir angka: 0
+(vi) Jawaban dengan 4 kata awal identik: 0 -> {}

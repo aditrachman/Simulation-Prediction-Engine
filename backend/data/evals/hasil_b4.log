@@ -1,0 +1,101 @@
+[fixture_bgn] run 1: 5 klaim, asal llm
+[fixture_bgn] run 2: 5 klaim, asal llm
+[fixture_bgn] run 3: 5 klaim, asal llm
+[fixture_bgn] run 4: 5 klaim, asal llm
+[fixture_bgn] run 5: 5 klaim, asal llm
+[input_evaluasi] run 1: 5 klaim, asal llm
+[input_evaluasi] run 2: 5 klaim, asal llm
+[input_evaluasi] run 3: 5 klaim, asal llm
+[input_evaluasi] run 4: 2 klaim, asal llm
+[input_evaluasi] run 5: 5 klaim, asal llm
+B4 - STABILITAS PEMBENTUKAN FAKTA TERKINI
+Topik: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?
+Judul fixture BGN: 8 | judul input evaluasi: 14
+
+=== fixture_bgn ===
+Judul terpilih: 5
+  [1] Aturan Baru Biaya Operasional MBG, BGN Ungkap Nasib Gaji Pengawas Gizi dan Keuangan
+  [2] BGN Hapus Biaya Kendaraan MBG, Mitra SPPG Kini Wajib Siapkan Armada Sendiri
+  [3] Aturan Baru MBG, Kendaraan Distribusi Tak Lagi Ditanggung Operasional Dapur, Insentif Harian Juga Dipangkas
+  [4] BGN Hapus Biaya Distribusi MBG Rp3.000 Per Penerima: Kami Kembalikan Kebijakan Semestinya
+  [5] Alasan Kendaraan Dicoret dari Biaya Operasional MBG
+
+--- run 1 | asal llm | hitungan {'armada_atau_mitra': True, 'insentif': True, 'pengawas': True, 'klaim_meta': False}
+  [1] (llm) BGN ungkap nasib gaji pengawas gizi dan keuangan lewat aturan baru biaya operasional MBG.
+  [2] (llm) BGN hapus biaya kendaraan MBG sehingga mitra SPPG wajib siapkan armada sendiri.
+  [3] (llm) Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas dalam aturan baru MBG.
+  [4] (llm) BGN hapus biaya distribusi MBG Rp3.000 per penerima demi kembalikan kebijakan semestinya.
+  [5] (llm) BGN mencoret kendaraan dari biaya operasional MBG.
+
+--- run 2 | asal llm | hitungan {'armada_atau_mitra': True, 'insentif': True, 'pengawas': True, 'klaim_meta': False}
+  [1] (llm) Aturan baru biaya operasional MBG mengungkap nasib gaji pengawas gizi dan keuangan.
+  [2] (llm) BGN hapus biaya kendaraan MBG dan mitra SPPG wajib siapkan armada sendiri.
+  [3] (llm) Aturan baru MBG menolak kendaraan distribusi dan potong insentif harian.
+  [4] (llm) BGN hapus biaya distribusi MBG Rp3.000 per penerima dan kembalikan kebijakan semestinya.
+  [5] (llm) Kendaraan dicoret dari biaya operasional MBG.
+
+--- run 3 | asal llm | hitungan {'armada_atau_mitra': True, 'insentif': True, 'pengawas': True, 'klaim_meta': False}
+  [1] (llm) BGN mengungkap nasib gaji pengawas gizi dan keuangan aturan baru biaya operasional MBG.
+  [2] (llm) BGN menghapus biaya kendaraan MBG dan mitra SPPG wajib menyiapkan armada sendiri.
+  [3] (llm) Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas.
+  [4] (llm) BGN menghapus biaya distribusi MBG Rp3.000 per penerima.
+  [5] (llm) BGN mencoret kendaraan dari biaya operasional MBG.
+
+--- run 4 | asal llm | hitungan {'armada_atau_mitra': True, 'insentif': True, 'pengawas': True, 'klaim_meta': False}
+  [1] (llm) Aturan Baru Biaya Operasional MBG, BGN Ungkap Nasib Gaji Pengawas Gizi dan Keuangan.
+  [2] (llm) BGN Hapus Biaya Kendaraan MBG, Mitra SPPG Kini Wajib Siapkan Armada Sendiri.
+  [3] (llm) Aturan Baru MBG, Kendaraan Distribusi Tak Lagi Ditanggung Operasional Dapur, Insentif Harian Juga Dipangkas.
+  [4] (llm) BGN Hapus Biaya Distribusi MBG Rp3.000 Per Penerima: Kami Kembalikan Kebijakan Semestinya.
+  [5] (llm) Alasan Kendaraan Dicoret dari Biaya Operasional MBG.
+
+--- run 5 | asal llm | hitungan {'armada_atau_mitra': True, 'insentif': True, 'pengawas': True, 'klaim_meta': False}
+  [1] (llm) BGN mengungkap nasib gaji pengawas gizi dan keuangan aturan baru biaya operasional MBG.
+  [2] (llm) BGN menghapus biaya kendaraan MBG membuat mitra SPPG wajib menyiapkan armada sendiri.
+  [3] (llm) Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas aturan baru MBG.
+  [4] (llm) BGN menghapus biaya distribusi MBG Rp3.000 per penerima karena dikembalikan kebijakan semestinya.
+  [5] (llm) BGN mengungkapkan alasan kendaraan dicoret dari biaya operasional MBG.
+
+Ringkasan: {'run_llm': 5, 'run_fallback': 0, 'klaim_total': 25, 'klaim_asal_llm': 25, 'klaim_asal_judul': 0, 'set_armada_mitra': 5, 'set_insentif': 5, 'set_pengawas': 5, 'set_klaim_meta': 0}
+
+=== input_evaluasi ===
+Judul terpilih: 5
+  [1] Strategi Baru BGN: Biaya Kendaraan Dihapus dari Operasional MBG BGN Hapus Kendaraan dari Biaya Operasional MBG - Supernews.co.id | Suara Perjuangan Indonesia
+  [2] Biaya Operasional MBG Rp3.000, Mobil SPPG Tak Lagi Ditanggung - https://www.politikindonesia.id/
+  [3] BGN Hapus Biaya Kendaraan dari Anggaran Harian Makan Bergizi - SulawesiPos
+  [4] BGN Tegaskan Kendaraan Distribusi Tidak Masuk Biaya Operasional MBG - murianews.com
+  [5] BGN Hapus Biaya Kendaraan dari Komponen Operasional MBG Rp3.000 per Penerima Manfaat - Haluan Riau - Haluan Riau
+
+--- run 1 | asal llm | hitungan {'armada_atau_mitra': False, 'insentif': False, 'pengawas': False, 'klaim_meta': False}
+  [1] (llm) BGN menghapus biaya kendaraan dari operasional MBG.
+  [2] (llm) Biaya operasional MBG Rp3.000 dan mobil SPPG tak lagi ditanggung.
+  [3] (llm) BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.
+  [4] (llm) BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.
+  [5] (llm) BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.
+
+--- run 2 | asal llm | hitungan {'armada_atau_mitra': False, 'insentif': False, 'pengawas': False, 'klaim_meta': False}
+  [1] (llm) BGN menghapus biaya kendaraan dari biaya operasional MBG.
+  [2] (llm) Mobil SPPG tidak lagi ditanggung oleh biaya operasional MBG Rp3.000.
+  [3] (llm) BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.
+  [4] (llm) BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.
+  [5] (llm) BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.
+
+--- run 3 | asal llm | hitungan {'armada_atau_mitra': False, 'insentif': False, 'pengawas': False, 'klaim_meta': False}
+  [1] (llm) BGN menghapus biaya kendaraan dari operasional MBG.
+  [2] (llm) Mobil SPPG tidak lagi ditanggung dalam biaya operasional MBG Rp3.000.
+  [3] (llm) BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.
+  [4] (llm) Kendaraan distribusi tidak masuk biaya operasional MBG.
+  [5] (llm) BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.
+
+--- run 4 | asal llm | hitungan {'armada_atau_mitra': False, 'insentif': False, 'pengawas': False, 'klaim_meta': False}
+  [1] (llm) BGN menghapus biaya kendaraan dari biaya operasional MBG.
+  [2] (judul) Biaya Operasional MBG Rp3.000, Mobil SPPG Tak Lagi Ditanggung - https://www.politikindonesia.id/
+
+--- run 5 | asal llm | hitungan {'armada_atau_mitra': False, 'insentif': False, 'pengawas': False, 'klaim_meta': False}
+  [1] (llm) BGN menghapus biaya kendaraan dari biaya operasional MBG.
+  [2] (llm) Mobil SPPG tak lagi ditanggung dari biaya operasional MBG Rp3.000.
+  [3] (llm) BGN menghapus biaya kendaraan dari anggaran harian Makan Bergizi.
+  [4] (llm) BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.
+  [5] (llm) BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.
+
+Ringkasan: {'run_llm': 5, 'run_fallback': 0, 'klaim_total': 22, 'klaim_asal_llm': 21, 'klaim_asal_judul': 1, 'set_armada_mitra': 0, 'set_insentif': 0, 'set_pengawas': 0, 'set_klaim_meta': 0}
+

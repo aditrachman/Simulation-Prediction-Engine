@@ -1,0 +1,449 @@
+{
+  "topik": "Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?",
+  "fixture_bgn": {
+    "judul_terpilih": [
+      "Aturan Baru Biaya Operasional MBG, BGN Ungkap Nasib Gaji Pengawas Gizi dan Keuangan",
+      "BGN Hapus Biaya Kendaraan MBG, Mitra SPPG Kini Wajib Siapkan Armada Sendiri",
+      "Aturan Baru MBG, Kendaraan Distribusi Tak Lagi Ditanggung Operasional Dapur, Insentif Harian Juga Dipangkas",
+      "BGN Hapus Biaya Distribusi MBG Rp3.000 Per Penerima: Kami Kembalikan Kebijakan Semestinya",
+      "Alasan Kendaraan Dicoret dari Biaya Operasional MBG"
+    ],
+    "runs": [
+      {
+        "run": 1,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN ungkap nasib gaji pengawas gizi dan keuangan lewat aturan baru biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "BGN hapus biaya kendaraan MBG sehingga mitra SPPG wajib siapkan armada sendiri.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas dalam aturan baru MBG.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN hapus biaya distribusi MBG Rp3.000 per penerima demi kembalikan kebijakan semestinya.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN mencoret kendaraan dari biaya operasional MBG.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": true,
+          "insentif": true,
+          "pengawas": true,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 2,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "Aturan baru biaya operasional MBG mengungkap nasib gaji pengawas gizi dan keuangan.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "BGN hapus biaya kendaraan MBG dan mitra SPPG wajib siapkan armada sendiri.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "Aturan baru MBG menolak kendaraan distribusi dan potong insentif harian.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN hapus biaya distribusi MBG Rp3.000 per penerima dan kembalikan kebijakan semestinya.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "Kendaraan dicoret dari biaya operasional MBG.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": true,
+          "insentif": true,
+          "pengawas": true,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 3,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN mengungkap nasib gaji pengawas gizi dan keuangan aturan baru biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "BGN menghapus biaya kendaraan MBG dan mitra SPPG wajib menyiapkan armada sendiri.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN menghapus biaya distribusi MBG Rp3.000 per penerima.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN mencoret kendaraan dari biaya operasional MBG.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": true,
+          "insentif": true,
+          "pengawas": true,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 4,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "Aturan Baru Biaya Operasional MBG, BGN Ungkap Nasib Gaji Pengawas Gizi dan Keuangan.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "BGN Hapus Biaya Kendaraan MBG, Mitra SPPG Kini Wajib Siapkan Armada Sendiri.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "Aturan Baru MBG, Kendaraan Distribusi Tak Lagi Ditanggung Operasional Dapur, Insentif Harian Juga Dipangkas.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN Hapus Biaya Distribusi MBG Rp3.000 Per Penerima: Kami Kembalikan Kebijakan Semestinya.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "Alasan Kendaraan Dicoret dari Biaya Operasional MBG.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": true,
+          "insentif": true,
+          "pengawas": true,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 5,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN mengungkap nasib gaji pengawas gizi dan keuangan aturan baru biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "BGN menghapus biaya kendaraan MBG membuat mitra SPPG wajib menyiapkan armada sendiri.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "Kendaraan distribusi tak lagi ditanggung operasional dapur dan insentif harian dipangkas aturan baru MBG.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN menghapus biaya distribusi MBG Rp3.000 per penerima karena dikembalikan kebijakan semestinya.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN mengungkapkan alasan kendaraan dicoret dari biaya operasional MBG.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": true,
+          "insentif": true,
+          "pengawas": true,
+          "klaim_meta": false
+        }
+      }
+    ],
+    "ringkasan": {
+      "run_llm": 5,
+      "run_fallback": 0,
+      "klaim_total": 25,
+      "klaim_asal_llm": 25,
+      "klaim_asal_judul": 0,
+      "set_armada_mitra": 5,
+      "set_insentif": 5,
+      "set_pengawas": 5,
+      "set_klaim_meta": 0
+    }
+  },
+  "input_evaluasi": {
+    "judul_terpilih": [
+      "Strategi Baru BGN: Biaya Kendaraan Dihapus dari Operasional MBG BGN Hapus Kendaraan dari Biaya Operasional MBG - Supernews.co.id | Suara Perjuangan Indonesia",
+      "Biaya Operasional MBG Rp3.000, Mobil SPPG Tak Lagi Ditanggung - https://www.politikindonesia.id/",
+      "BGN Hapus Biaya Kendaraan dari Anggaran Harian Makan Bergizi - SulawesiPos",
+      "BGN Tegaskan Kendaraan Distribusi Tidak Masuk Biaya Operasional MBG - murianews.com",
+      "BGN Hapus Biaya Kendaraan dari Komponen Operasional MBG Rp3.000 per Penerima Manfaat - Haluan Riau - Haluan Riau"
+    ],
+    "runs": [
+      {
+        "run": 1,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN menghapus biaya kendaraan dari operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "Biaya operasional MBG Rp3.000 dan mobil SPPG tak lagi ditanggung.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": false,
+          "insentif": false,
+          "pengawas": false,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 2,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN menghapus biaya kendaraan dari biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "Mobil SPPG tidak lagi ditanggung oleh biaya operasional MBG Rp3.000.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": false,
+          "insentif": false,
+          "pengawas": false,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 3,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN menghapus biaya kendaraan dari operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "Mobil SPPG tidak lagi ditanggung dalam biaya operasional MBG Rp3.000.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "BGN menghapus biaya kendaraan dari anggaran harian makan bergizi.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "Kendaraan distribusi tidak masuk biaya operasional MBG.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": false,
+          "insentif": false,
+          "pengawas": false,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 4,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN menghapus biaya kendaraan dari biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "Biaya Operasional MBG Rp3.000, Mobil SPPG Tak Lagi Ditanggung - https://www.politikindonesia.id/",
+            "sumber_idx": 1,
+            "asal": "judul"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": false,
+          "insentif": false,
+          "pengawas": false,
+          "klaim_meta": false
+        }
+      },
+      {
+        "run": 5,
+        "asal": "llm",
+        "klaim": [
+          {
+            "nomor": 1,
+            "klaim": "BGN menghapus biaya kendaraan dari biaya operasional MBG.",
+            "sumber_idx": 0,
+            "asal": "llm"
+          },
+          {
+            "nomor": 2,
+            "klaim": "Mobil SPPG tak lagi ditanggung dari biaya operasional MBG Rp3.000.",
+            "sumber_idx": 1,
+            "asal": "llm"
+          },
+          {
+            "nomor": 3,
+            "klaim": "BGN menghapus biaya kendaraan dari anggaran harian Makan Bergizi.",
+            "sumber_idx": 2,
+            "asal": "llm"
+          },
+          {
+            "nomor": 4,
+            "klaim": "BGN menegaskan kendaraan distribusi tidak masuk biaya operasional MBG.",
+            "sumber_idx": 3,
+            "asal": "llm"
+          },
+          {
+            "nomor": 5,
+            "klaim": "BGN menghapus biaya kendaraan dari komponen operasional MBG Rp3.000 per penerima manfaat.",
+            "sumber_idx": 4,
+            "asal": "llm"
+          }
+        ],
+        "hitungan": {
+          "armada_atau_mitra": false,
+          "insentif": false,
+          "pengawas": false,
+          "klaim_meta": false
+        }
+      }
+    ],
+    "ringkasan": {
+      "run_llm": 5,
+      "run_fallback": 0,
+      "klaim_total": 22,
+      "klaim_asal_llm": 21,
+      "klaim_asal_judul": 1,
+      "set_armada_mitra": 0,
+      "set_insentif": 0,
+      "set_pengawas": 0,
+      "set_klaim_meta": 0
+    }
+  }
+}

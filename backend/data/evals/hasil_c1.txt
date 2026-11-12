@@ -1,0 +1,83 @@
+============================================================
+EVALUASI C1 - RUN BGN 10 PERSONA
+============================================================
+Topik: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?
+Model: openai/gpt-oss-20b
+Durasi: 123.3s
+
+=== BLOK FAKTA TERKINI YANG MASUK PROMPT ===
+FAKTA TERKINI:
+[1] BGN memutuskan kendaraan distribusi tidak termasuk dalam biaya operasional Rp3.000 per penerima manfaat.
+[2] Berita Seputar BGN hapus biaya kendaraan MBG Terbaru dan Terkini Hari Ini
+[3] Mobil SPPG tidak lagi ditanggung oleh anggaran operasional setelah BGN menghapus biaya kendaraan.
+[4] Strategi baru BGN meniad
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+
+Jumlah klaim: 4
+[1] (13 kata) BGN memutuskan kendaraan distribusi tidak termasuk dalam biaya operasional Rp3.000 per penerima manfaat.
+[2] (12 kata) Berita Seputar BGN hapus biaya kendaraan MBG Terbaru dan Terkini Hari Ini
+[3] (13 kata) Mobil SPPG tidak lagi ditanggung oleh anggaran operasional setelah BGN menghapus biaya kendaraan.
+[4] (4 kata) Strategi baru BGN meniad
+
+=== JAWABAN RONDE 1 (10 persona) ===
+
+--- Pengusaha/UMKM | model openai/gpt-oss-20b | negatif -0.5 | status sukses
+Menghapus biaya kendaraan bikin UMKM harus bayar sendiri, ngurangin subsidi dan nambah beban operasional. Ini bikin margin turun, bukan bantu profit.
+6 kata pertama: Menghapus biaya kendaraan bikin UMKM harus
+
+--- Pemerintah | model openai/gpt-oss-20b | positif 1.0 | status sukses
+Dengan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat, BGN menghemat biaya operasional dan memperlancar distribusi, meningkatkan efisiensi program.
+6 kata pertama: Dengan menghapus biaya kendaraan distribusi dari
+
+--- Akademisi | model openai/gpt-oss-20b | negatif -0.5 | status sukses
+Menghapus biaya kendaraan tanpa alasan jelas berpotensi mengurangi efisiensi distribusi, menimbulkan kerugian operasional bagi penerima manfaat.
+6 kata pertama: Menghapus biaya kendaraan tanpa alasan jelas
+
+--- Dokter/Nakes | model openai/gpt-oss-20b | negatif -0.7 | status sukses
+Menghilangkan biaya kendaraan mengurangi dana untuk distribusi, menurunkan kualitas layanan gizi bagi ibu dan anak. Ini berdampak negatif pada mutu makanan.
+6 kata pertama: Menghilangkan biaya kendaraan mengurangi dana untuk
+
+--- Penyedia Logistik Pangan | model openai/gpt-oss-20b | negatif -0.5 | status sukses
+Dengan menghapus biaya kendaraan dari anggaran, armada harus menanggung biaya sendiri. Hal ini meningkatkan beban operasional, mengurangi fleksibilitas distribusi, dan dapat menurunkan efisiensi layanan.
+6 kata pertama: Dengan menghapus biaya kendaraan dari anggaran,
+
+--- Skeptis Ekonomi | model openai/gpt-oss-20b | netral 0.0 | status sukses
+Penghapusan biaya kendaraan distribusi berarti pengeluaran operasional turun, tapi tidak ada data tentang dampak ke layanan. Tanpa bukti efek positif atau negatif, keputusan tidak dapat dinilai tepat atau salah.
+6 kata pertama: Penghapusan biaya kendaraan distribusi berarti pengeluaran
+
+--- Pekerja Kantoran | model openai/gpt-oss-20b | positif 0.8 | status sukses
+Kebijakan BGN menghapus biaya kendaraan distribusi meningkatkan efisiensi dan menekan biaya operasional, jadi tepat bagi HRD yang mengelola anggaran.
+6 kata pertama: Kebijakan BGN menghapus biaya kendaraan distribusi
+
+--- Masyarakat Umum | model openai/gpt-oss-20b | positif 0.8 | status sukses
+Kehilangan biaya kendaraan bikin distribusi lebih hemat, jadi lebih murah bagi keluarga. Niatnya jelas, nggak ada alokasi dana ekstra, jadi lebih bijak buat rumah tangga yang susah.
+6 kata pertama: Kehilangan biaya kendaraan bikin distribusi lebih
+
+--- Pemilik Toko Kecil/Pasar Tradisional | model openai/gpt-oss-20b | positif 0.5 | status sukses
+Menghilangkan biaya kendaraan distribusi mengurangi beban operasional, membantu toko kecil menurunkan harga jual dan meningkatkan omzet.
+6 kata pertama: Menghilangkan biaya kendaraan distribusi mengurangi beban
+
+--- Ibu Hamil/Menyusui | model openai/gpt-oss-20b | netral 0.0 | status sukses
+Penghapusan biaya kendaraan distribusi bisa mengurangi beban operasional, namun belum jelas dampaknya pada distribusi makanan bergizi ke ibu hamil. Lebih banyak data diperlukan.
+6 kata pertama: Penghapusan biaya kendaraan distribusi bisa mengurangi
+
+=== HITUNGAN ===
+(i) Klaim berbeda yang dirujuk: 3 dari 4 -> [1, 2, 3]
+(ii) Jawaban memuat kata sudut selain klaim 1: 1 -> ['Penyedia Logistik Pangan']
+(iii) Jawaban diawali 'BGN' atau nama lembaga: 0 -> []
+(iv) Jawaban menyatakan alasan di luar FAKTA: 4 -> ['Pemerintah', 'Akademisi', 'Penyedia Logistik Pangan', 'Pekerja Kantoran']
+(v) Jawaban salah tafsir angka: 0
+(vi) Jawaban dengan 4 kata awal identik: 4 -> {'dengan menghapus biaya kendaraan': ['Pemerintah', 'Penyedia Logistik Pangan'], 'penghapusan biaya kendaraan distribusi': ['Skeptis Ekonomi', 'Ibu Hamil/Menyusui']}
+
+=== AGENT_ROLES (metadata) ===
+  Pemerintah: sumber=registry, voice_anchor=pemerintah
+  Akademisi: sumber=registry, voice_anchor=akademisi
+  Pengusaha/UMKM: sumber=llm, voice_anchor=pengusaha
+  Ibu Hamil/Menyusui: sumber=archetype, voice_anchor=None
+  Pekerja Kantoran: sumber=llm, voice_anchor=pekerja_kantoran
+  Masyarakat Umum: sumber=llm, voice_anchor=masyarakat_umum
+  Dokter/Nakes: sumber=archetype, voice_anchor=None
+  Pemilik Toko Kecil/Pasar Tradisional: sumber=archetype, voice_anchor=None
+  Skeptis Ekonomi: sumber=archetype, voice_anchor=None
+  Penyedia Logistik Pangan: sumber=archetype, voice_anchor=None

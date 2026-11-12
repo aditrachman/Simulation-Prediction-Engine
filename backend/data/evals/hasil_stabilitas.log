@@ -1,0 +1,54 @@
+[LLM] openai/gpt-oss-20b: error Error code: 400 - {'error': {'message': "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details. Error: jsonschema: '/alasan' does not validate with /properties/alasan/minItems: minItems: got 2, want 3", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"vonis":"Mayoritas peserta mendukung keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat","alasan":["Kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu ditanggung dalam Rp3.000 per penerima manfaat. Kebijakan ini sesuai pernyataan BGN dan memperjelas alokasi dana.","Dengan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat, alokasi dana dapat lebih tepat guna bagi layanan langsung, menjaga efisiensi program."],"situasi":{"pemicu":{"angka":"","teks":"Topik simulasi ini: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?"},"bahan":["BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.","Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.","Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan."]},"kubu_catatan":{"tolak":"Masyarakat Umum","netral":"","dukung":"Pemerintah, Akademisi"},"ronde":[{"no":1,"judul":"Akademisi menilai kebijakan tepat","ringkas":"Akademisi menilai bahwa kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu ditanggung dalam Rp3.000 per penerima manfaat. Kebijakan ini sesuai pernyataan BGN dan memperjelas alokasi dana."}],"skenario":[{"dasar_agen":"Akademisi","jika":"Jika kendaraan distribusi tidak lagi masuk biaya operasional","maka":"Mendukung penghapusan biaya Rp3.000 per penerima manfaat"}]}'}}
+[LLM] openai/gpt-oss-20b: error Error code: 400 - {'error': {'message': "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details. Error: jsonschema: '/ronde/0/ringkas' does not validate with /properties/ronde/items/properties/ringkas/maxLength: maxLength: got 214, want 200", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"vonis":"Mayoritas peserta mendukung keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat","alasan":["Kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu ditanggung dalam Rp3.000 per penerima manfaat","Kebijakan ini sesuai pernyataan BGN dan memperjelas alokasi dana","Alokasi dana dapat lebih tepat guna bagi layanan langsung, menjaga efisiensi program"],"situasi":{"pemicu":{"angka":"","teks":"Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?"},"bahan":["BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.","Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.","Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan"]},"kubu_catatan":{"tolak":"Masyarakat Umum","netral":"","dukung":"Pemerintah, Akademisi"},"ronde":[{"no":1,"judul":"Akademisi menilai kebijakan sesuai BGN","ringkas":"Akademisi menilai bahwa kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu ditanggung dalam Rp3.000 per penerima manfaat. Kebijakan ini sesuai pernyataan BGN dan memperjelas alokasi dana."}],"skenario":[{"dasar_agen":"Akademisi","jika":"Jika kendaraan distribusi tidak lagi masuk biaya operasional","maka":"Mendukung keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat"}]}'}}
+[LLM] openai/gpt-oss-120b: error Error code: 400 - {'error': {'message': "max completion tokens reached before generating a valid document: the output was truncated to fit max_completion_tokens and is missing required content. Increase max_completion_tokens. See 'failed_generation' for the truncated output. Error: jsonschema: '' does not validate with /required: missing properties: 'situasi'", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"vonis":"Mayoritas peserta mendukung keputusan tersebut.","alasan":["Kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu ditanggung dalam Rp3.000 per penerima manfaat.","Dengan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat, alokasi dana dapat lebih tepat guna bagi layanan langsung, menjaga efisiensi program.","Kebijakan ini memperjelas alokasi dana program sesuai pernyataan BGN."],"kubu_catatan":{"dukung":"Pemerintah, Akademisi","netral":"Tidak ada","tolak":"Masyarakat Umum"},"ronde":[{"no":1,"judul":"Ronde 1","ringkas":"Akademisi menyatakan bahwa penghapusan biaya kendaraan dari alokasi Rp3.000 per penerima manfaat memperjelas penggunaan dana dan meningkatkan efisiensi program."}],"skenario":[{"dasar_agen":"Akademisi","jika":"Jika biaya kendaraan dihapus dari Rp3.000 per penerima manfaat","maka":"Maka alokasi dana menjadi lebih tepat guna untuk layanan langsung"}]}'}}
+[LLM] qwen/qwen3.8-27b: error Error code: 400 - {'error': {'message': "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"alسف'}}
+[LLM] openai/gpt-oss-20b: error Error code: 400 - {'error': {'message': "Generated JSON does not match the expected schema. Please adjust your prompt. See 'failed_generation' for more details. Error: jsonschema: '/alasan' does not validate with /properties/alasan/minItems: minItems: got 2, want 3", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"vonis":"Mayoritas peserta mendukung keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat","alasan":["Kendaraan distribusi memang tidak termasuk biaya operasional MBG, sehingga penetapan Rp3.000 per penerima manfaat tidak menutup biaya kendaraan.","Biaya kendaraan distribusi sudah dihapus dari Rp3.000 per penerima manfaat, sehingga dana lebih langsung ke layanan. Hal ini memperkuat alokasi langsung dan meningkatkan transparansi program."],"situasi":{"pemicu":{"angka":"","teks":"Topik simulasi ini: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?"},"bahan":["BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.","Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.","Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan."],"sumber":"Sumber: 0 artikel RSS. Briefing terbatas."},"kubu_catatan":{"tolak":"","netral":"Masyarakat Umum","dukung":"Pemerintah, Akademisi"},"ronde":[{"no":1,"judul":"Akademisi menilai biaya kendaraan tidak termasuk operasional","ringkas":"Akademisi menegaskan bahwa kendaraan distribusi bukan bagian dari biaya operasional MBG, sehingga penetapan Rp3.000 per penerima manfaat tidak menutup biaya kendaraan."}],"skenario":[{"dasar_agen":"Akademisi","jika":"Jika kendaraan distribusi tidak termasuk biaya operasional MBG","maka":"Mendukung penetapan Rp3.000 per penerima manfaat karena dana lebih langsung ke layanan"}]}'}}
+[LLM] openai/gpt-oss-120b: error Error code: 400 - {'error': {'message': "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': 'max completion tokens reached before generating a valid document'}}
+[LLM] qwen/qwen3.8-27b: error Error code: 400 - {'error': {'message': "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{ Ron'}}
+Run 1 with openai/gpt-oss-20b...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276446884
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276446884
+Run 2 with openai/gpt-oss-20b...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276507425
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276507425
+Run 1 with openai/gpt-oss-120b...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276570432
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276570432
+Run 2 with openai/gpt-oss-120b...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276629974
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794276629974
+============================================================
+STABILITY CHECK: 3 PERSONAS x 2 MODELS x 2 RUNS
+============================================================
+
+--- openai/gpt-oss-20b ---
+  Run 1:
+    Pemerintah: positif 0.50 | Dengan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat, a...
+    Masyarakat Umum: negatif -0.20 | Aduh, kalau biaya kendaraan udah dipisah, Rp3.000 tiap penerima manfaat nggak na...
+    Akademisi: positif 0.80 | Kendaraan distribusi tidak lagi masuk biaya operasional, sehingga tidak perlu di...
+  Run 2:
+    Pemerintah: positif 0.50 | Sejak BGN menetapkan bahwa Rp3.000 per penerima tidak lagi meliputi kendaraan di...
+    Masyarakat Umum: netral -0.20 | Aduh, sekarang uang Rp3.000 tiap penerima manfaat memang ga termasuk biaya kenda...
+    Akademisi: positif 0.80 | BGN jelas menyatakan kendaraan distribusi bukan bagian biaya operasional MBG, se...
+
+--- openai/gpt-oss-120b ---
+  Run 1:
+    Pemerintah: positif 0.50 | Biaya kendaraan tidak lagi masuk Rp3.000 per penerima, sehingga alokasi lebih te...
+    Masyarakat Umum: netral -0.20 | Aduh, sekarang Rp3.000 per penerima manfaat ga lagi termasuk kendaraan, jadi ora...
+    Akademisi: positif 0.80 | BGN jelas menyatakan kendaraan distribusi tidak termasuk dalam biaya operasional...
+  Run 2:
+    Pemerintah: positif 0.50 | Biaya kendaraan distribusi sudah dihapus dari Rp3.000 per penerima manfaat, sehi...
+    Masyarakat Umum: netral -0.20 | Aduh, kalau uang Rp3.000 per penerima manfaat ga lagi ngasih kendaraan, orang ja...
+    Akademisi: positif 0.80 | Kendaraan distribusi memang tidak termasuk biaya operasional MBG, sehingga penet...
+
+=== CONSISTENCY ===
+
+openai/gpt-oss-20b:
+  Pemerintah: positif(0.50) vs positif(0.50) ✓ | diff=0.00
+  Masyarakat Umum: negatif(-0.20) vs netral(-0.20) ✗ | diff=0.00
+  Akademisi: positif(0.80) vs positif(0.80) ✓ | diff=0.00
+
+openai/gpt-oss-120b:
+  Pemerintah: positif(0.50) vs positif(0.50) ✓ | diff=0.00
+  Masyarakat Umum: netral(-0.20) vs netral(-0.20) ✓ | diff=0.00
+  Akademisi: positif(0.80) vs positif(0.80) ✓ | diff=0.00

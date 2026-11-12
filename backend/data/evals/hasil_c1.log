@@ -1,0 +1,85 @@
+Running simulation with 10 agents...
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794260838440
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794260838440
+Duration: 122.5s
+============================================================
+EVALUASI C1 - RUN BGN 10 PERSONA
+============================================================
+Topik: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?
+Model: openai/gpt-oss-20b
+Durasi: 122.5s
+
+=== BLOK FAKTA TERKINI YANG MASUK PROMPT ===
+FAKTA TERKINI:
+[1] BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+[2] Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+[3] Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+
+Pilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.
+
+Jumlah klaim: 3
+[1] (9 kata) BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+[2] (9 kata) Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+[3] (8 kata) Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+
+=== JAWABAN RONDE 1 (10 persona) ===
+
+--- Pengusaha/UMKM | model openai/gpt-oss-20b | positif 0.5 | status sukses
+Kebijakan BGN ngecok biaya kendaraan distribusi, jadi Rp3.000 per penerima manfaat gak nyakup mobil, bikin anggaran lebih efisien buat UMKM
+6 kata pertama: Kebijakan BGN ngecok biaya kendaraan distribusi,
+
+--- Pemerintah | model openai/gpt-oss-20b | positif 0.5 | status sukses
+Kebijakan menghapus biaya kendaraan dari Rp3.000 per penerima manfaat memfokuskan dana langsung pada pelayanan, mengurangi pemborosan dan meningkatkan efisiensi distribusi.
+6 kata pertama: Kebijakan menghapus biaya kendaraan dari Rp3.000
+
+--- Akademisi | model openai/gpt-oss-20b | positif 0.8 | status sukses
+Kebijakan BGN menghilangkan biaya kendaraan distribusi dari Rp3.000 per penerima manfaat memisahkan biaya operasional, sehingga alokasi dana lebih transparan dan efisien.
+6 kata pertama: Kebijakan BGN menghilangkan biaya kendaraan distribusi
+
+--- Dokter/Nakes | model openai/gpt-oss-20b | netral 0.0 | status sukses
+Kebijakan memisahkan biaya kendaraan distribusi dari anggaran operasional tidak memengaruhi layanan kesehatan secara langsung, sehingga tidak menimbulkan masalah besar bagi mutu makanan dan layanan.
+6 kata pertama: Kebijakan memisahkan biaya kendaraan distribusi dari
+
+--- Penyedia Logistik Pangan | model openai/gpt-oss-20b | positif 1.0 | status sukses
+Dengan kendaraan distribusi tidak lagi masuk biaya operasional, anggaran Rp3.000 per penerima manfaat bisa dialokasikan lebih tepat ke kebutuhan lain, memperjelas tanggung jawab pengeluaran.
+6 kata pertama: Dengan kendaraan distribusi tidak lagi masuk
+
+--- Skeptis Ekonomi | model openai/gpt-oss-20b | positif 0.5 | status sukses
+Biaya kendaraan distribusi dipisahkan, sehingga alokasi Rp3.000 per penerima manfaat lebih jelas. Transparansi meningkat dan tidak menumpuk biaya operasional.
+6 kata pertama: Biaya kendaraan distribusi dipisahkan, sehingga alokasi
+
+--- Pekerja Kantoran | model openai/gpt-oss-20b | netral 0.0 | status sukses
+Dengan menghapus biaya kendaraan dari anggaran operasional, perusahaan harus menyesuaikan alokasi dana lain untuk tetap mendukung distribusi, tanpa mengurangi kualitas layanan.
+6 kata pertama: Dengan menghapus biaya kendaraan dari anggaran
+
+--- Masyarakat Umum | model openai/gpt-oss-20b | positif 0.8 | status sukses
+Aduh, kalau kendaraan distribusi nggak masuk biaya Rp3.000 per penerima, berarti uang keluarga lebih banyak pakai. Iya kan, lebih hemat untuk kebutuhan rumah tangga.
+6 kata pertama: Aduh, kalau kendaraan distribusi nggak masuk
+
+--- Pemilik Toko Kecil/Pasar Tradisional | model openai/gpt-oss-20b | positif 0.7 | status sukses
+Biaya kendaraan distribusi memang tidak masuk biaya operasional, jadi mengeluarkannya dari Rp3.000 per penerima manfaat memang masuk akal untuk efisiensi dana.
+6 kata pertama: Biaya kendaraan distribusi memang tidak masuk
+
+--- Ibu Hamil/Menyusui | model openai/gpt-oss-20b | positif 0.5 | status sukses
+Kendaraan distribusi bukan biaya operasional MBG, jadi tidak masuk Rp3.000 per penerima, sesuai kebijakan BGN.
+6 kata pertama: Kendaraan distribusi bukan biaya operasional MBG,
+
+=== HITUNGAN ===
+(i) Klaim berbeda yang dirujuk: 3 dari 3 -> [1, 2, 3]
+(ii) Jawaban memuat kata sudut selain klaim 1: 0 -> []
+(iii) Jawaban diawali 'BGN' atau nama lembaga: 0 -> []
+(iv) Jawaban menyatakan alasan di luar FAKTA: 5 -> ['Pengusaha/UMKM', 'Pemerintah', 'Akademisi', 'Skeptis Ekonomi', 'Pemilik Toko Kecil/Pasar Tradisional']
+(v) Jawaban salah tafsir angka: 0
+(vi) Jawaban dengan 4 kata awal identik: 0 -> {}
+
+=== AGENT_ROLES (metadata) ===
+  Pemerintah: sumber=registry, voice_anchor=pemerintah
+  Akademisi: sumber=registry, voice_anchor=akademisi
+  Pengusaha/UMKM: sumber=llm, voice_anchor=pengusaha
+  Ibu Hamil/Menyusui: sumber=archetype, voice_anchor=None
+  Pekerja Kantoran: sumber=llm, voice_anchor=pekerja_kantoran
+  Masyarakat Umum: sumber=llm, voice_anchor=masyarakat_umum
+  Dokter/Nakes: sumber=archetype, voice_anchor=None
+  Pemilik Toko Kecil/Pasar Tradisional: sumber=archetype, voice_anchor=None
+  Skeptis Ekonomi: sumber=archetype, voice_anchor=None
+  Penyedia Logistik Pangan: sumber=archetype, voice_anchor=None

@@ -1348,6 +1348,7 @@ def _resolve_nama(s: str, pengaruh_map: dict, nama_valid: list) -> str:
 
 
 def _label_sentimen(skor: float) -> str:
+    skor = round(skor, 2)  # bulatkan ke 2 desimal sebelum bandingkan
     if skor > 0.2:  return "positif"
     if skor < -0.2: return "negatif"
     return "netral"
@@ -1364,100 +1365,282 @@ BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", 
 FAKTA_MAKS_KLAIM = 5
 FAKTA_MAKS_KATA = 20
 
-_FAKTA_SYSTEM = (
-    "Kamu mengubah daftar judul berita yang sudah dikelompokkan per peristiwa "
-    "menjadi daftar klaim fakta pendek. Aturan ketat:\n"
-    "1. HANYA gunakan informasi yang ada di judul. JANGAN tambah fakta, angka, nama, atau tanggal.\n"
-    "2. Setiap klaim = SATU kalimat pernyataan, ≤20 kata.\n"
-    "3. Awali dengan nomor kelompok: '[1] ...', '[2] ...', dst.\n"
-    "4. Urutan: klaim yang memuat informasi DI LUAR topik dulu (waktu, pihak yang menyatakan, "
-    "syarat, penundaan, kondisi), lalu klaim yang hanya mengulang topik.\n"
-    "5. Maksimal 5 klaim. Jika >5 kelompok, pilih 5 paling informatif.\n"
-    "6. Output HANYA daftar klaim, satu per baris, tanpa markdown, tanpa penjelasan."
+
+# ── C1c: seleksi judul deterministik + rewrite LLM + validasi ───────────────
+# Kata yang tidak dihitung sebagai kata pembeda judul/klaim.
+_FAKTA_STOPWORD = frozenset("""
+ada adalah agar akan atau belum bisa dari dalam dan dengan di untuk pada
+ini itu yang juga karena sebagai setelah sebelum saat sejak
+tidak tak bukan hanya masih lebih paling sangat para setiap semua
+telah sudah sedang oleh ke bagi tentang terhadap
+kata pihak sebut sebutkan jelas terkait soal
+terbaru terkini hari berita update live seputar foto video
+""".split())
+
+# Frasa judul halaman agregator: tidak memuat peristiwa, hanya kumpulan tautan.
+_AGREGATOR_FRASA = (
+    "berita seputar", "terbaru dan terkini", "kumpulan berita",
+    "update terbaru", "indeks berita", "foto:", "video:",
+)
+_AGREGATOR_DOMAIN = (
+    "google.com", "msn.com", "yahoo.com", "flipboard.com",
+    "smartnews.", "newsnow.", "ground.news",
+)
+_FAKTA_SYSTEM_REWRITE = (
+    "Kamu menulis ulang judul berita menjadi satu klaim fakta pendek. Aturan:\n"
+    "1. HANYA gunakan kata dan informasi dari judul nomor yang sama.\n"
+    "2. JANGAN menambah angka, nama, tanggal, atau sebab-akibat baru.\n"
+    "3. Satu klaim per judul, 4-20 kata, satu kalimat, akhiri dengan titik.\n"
+    "4. Awali dengan '[N] ' sesuai nomor judul.\n"
+    "5. Output HANYA daftar klaim, tanpa markdown, tanpa penjelasan.\n"
+    "6. Jika satu judul memuat lebih dari satu hal, tulis HANYA hal yang "
+    "menyangkut TOPIK dan abaikan sisanya.\n"
+    "7. Klaim harus menyebut ISI: apa yang diputuskan, dinyatakan, atau berubah. "
+    "Jangan menulis klaim yang hanya mengatakan ada hal yang diungkap, dijelaskan, "
+    "disebut, atau ada alasan tanpa menyebut isinya. Jika judul hanya menjanjikan "
+    "penjelasan, tulis apa yang terjadi menurut judul itu.\n"
+    "8. Angka rupiah ditulis bersama pos anggarannya, persis seperti hubungan di "
+    "judul (misalnya 'anggaran Rp1.000 per orang tidak lagi mencakup X'). Dilarang "
+    "bentuk 'biaya X jadi/turun/naik Rp...' bila judul tidak menyatakan perubahan "
+    "nominal.\n"
+    "9. Jangan awali dua klaim dengan kata yang sama; variasikan subjeknya "
+    "(lembaga, pos anggaran, pihak yang menanggung, aturan)."
 )
 
-_FAKTA_USER_TEMPLATE = (
+_FAKTA_USER_REWRITE = (
     "Topik: {topik}\n\n"
-    "Kelompok berita (sudah diklaster):\n{kelompok_teks}\n\n"
-    "Hasilkan maksimal {maks} klaim fakta:"
+    "Judul berita:\n{judul_teks}\n\n"
+    "Tulis ulang tiap judul menjadi klaim fakta:"
 )
 
 
-def _susun_fakta_terkini(
-    kelompok: list[dict],
+def _is_aggregator_domain(teks: str) -> bool:
+    """True jika teks memuat domain agregator berita."""
+    from urllib.parse import urlparse
+    for tok in re.findall(r"(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/\S*)?", (teks or "").lower()):
+        host = urlparse("http://" + tok).hostname or ""
+        if any(host == d or host.endswith("." + d) for d in _AGREGATOR_DOMAIN):
+            return True
+    return False
+
+
+def _judul_agregator(judul: str) -> bool:
+    """True jika judul adalah halaman kumpulan berita, bukan peristiwa."""
+    t = (judul or "").lower()
+    if any(f in t for f in _AGREGATOR_FRASA):
+        return True
+    if re.search(r"\b(hari ini|indeks|live)\b", t):
+        return True
+    return _is_aggregator_domain(t)
+
+
+def _kata_isi(teks: str) -> set[str]:
+    """Kata bermakna untuk pembanding judul/klaim (tanpa stopword dan angka)."""
+    kata = re.findall(r"[a-z0-9]+", (teks or "").lower())
+    return {k for k in kata if len(k) > 2 and k not in _FAKTA_STOPWORD and not k.isdigit()}
+
+
+def _hitung_kata_pembeda(teks: str, sumber: str, topik: str = "") -> int:
+    """Jumlah kata bermakna yang dipakai bersama teks dan sumber, di luar topik."""
+    return len((_kata_isi(teks) & _kata_isi(sumber)) - _kata_isi(topik))
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def _dedup_klaim(klaim: list[dict]) -> list[dict]:
+    """Buang klaim yang hampir sama (Jaccard >= 0.8)."""
+    unik: list[dict] = []
+    for k in klaim:
+        isi = _kata_isi(k.get("klaim", ""))
+        if any(_jaccard(isi, _kata_isi(u.get("klaim", ""))) >= 0.8 for u in unik):
+            continue
+        unik.append(k)
+    return unik
+
+
+def _pilih_judul_fakta(judul: list[str], topik: str, maks: int) -> list[str]:
+    """Pilih judul paling informatif secara deterministik (greedy set cover).
+
+    Hanya judul yang nyambung dengan topik yang ikut: harus berbagi >= 3 kata
+    isi dengan topik atau dengan inti peristiwa (kata di >= 40% judul).
+    """
+    from collections import Counter
+
+    kandidat: list[str] = []
+    for j in judul or []:
+        j = str(j or "").strip()
+        j = re.sub(r"^(foto|video)\s+", "", j, flags=re.IGNORECASE)
+        j = re.sub(r"\s+-\s+\S+\.\S+\s*$", "", j).strip()
+        if not j or _judul_agregator(j) or j in kandidat:
+            continue
+        kandidat.append(j)
+    if not kandidat:
+        return []
+
+    kata_topik = set(_kata_isi(topik))
+    kata_kandidat = [set(_kata_isi(j)) for j in kandidat]
+
+    hitung = Counter(w for ks in kata_kandidat for w in ks)
+    batas = max(2, int(0.4 * len(kandidat)))
+    kata_inti = {w for w, n in hitung.items() if n >= batas}
+
+    acuan = kata_topik | kata_inti
+    relevan = [j for j, ks in zip(kandidat, kata_kandidat) if len(ks & acuan) >= 3]
+    # Jangan membuang semuanya (topik sangat pendek atau sumber sedikit).
+    if len(relevan) >= 2:
+        kandidat = relevan
+
+    maks = max(1, min(maks, len(kandidat)))
+    terpilih: list[str] = []
+    tertutup: set[str] = set(kata_topik)
+    sisa = list(kandidat)
+    while sisa and len(terpilih) < maks:
+        skor = [(len(set(_kata_isi(j)) - tertutup), -i) for i, j in enumerate(sisa)]
+        terbaik = max(range(len(sisa)), key=lambda i: skor[i])
+        j = sisa.pop(terbaik)
+        terpilih.append(j)
+        tertutup |= set(_kata_isi(j))
+    return terpilih
+
+def _angka_teks(teks: str) -> set[str]:
+    """Angka di teks, dinormalisasi tanpa pemisah."""
+    hasil = set()
+    for tok in re.findall(r"\d+(?:[.,]\d+)*", teks or ""):
+        t = re.sub(r"\D", "", tok)
+        if len(t) >= 2:
+            hasil.add(t)
+    return hasil
+
+
+def _potong_kata_utuh(teks: str, sumber: str) -> str | None:
+    """Kembalikan klaim yang berakhir di kata utuh, atau None jika terpotong."""
+    kata = str(teks or "").split()
+    if len(kata) < 4:
+        return None
+    if len(kata) > FAKTA_MAKS_KATA:
+        kata = kata[:FAKTA_MAKS_KATA]
+    ekor = re.sub(r"[^\w]+$", "", kata[-1]).lower()
+    kata_sumber = set(re.findall(r"[a-z0-9]+", (sumber or "").lower()))
+    if ekor and ekor not in kata_sumber and any(
+        w.startswith(ekor) and w != ekor for w in kata_sumber
+    ):
+        return None
+    return " ".join(kata)
+
+
+def _validasi_klaim_berbasis_judul(
+    klaim: list[dict],
+    judul: list[str],
+    topik: str,
+) -> list[dict]:
+    """Klaim wajib memakai kata pembeda judul sumber dan angka yang sah.
+
+    Klaim yang tidak lolos diganti judul sumbernya (bukan dibuang).
+    """
+    angka_boleh = _angka_teks(topik)
+    for j in judul:
+        angka_boleh |= _angka_teks(j)
+
+    hasil: list[dict] = []
+    for k in klaim:
+        idx = k.get("sumber_idx", 0)
+        if not isinstance(idx, int) or not (0 <= idx < len(judul)):
+            idx = 0
+        sumber = judul[idx] if judul else ""
+        teks = _potong_kata_utuh(k.get("klaim", ""), sumber)
+        if teks and _angka_teks(teks) - angka_boleh:
+            teks = None
+        if not teks or _hitung_kata_pembeda(teks, sumber, topik) <= 0:
+            teks = sumber
+        hasil.append({"nomor": len(hasil) + 1, "klaim": teks, "sumber_idx": idx})
+    return hasil
+
+
+def _susun_fakta_terkini_rewrite(
+    judul: list[str],
     topik: str,
     maks_klaim: int = FAKTA_MAKS_KLAIM,
 ) -> list[dict] | None:
-    """
-    Panggil LLM sekali untuk mengubah kelompok berita jadi klaim terstruktur.
-    Return list of dict: [{"nomor": 1, "klaim": "...", "kelompok_asli": 0}, ...] atau None jika gagal.
-    """
-    if not kelompok:
+    """Satu panggilan LLM: judul terpilih -> klaim tervalidasi."""
+    if not judul:
         return None
 
-    # Siapkan teks kelompok untuk prompt
-    kelompok_teks = "\n".join(
-        f"[{i+1}] {k['baris'].lstrip('- ')}"
-        for i, k in enumerate(kelompok)
-    )
-
-    user_p = _FAKTA_USER_TEMPLATE.format(
-        topik=topik,
-        kelompok_teks=kelompok_teks,
-        maks=maks_klaim,
-    )
-
+    judul_teks = "\n".join(f"[{i+1}] {j}" for i, j in enumerate(judul))
     try:
         raw = call_llm(
-            _FAKTA_SYSTEM,
-            user_p,
+            _FAKTA_SYSTEM_REWRITE,
+            _FAKTA_USER_REWRITE.format(topik=topik, judul_teks=judul_teks),
             max_tokens=200,
             model="openai/gpt-oss-20b",
             use_cache=False,
             auto_complete=False,
         )
-    except Exception as e:
-        # Tes memblokir LLM nyata → fallback ke baris judul
+    except Exception:
         return None
 
-    # Parse output: baris "[1] Klaim..." atau "1. Klaim..."
-    klaim_list = []
-    for baris in raw.strip().split("\n"):
+    klaim: list[dict] = []
+    for baris in (raw or "").strip().split("\n"):
         baris = baris.strip()
         if not baris:
             continue
-        # Cocokkan "[N] ..." atau "N. ..." - LLM outputs "[1] Text..." with ] followed by space
-        m = re.match(r"[\[\(]?(\d+)[\]\)]*\s*(.+)", baris)
+        m = re.match(r"[\[\(]?(\d+)[\]\)\.]*\s*(.+)", baris)
         if not m:
-            m = re.match(r"^(\d+)\s+(.+)", baris)
-        if m:
-            nomor = int(m.group(1))
-            klaim = m.group(2).strip()
-            if 1 <= nomor <= len(kelompok):
-                # Hitung kata
-                if len(klaim.split()) <= FAKTA_MAKS_KATA:
-                    klaim_list.append({
-                        "nomor": nomor,
-                        "klaim": klaim,
-                        "kelompok_asli": nomor - 1,
-                    })
+            continue
+        nomor = int(m.group(1))
+        teks = m.group(2).strip()
+        if not (1 <= nomor <= len(judul)) or not teks:
+            continue
+        # Cocokkan klaim ke judul sumber yang paling banyak berbagi kata.
+        idx = nomor - 1
+        skor = [_hitung_kata_pembeda(teks, j, topik) for j in judul]
+        terbaik = max(range(len(judul)), key=lambda i: (skor[i], i == idx, -i))
+        if skor[terbaik] > 0:
+            idx = terbaik
+        klaim.append({"nomor": nomor, "klaim": teks, "sumber_idx": idx})
 
-    if not klaim_list:
+    if not klaim:
+        return None
+    return _dedup_klaim(_validasi_klaim_berbasis_judul(klaim, judul, topik))[:maks_klaim]
+
+
+def _susun_fakta_terkini(
+    judul: list[str],
+    topik: str,
+    maks_klaim: int = FAKTA_MAKS_KLAIM,
+) -> list[dict] | None:
+    """Susun klaim FAKTA dari judul berita.
+
+    Alur: seleksi deterministik -> rewrite LLM -> validasi. Jika LLM gagal,
+    klaim diisi judul terpilih apa adanya.
+    """
+    if not judul:
         return None
 
-    # Urutkan: yang punya info di luar topik dulu (heuristik: mengandung waktu/pihak/syarat/penundaan)
-    kata_ekstra = ("januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus",
-                   "september", "oktober", "november", "desember", "2025", "2026", "2027",
-                   "menko", "menteri", "airlangga", "prabowo", "jokowi", "presiden",
-                   "tunda", "ditunda", "penundaan", "belum", "tidak", "akan", "setelah",
-                   "syarat", "kondisi", "hanya", "cuma", "sementara")
+    terpilih = _pilih_judul_fakta(judul, topik, maks_klaim)
+    if not terpilih:
+        return None
 
-    def skor_ekstra(k):
-        t = k["klaim"].lower()
-        return sum(1 for w in kata_ekstra if w in t)
+    klaim = _susun_fakta_terkini_rewrite(terpilih, topik, maks_klaim)
+    if klaim is None:
+        klaim = [
+            {"nomor": i + 1, "klaim": j, "sumber_idx": i}
+            for i, j in enumerate(terpilih)
+        ]
+    for i, k in enumerate(klaim, 1):
+        k["nomor"] = i
+    return klaim[:maks_klaim]
 
-    klaim_list.sort(key=skor_ekstra, reverse=True)
-    return klaim_list[:maks_klaim]
+
+def _judul_kelompok(k: dict) -> str:
+    """Judul wakil kelompok; fallback parsing dari baris briefing."""
+    if k.get("judul"):
+        return str(k["judul"]).strip()
+    baris = str(k.get("baris") or "").lstrip("- ").strip()
+    return re.sub(r"\s+\([^()]*\)\s*$", "", baris).strip()
 
 
 def _catatan_istilah(topik: str) -> str | None:
@@ -1489,7 +1672,14 @@ def _bangun_fakta_terkini(
         }
 
     # Coba konversi ke klaim via LLM (satu panggilan)
-    klaim = _susun_fakta_terkini(kelompok, topik)
+    # Semua judul anggota tiap kelompok (maks 12), bukan hanya wakil.
+    judul_kelompok = list(dict.fromkeys(
+        j
+        for k in kelompok
+        for j in (k.get("judul_anggota") or [_judul_kelompok(k)])
+        if j
+    ))[:12]
+    klaim = _susun_fakta_terkini(judul_kelompok, topik)
 
     catatan = _catatan_istilah(topik)
 
@@ -1628,6 +1818,7 @@ def _susun_briefing(
         tanggal_label, tanggal_dt = wakil["_tanggal"]
         teks_kelompok = " ".join(a.get("judul", "") for a in anggota).lower()
         kelompok.append({
+            "judul": wakil["judul"],
             "baris": (
                 f"- {wakil['judul']} ({wakil['_media']}, {tanggal_label or 'tanggal tidak diketahui'}; "
                 f"dilaporkan {len({a['_media'] for a in anggota})} media)"
@@ -1635,6 +1826,8 @@ def _susun_briefing(
             "tanggal": tanggal_dt,
             "lama": bool(tanggal_dt and (sekarang - tanggal_dt).days > 30),
             "kritis": any(k in teks_kelompok for k in BRIEFING_KATA_KRITIS),
+            "judul_anggota": list(dict.fromkeys(a["judul"] for a in anggota if a.get("judul"))),
+
         })
 
     def urut(k):

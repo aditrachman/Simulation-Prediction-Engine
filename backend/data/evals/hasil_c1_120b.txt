@@ -1,0 +1,16 @@
+=== TEST gpt-oss-120b (5.9s) ===
+FAKTA: FAKTA TERKINI:
+[1] BGN menegaskan kendaraan distribusi tidak lagi masuk anggaran Rp3.000 per penerima manfaat.
+[2] BGN memperkenalkan strategi baru dengan menghilangkan biaya kendaraan dari program MB...
+
+--- Masyarakat Umum | model gpt-oss-120b | positif 0.7
+Aku rasa ngurangin biaya kendaraan buat distribusi itu ngirit duit, jadi lebih banyak dana buat kebutuhan keluarga. Jadi, keputusan itu tepat.
+6 kata pertama: Aku rasa ngurangin biaya kendaraan buat
+
+--- Pemilik Toko Kecil/Pasar Tradisional | model gpt-oss-120b | positif 0.8
+Menghapus biaya kendaraan distribusi memberi manfaat lebih bagi pemilik warung, menurunkan biaya operasional dan memudahkan distribusi barang ke pelanggan.
+6 kata pertama: Menghapus biaya kendaraan distribusi memberi manfaat
+
+--- Pengusaha/UMKM | model gpt-oss-120b | netral 0.0
+Kebijakan ini memang hilangkan biaya kendaraan distribusi, jadi ongkos Rp3.000 per penerima hilang. Bukan solusi biaya, tapi mungkin mengurangi beban. Dampak jangka panjang belum jelas.
+6 kata pertama: Kebijakan ini memang hilangkan biaya kendaraan

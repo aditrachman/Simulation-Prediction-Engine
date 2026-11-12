@@ -1,0 +1,9 @@
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396470111
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396470111
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396585630
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396585630
+[DELTA_CAP] Pengusaha/UMKM R1: skor +0.00 → +0.80 (delta=+0.80) DIKURANGI ke +0.70 (cap=0.7)
+[DELTA_CAP] Pemilik Toko Kecil/Pasar Tradisional R1: skor +0.00 → +1.00 (delta=+1.00) DIKURANGI ke +0.70 (cap=0.7)
+[RUN_STORE] saved run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396646325
+[CASE_STUDY] assembled and saved for run_id=Apakah_keputusan_BGN_mengeluarkan_biaya_kendaraan_1794396646325
+Selesai. Cek backend/data/evals/hasil_c1d.txt

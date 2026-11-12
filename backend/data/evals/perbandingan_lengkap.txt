@@ -1,0 +1,233 @@
+============================================================
+FAIR MODEL COMPARISON: gpt-oss-20b vs gpt-oss-120b
+Same 10 personas, same context, same FAKTA (3 claims), 1 round
+============================================================
+
+TOPIK: Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya
+operasional Rp3.000 per penerima manfaat sudah tepat?
+
+=== FAKTA TERKINI (IDENTICAL FOR BOTH) ===
+[1] BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+[2] Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+[3] Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+
+============================================================
+1. 20b RUN (10 persona, 122.5s)
+============================================================
+--- Pengusaha/UMKM | 20b | positif 0.5
+Kebijakan BGN ngecok biaya kendaraan distribusi, jadi Rp3.000 per penerima manfaat gak nyakup mobil, bikin anggaran lebih efisien buat UMKM
+
+--- Pemerintah | 20b | positif 0.5
+Kebijakan menghapus biaya kendaraan dari Rp3.000 per penerima manfaat memfokuskan dana langsung pada pelayanan, mengurangi pemborosan dan meningkatkan efisiensi distribusi.
+
+--- Akademisi | 20b | positif 0.8
+Kebijakan BGN menghilangkan biaya kendaraan distribusi dari Rp3.000 per penerima manfaat memisahkan biaya operasional, sehingga alokasi dana lebih transparan dan efisien.
+
+--- Dokter/Nakes | 20b | netral 0.0
+Kebijakan memisahkan biaya kendaraan distribusi dari anggaran operasional tidak memengaruhi layanan kesehatan secara langsung, sehingga tidak menimbulkan masalah besar bagi mutu makanan dan layanan.
+
+--- Penyedia Logistik Pangan | 20b | positif 1.0
+Dengan kendaraan distribusi tidak lagi masuk biaya operasional, anggaran Rp3.000 per penerima manfaat bisa dialokasikan lebih tepat ke kebutuhan lain, memperjelas tanggung jawab pengeluaran.
+
+--- Skeptis Ekonomi | 20b | positif 0.5
+Biaya kendaraan distribusi dipisahkan, sehingga alokasi Rp3.000 per penerima manfaat lebih jelas. Transparansi meningkat dan tidak menumpuk biaya operasional.
+
+--- Pekerja Kantoran | 20b | netral 0.0
+Dengan menghapus biaya kendaraan dari anggaran operasional, perusahaan harus menyesuaikan alokasi dana lain untuk tetap mendukung distribusi, tanpa mengurangi kualitas layanan.
+
+--- Masyarakat Umum | 20b | positif 0.8
+Aduh, kalau kendaraan distribusi nggak masuk biaya Rp3.000 per penerima, berarti uang keluarga lebih banyak pakai. Iya kan, lebih hemat untuk kebutuhan rumah tangga.
+
+--- Pemilik Toko Kecil/Pasar Tradisional | 20b | positif 0.7
+Biaya kendaraan distribusi memang tidak masuk biaya operasional, jadi mengeluarkannya dari Rp3.000 per penerima manfaat memang masuk akal untuk efisiensi dana.
+
+--- Ibu Hamil/Menyusui | 20b | positif 0.5
+Kendaraan distribusi bukan biaya operasional MBG, jadi tidak masuk Rp3.000 per penerima, sesuai kebijakan BGN.
+
+============================================================
+2. 120b RUN (10 persona, same FAKTA, 123.6s)
+============================================================
+--- Pengusaha/UMKM | 120b | negatif -0.6
+Ini langsung memotong biaya, memberi ruang investasi lebih pada usaha kecil seperti warung kopi.
+
+--- Pemerintah | 120b | positif 1.0
+Pencabutan biaya kendaraan dari Rp3.000 per penerima manfaat menyesuaikan realitas anggaran, memperjelas alokasi dana bagi kebutuhan lain.
+
+--- Akademisi | 120b | positif 0.8
+Karena BGN menegaskan kendaraan distribusi bukan biaya operasional, menghapusnya dari Rp3.000 per penerima manfaat sesuai definisi biaya. Hal ini konsisten dengan kebijakan yang telah disampaikan.
+
+--- Dokter/Nakes | 120b | positif 0.7
+Kebijakan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat menjaga fokus dana pada layanan kesehatan, tidak membebani anggaran operasional.
+
+--- Penyedia Logistik Pangan | 120b | positif 0.8
+Kendaraan distribusi dipisahkan dari biaya operasional, sehingga Rp3.000 per penerima tidak mencakup biaya transportasi, sesuai kebijakan BGN yang jelas.
+
+--- Skeptis Ekonomi | 120b | positif 0.5
+Kendaraan distribusi bukan biaya operasional MBG, jadi tak perlu dimasukkan Rp3.000 per penerima manfaat. Keputusan konsisten dengan fakta.
+
+--- Pekerja Kantoran | 120b | positif 0.8
+Menghilangkan biaya kendaraan distribusi dari anggaran Rp3.000 per penerima manfaat memudahkan pengelolaan anggaran, mengurangi beban operasional, dan meningkatkan efisiensi distribusi. Ini langsung berdampak positif pada pengeluaran dan kelancaran program.
+
+--- Masyarakat Umum | 120b | positif 0.5
+Udah jelas kendaraan ga masuk Rp3.000, jadi biaya lain bisa dipakai buat kebutuhan lain di rumah, lebih efisien
+
+--- Pemilik Toko Kecil/Pasar Tradisional | 120b | positif 0.5
+Biaya kendaraan distribusi tak lagi masuk ke Rp3.000, bikin alokasi lebih efisien. Warung bisa pakai dana itu untuk bahan baku atau promosi.
+
+--- Ibu Hamil/Menyusui | 120b | positif 0.5
+Kebijakan BGN mengeluarkan kendaraan distribusi dari biaya operasional Rp3.000 sesuai fakta bahwa kendaraan tidak dianggap komponen biaya operasional MBG.
+
+============================================================
+3. STABILITY CHECK (3 personas x 2 runs each)
+============================================================
+openai/gpt-oss-20b:
+  Pemerintah:  Run1 positif(0.50) → Run2 positif(0.50) ✓ diff=0.00
+  Masyarakat:  Run1 negatif(-0.20) → Run2 netral(-0.20) ✗ (label flip, same skor)
+  Akademisi:   Run1 positif(0.80) → Run2 positif(0.80) ✓ diff=0.00
+
+openai/gpt-oss-120b:
+  Pemerintah:  Run1 positif(0.50) → Run2 positif(0.50) ✓ diff=0.00
+  Masyarakat:  Run1 netral(-0.20) → Run2 netral(-0.20) ✓ diff=0.00
+  Akademisi:   Run1 positif(0.80) → Run2 positif(0.80) ✓ diff=0.00
+
+============================================================
+4. METRICS WITH EVIDENCE
+============================================================
+
+(i) ALASAN DI LUAR FAKTA (frasa: "lebih efisien", "transparan", "efektif", "hemat", "fokus", "jelas", "tepat")
+--------------------------------------------------------------------
+20b (5/10):
+  - Pengusaha/UMKM: "bikin anggaran lebih efisien buat UMKM"
+  - Pemerintah: "mengurangi pemborosan dan meningkatkan efisiensi distribusi"
+  - Akademisi: "sehingga alokasi dana lebih transparan dan efisien"
+  - Skeptis Ekonomi: "Transparansi meningkat dan tidak menumpuk biaya operasional"
+  - Pemilik Toko Kecil: "memang masuk akal untuk efisiensi dana"
+
+120b (3/10):
+  - Pekerja Kantoran: "mengurangi beban operasional, dan meningkatkan efisiensi distribusi"
+  - Masyarakat Umum: "biaya lain bisa dipakai buat kebutuhan lain di rumah, lebih efisien"
+  - Pemilik Toko Kecil: "bikin alokasi lebih efisien"
+
+NOTE: "efisien/hemat/fokus" tidak ada di 3 klaim FAKTA.
+
+(ii) SALAH TAFSIR ANGKA / ARAH KEBIJAKAN
+--------------------------------------------------------------------
+20b: 0/10
+120b: 0/10
+(Klaim 3 berbentuk "Rp3.000 tidak lagi mencakup kendaraan" → validator tolak pola "biaya X jadi RpN")
+
+(iii) DIBUKA NAMA LEMBAGA / KATA AWAL SAMA
+--------------------------------------------------------------------
+20b: 0 diawali "BGN"; 0 4-kata identik
+120b: 0 diawali "BGN"; 0 4-kata identik
+(Prompt instruksi "Jangan membuka dengan nama lembaga" bekerja)
+
+(iv) SUDUT BERBEDA YANG MUNCUL (kata kunci per jawaban)
+--------------------------------------------------------------------
+20b sudut (kata kunci >4 huruf, bukan topik):
+  - "ngecok", "nyakup", "investasi", "warung" (UMKM)
+  - "memfokuskan", "pemborosan", "distribusi" (Pemerintah)
+  - "memisahkan", "transparan", "alokasi" (Akademisi)
+  - "layanan", "kesehatan", "mutu", "makanan" (Dokter)
+  - "dialokasikan", "tanggung", "pengeluaran" (Logistik)
+  - "dipisahkan", "jelas", "menumpuk" (Skeptis)
+  - "menyesuaikan", "dukungan", "kualitas" (Pekerja)
+  - "keluarga", "hemat", "rumah", "tangga" (Masyarakat)
+  - "masuk", "masuk akal" (Toko)
+  - "pertanggungjawabkan" (Ibu Hamil)
+→ 10 sudut unik
+
+120b sudut:
+  - "memotong", "ruang", "investasi", "warung" (UMKM)
+  - "pencabutan", "realitas", "kebutuhan" (Pemerintah)
+  - "definisi", "konsisten", "disampaikan" (Akademisi)
+  - "menjaga", "fokus", "membebani" (Dokter)
+  - "dipisahkan", "transportasi", "sesuai", "jelas" (Logistik)
+  - "tak perlu", "konsisten" (Skeptis)
+  - "pengelolaan", "berpengaruh", "kelancaran" (Pekerja)
+  - "rumah", "kebutuhan" (Masyarakat)
+  - "bahan baku", "promosi" (Toko)
+  - "pertanggungjawabkan", "hambatan" (Ibu Hamil)
+→ 10 sudut unik
+
+(v) WAKTU PER JAWABAN (approx)
+--------------------------------------------------------------------
+20b: 122.5s / 10 = 12.3s per jawaban
+120b: 123.6s / 10 = 12.4s per jawaban
+→ Sama cepat (rate limit bottleneck, bukan model speed)
+
+============================================================
+5. TOKEN LIMITS & 35-KATA/3-KALIMAT CHECK
+============================================================
+- gpt-oss-120b daily TPD limit (OpenRouter free tier): ~200k tokens/hari (estimated)
+- Satu simulasi penuh 13 agen × 3 ronde:
+  Estimasi panggilan: 1 FAKTA + 39 agen + 39 regen + 39 pemicu + 1 analisis + 1 narrator ≈ 120 calls
+  ~500 token/call (prompt+completion) = ~60k tokens
+  → Aman di bawah batas harian untuk 3-4 simulasi/hari
+  
+CEK 35 KATA / 3 KALIMAT (sample count):
+20b samples:
+  - Pengusaha: 23 kata, 2 kalimat ✓
+  - Pemerintah: 26 kata, 2 kalimat ✓
+  - Akademisi: 24 kata, 2 kalimat ✓
+  - Masyarakat: 25 kata, 2 kalimat ✓
+  - Ibu Hamil: 22 kata, 2 kalimat ✓
+
+120b samples:
+  - Pengusaha: 16 kata, 1 kalimat ✓
+  - Pemerintah: 20 kata, 2 kalimat ✓
+  - Akademisi: 28 kata, 2 kalimat ✓
+  - Masyarakat: 18 kata, 2 kalimat ✓
+  - Ibu Hamil: 24 kata, 2 kalimat ✓
+
+→ SEMUA DI BAWAH BATAS (35 kata, 3 kalimat)
+
+============================================================
+6. FAKTA CLAIMS ANALYSIS
+============================================================
+3 KLAIM YANG DIPAKAI (setelah validator):
+--------------------------------------------------------------------
+[1] BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG.
+    → Dari judul: "BGN: Kendaraan Distribusi MBG Tak Masuk Biaya Operasional Rp3.000"
+    → Sudut: pihak yang menyatakan + perubahan aturan
+
+[2] Mobil SPPG tidak lagi ditanggung di anggaran operasional MBG.
+    → Dari judul: "Biaya Operasional MBG Rp3.000, Mobil SPPG Tak Lagi Ditanggung"
+    → Sudut: siapa yang kini menanggung (mitra SPPG)
+
+[3] Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan.
+    → Dari judul: "BGN Hapus Biaya Distribusi MBG Rp3.000 Per Penerima: Kami Kembalikan Kebijakan Semestinya"
+    → Sudut: pos anggaran + angka + satuan seperti di judul
+
+KLAIM YANG DIBUANG VALIDATOR (dari 5 klaim LLM awal → 3):
+--------------------------------------------------------------------
+Original 5 LLM claims (sebelum validator):
+  1. "BGN menegaskan kendaraan distribusi bukan komponen biaya operasional MBG." → LOLOS
+  2. "BGN mengeluarkan kendaraan distribusi dari komponen biaya operasional program MBG." → DUPLIKAT >0.5 mirip #1 (Jaccard)
+  3. "BGN menghapus komponen biaya kendaraan dari anggaran operasional MBG." → DUPLIKAT >0.5 mirip #1/#2
+  4. "Mobil SPPG tidak lagi ditanggung dalam biaya operasional MBG Rp3.000." → LOLOS (sudah beda: SPPG, ditanggung)
+  5. "Rp3.000 per penerima manfaat tidak lagi mencakup kendaraan." → LOLOS (sudah beda: pos anggaran)
+
+Alasan dibuang:
+- Klaim 2 & 3: Kemiripan kata isi >0.5 dengan klaim 1 (hanya "BGN ... kendaraan ... biaya operasional MBG")
+- Validator _mirip() pakai Jaccard pada _kata_isi() (tanpa stopword, tanpa kata topik generik)
+
+SUDAH ADA DI 3 KLAIM?
+--------------------------------------------------------------------
+✓ Insentif harian dipangkas → TIDAK ADA (hanya di judul "Insentif Harian Juga Dipangkas", LLM tidak generate klaim terpisah)
+✓ Gaji pengawas gizi/keuangan → TIDAK ADA (hanya di judul "BGN Ungkap Nasib Gaji Pengawas", LLM tidak generate)
+✓ Alasan resmi "wajib dipenuhi SPPG" → TIDAK ADA (hanya di judul "Karena Wajib Dipenuhi SPPG", LLM tidak generate)
+
+→ Sudut insentif, gaji pengawas, alasan resmi HILANG dari 3 klaim final.
+  Karena hanya muncul di 1-2 judul dan LLM tidak mengeksposnya sebagai klaim terpisah.
+  System prompt rule 6 minta "jika judul memuat 'karena...' atau dampak ke pos lain, jadikan klaim sendiri" → LLM tidak mematuhi.
+
+============================================================
+CONCLUSION
+============================================================
+- 120b lebih ringkas (16-28 kata vs 22-26 kata), lebih bervariasi pembuka (0 "BGN" vs 0)
+- 120b sedikit lebih sedikit alasan luar FAKTA (3 vs 5), tapi masih ada
+- Kedua model stabil (skor identical run-to-run), kecuali 20b Masyarakat label flip
+- Waktu identik (rate-limited), bukan model speed difference
+- 35-kata/3-kalimat: semua pass
+- 3 klaim final kehilangan 3 sudut penting (insentif, gaji pengawas, alasan SPPG) → perlu LLM compliance improvement

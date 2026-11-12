@@ -1,0 +1,225 @@
+{
+  "topik": "Apakah keputusan BGN mengeluarkan biaya kendaraan distribusi dari biaya operasional Rp3.000 per penerima manfaat sudah tepat?",
+  "model": "openai/gpt-oss-20b",
+  "durasi": 123.32312846183777,
+  "fakta_terkini": "FAKTA TERKINI:\n[1] BGN memutuskan kendaraan distribusi tidak termasuk dalam biaya operasional Rp3.000 per penerima manfaat.\n[2] Berita Seputar BGN hapus biaya kendaraan MBG Terbaru dan Terkini Hari Ini\n[3] Mobil SPPG tidak lagi ditanggung oleh anggaran operasional setelah BGN menghapus biaya kendaraan.\n[4] Strategi baru BGN meniad\n\nPilih SATU fakta dari daftar dan sebut dengan kata-katamu sendiri, jangan menyalin kalimatnya. Jangan menyebut angka yang tidak ada di daftar.",
+  "klaim": [
+    {
+      "nomor": 1,
+      "klaim": "BGN memutuskan kendaraan distribusi tidak termasuk dalam biaya operasional Rp3.000 per penerima manfaat.",
+      "sumber_idx": 0
+    },
+    {
+      "nomor": 2,
+      "klaim": "Berita Seputar BGN hapus biaya kendaraan MBG Terbaru dan Terkini Hari Ini",
+      "sumber_idx": 1
+    },
+    {
+      "nomor": 3,
+      "klaim": "Mobil SPPG tidak lagi ditanggung oleh anggaran operasional setelah BGN menghapus biaya kendaraan.",
+      "sumber_idx": 2
+    },
+    {
+      "nomor": 4,
+      "klaim": "Strategi baru BGN meniad",
+      "sumber_idx": 3
+    }
+  ],
+  "jawaban": [
+    {
+      "nama": "Pengusaha/UMKM",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "negatif",
+        "skor": -0.5
+      },
+      "status": "sukses",
+      "pendapat": "Menghapus biaya kendaraan bikin UMKM harus bayar sendiri, ngurangin subsidi dan nambah beban operasional. Ini bikin margin turun, bukan bantu profit.",
+      "kata_awal": "Menghapus biaya kendaraan bikin UMKM harus"
+    },
+    {
+      "nama": "Pemerintah",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "positif",
+        "skor": 1.0
+      },
+      "status": "sukses",
+      "pendapat": "Dengan menghapus biaya kendaraan distribusi dari Rp3.000 per penerima manfaat, BGN menghemat biaya operasional dan memperlancar distribusi, meningkatkan efisiensi program.",
+      "kata_awal": "Dengan menghapus biaya kendaraan distribusi dari"
+    },
+    {
+      "nama": "Akademisi",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "negatif",
+        "skor": -0.5
+      },
+      "status": "sukses",
+      "pendapat": "Menghapus biaya kendaraan tanpa alasan jelas berpotensi mengurangi efisiensi distribusi, menimbulkan kerugian operasional bagi penerima manfaat.",
+      "kata_awal": "Menghapus biaya kendaraan tanpa alasan jelas"
+    },
+    {
+      "nama": "Dokter/Nakes",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "negatif",
+        "skor": -0.7
+      },
+      "status": "sukses",
+      "pendapat": "Menghilangkan biaya kendaraan mengurangi dana untuk distribusi, menurunkan kualitas layanan gizi bagi ibu dan anak. Ini berdampak negatif pada mutu makanan.",
+      "kata_awal": "Menghilangkan biaya kendaraan mengurangi dana untuk"
+    },
+    {
+      "nama": "Penyedia Logistik Pangan",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "negatif",
+        "skor": -0.5
+      },
+      "status": "sukses",
+      "pendapat": "Dengan menghapus biaya kendaraan dari anggaran, armada harus menanggung biaya sendiri. Hal ini meningkatkan beban operasional, mengurangi fleksibilitas distribusi, dan dapat menurunkan efisiensi layanan.",
+      "kata_awal": "Dengan menghapus biaya kendaraan dari anggaran,"
+    },
+    {
+      "nama": "Skeptis Ekonomi",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "netral",
+        "skor": 0.0
+      },
+      "status": "sukses",
+      "pendapat": "Penghapusan biaya kendaraan distribusi berarti pengeluaran operasional turun, tapi tidak ada data tentang dampak ke layanan. Tanpa bukti efek positif atau negatif, keputusan tidak dapat dinilai tepat atau salah.",
+      "kata_awal": "Penghapusan biaya kendaraan distribusi berarti pengeluaran"
+    },
+    {
+      "nama": "Pekerja Kantoran",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "positif",
+        "skor": 0.8
+      },
+      "status": "sukses",
+      "pendapat": "Kebijakan BGN menghapus biaya kendaraan distribusi meningkatkan efisiensi dan menekan biaya operasional, jadi tepat bagi HRD yang mengelola anggaran.",
+      "kata_awal": "Kebijakan BGN menghapus biaya kendaraan distribusi"
+    },
+    {
+      "nama": "Masyarakat Umum",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "positif",
+        "skor": 0.8
+      },
+      "status": "sukses",
+      "pendapat": "Kehilangan biaya kendaraan bikin distribusi lebih hemat, jadi lebih murah bagi keluarga. Niatnya jelas, nggak ada alokasi dana ekstra, jadi lebih bijak buat rumah tangga yang susah.",
+      "kata_awal": "Kehilangan biaya kendaraan bikin distribusi lebih"
+    },
+    {
+      "nama": "Pemilik Toko Kecil/Pasar Tradisional",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "positif",
+        "skor": 0.5
+      },
+      "status": "sukses",
+      "pendapat": "Menghilangkan biaya kendaraan distribusi mengurangi beban operasional, membantu toko kecil menurunkan harga jual dan meningkatkan omzet.",
+      "kata_awal": "Menghilangkan biaya kendaraan distribusi mengurangi beban"
+    },
+    {
+      "nama": "Ibu Hamil/Menyusui",
+      "model": "openai/gpt-oss-20b",
+      "sentimen": {
+        "label": "netral",
+        "skor": 0.0
+      },
+      "status": "sukses",
+      "pendapat": "Penghapusan biaya kendaraan distribusi bisa mengurangi beban operasional, namun belum jelas dampaknya pada distribusi makanan bergizi ke ibu hamil. Lebih banyak data diperlukan.",
+      "kata_awal": "Penghapusan biaya kendaraan distribusi bisa mengurangi"
+    }
+  ],
+  "hitungan": {
+    "klaim_dirujuk": 3,
+    "klaim_dirujuk_detail": [
+      1,
+      2,
+      3
+    ],
+    "sudut_lain": 1,
+    "sudut_lain_detail": [
+      "Penyedia Logistik Pangan"
+    ],
+    "awal_bgn": 0,
+    "awal_bgn_detail": [],
+    "alasan_luar_fakta": 4,
+    "alasan_luar_fakta_detail": [
+      "Pemerintah",
+      "Akademisi",
+      "Penyedia Logistik Pangan",
+      "Pekerja Kantoran"
+    ],
+    "salah_angka": 0,
+    "salah_angka_detail": [],
+    "empat_kata_identik": {
+      "dengan menghapus biaya kendaraan": [
+        "Pemerintah",
+        "Penyedia Logistik Pangan"
+      ],
+      "penghapusan biaya kendaraan distribusi": [
+        "Skeptis Ekonomi",
+        "Ibu Hamil/Menyusui"
+      ]
+    }
+  },
+  "agent_roles": {
+    "Pemerintah": {
+      "role": "Kamu pejabat pemerintah yang berbicara formal dan diplomatis — tapi SINGKAT dan PADAT. Gunakan maksimal 2 kalimat per respons. Tidak perlu menyebutkan semua faktor — pilih satu poin terkuat dan pertahankan.",
+      "sumber": "registry",
+      "voice_anchor": "pemerintah"
+    },
+    "Akademisi": {
+      "role": "Kamu dosen dan peneliti yang HARUS memiliki posisi JELAS dan TEGAK berdasarkan data. Netral BUKAN berarti 'objektif' — netral berarti belum ada bukti yang cukup. Jika ada bukti, gunakan bukti itu untuk MENENTUKAN posisi, bukan sebagai alasan untuk netral. Boleh berubah posisi, tapi HANYA dengan alasan atau data baru yang eksplisit — dan kamu WAJIB sebutkan alasan itu di responsmu. Berikan argumen berbasis riset, statistik, atau studi. Hindari frasa escape seperti 'perlu diteliti lebih lanjut', 'ada dua sisi', atau 'tergantung konteks' tanpa diikuti posisi konkret. Setiap responsmu HARUS berakhir dengan posisi tegas — bukan pertanyaan terbuka. Jika data condong ke satu arah, simpulkan. Berani menyimpulkan adalah tugas ilmuwan.",
+      "sumber": "registry",
+      "voice_anchor": "akademisi"
+    },
+    "Pengusaha/UMKM": {
+      "role": "Kamu pengusaha UMKM yang fokus pada untung-rugi dan dampak kebijakan terhadap bisnis dan lapangan kerja. Berbicara pragmatis, langsung ke angka dan dampak ekonomi nyata.",
+      "sumber": "llm",
+      "voice_anchor": "pengusaha"
+    },
+    "Ibu Hamil/Menyusui": {
+      "role": "Kamu ibu hamil yang bergantung pada bantuan pangan dan layanan posyandu. Bicara sederhana, fokus pada apakah makanan bergizi tetap sampai ke anak.",
+      "sumber": "archetype",
+      "voice_anchor": null
+    },
+    "Pekerja Kantoran": {
+      "role": "Kamu pekerja kantoran yang pragmatis — bicara singkat, langsung ke dampak nyata pada pekerjaan dan penghasilan. Tidak bertele-tele. Satu poin, satu sudut pandang, selesai.",
+      "sumber": "llm",
+      "voice_anchor": "pekerja_kantoran"
+    },
+    "Masyarakat Umum": {
+      "role": "Kamu warga biasa yang mewakili suara rakyat: sederhana, langsung, dan sangat dipengaruhi kondisi ekonomi sehari-hari. Bicara apa adanya berdasarkan pengalaman hidup nyata.",
+      "sumber": "llm",
+      "voice_anchor": "masyarakat_umum"
+    },
+    "Dokter/Nakes": {
+      "role": "Kamu dokter yang memantau gizi ibu dan anak di puskesmas. Fokus pada mutu makanan dan layanan kesehatan yang bisa terdampak.",
+      "sumber": "archetype",
+      "voice_anchor": null
+    },
+    "Pemilik Toko Kecil/Pasar Tradisional": {
+      "role": "Kamu pemilik warung dan pedagang pasar tradisional. Fokus pada omzet, harga bahan, dan dampak biaya operasional ke dagangan.",
+      "sumber": "archetype",
+      "voice_anchor": null
+    },
+    "Skeptis Ekonomi": {
+      "role": "Kamu ekonom skeptis yang menguji klaim anggaran fiskal dengan data. Fokus pada pembebanan biaya, insentif, dan transparansi anggaran.",
+      "sumber": "archetype",
+      "voice_anchor": null
+    },
+    "Penyedia Logistik Pangan": {
+      "role": "Kamu penyedia jasa logistik dan armada pengiriman pangan. Fokus pada kendaraan, biaya angkut, dan siapa yang menanggung operasional.",
+      "sumber": "archetype",
+      "voice_anchor": null
+    }
+  }
+}

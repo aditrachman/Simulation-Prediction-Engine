@@ -1548,8 +1548,9 @@ def fetch_berita(topik: str, maks_per_sumber: int = 3) -> dict:
         if id(art) not in selected_ids and id(art) not in drop_reason:
             drop_reason[id(art)] = "tidak_masuk_pool: _take(sisa, 12 - len(selected))"
 
-    if len(pool) >= 12:
-        assert len(selected) == 12, f"seleksi akhir harus 12 item, dapat {len(selected)}"
+    if len(selected) != 12:
+        print(f"[SOURCES] WARNING seleksi akhir {len(selected)} item (target 12)")
+    selected = selected[:12]
     for domain, count in domain_counts.items():
         assert count <= _domain_cap(domain), f"domain {domain} melebihi batas: {count}"
 

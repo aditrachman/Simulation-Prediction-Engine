@@ -103,4 +103,4 @@ class TestPromptRonde2:
         # Harus dibatasi 5 klaim, tidak memotong di tengah
         assert len(fakta["klaim"]) <= 5
         for k in fakta["klaim"]:
-            assert len(k["klaim"]) <= 20  # maks 20 kata per klaim
+            assert len(k["klaim"].split()) <= 20  # maks 20 kata per klaim
