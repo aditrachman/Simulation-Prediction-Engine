@@ -1,4 +1,4 @@
-# VoxSwarm — Social Simulation Engine
+# VoxSwarm — Social Simulation Engine  
 
 > Simulasi reaksi publik terhadap kebijakan pemerintah Indonesia sebelum diluncurkan.
 
